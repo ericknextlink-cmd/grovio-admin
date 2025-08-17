@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, Save, Plus } from 'lucide-react'
+import { X, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GroceryProduct, GroceryCategory } from '@/types/grocery'
 import ImageUpload from './ImageUpload'

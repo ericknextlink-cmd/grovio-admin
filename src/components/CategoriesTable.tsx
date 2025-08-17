@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { Search, Edit, Trash2, Plus, Tag, X } from 'lucide-react'
 import { GroceryCategory } from '@/types/grocery'
-import { cn } from '@/lib/utils'
+// import { cn } from '@/lib/utils'
 
 interface CategoriesTableProps {
   categories: GroceryCategory[]

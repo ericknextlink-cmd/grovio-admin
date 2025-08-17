@@ -10,7 +10,7 @@ import { GroceryProduct } from '@/types/grocery'
 
 export default function AdminDashboard() {
   const {
-    products,
+    // products,
     categories,
     stats,
     searchQuery,

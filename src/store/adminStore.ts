@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GroceryProduct, GroceryCategory, Order, Transaction, AdminStats, AdminState, AdminActions, OrderStatus, TransactionStatus } from '@/types/grocery'
+import { GroceryProduct, GroceryCategory, Order, Transaction, AdminState, AdminActions } from '@/types/grocery'
 import { generateId, validateImageUrl } from '@/lib/utils'
 
 // Sample data for demonstration

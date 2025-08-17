@@ -26,8 +26,8 @@ export default function NotFound() {
         <h1 className="text-6xl font-bold text-gray-800 mb-4">404</h1>
         <h2 className="text-2xl font-semibold text-gray-700 mb-4">Page Not Found</h2>
         <p className="text-gray-600 mb-8 leading-relaxed">
-          Oops! The page you're looking for seems to have wandered off into the grocery aisles. 
-          Let's get you back on track.
+          Oops! The page you&apos;re looking for seems to have wandered off into the grocery aisles. 
+          Let&apos;s get you back on track.
         </p>
 
         {/* Action Buttons */}
@@ -61,7 +61,7 @@ export default function NotFound() {
         {/* Footer */}
         <div className="mt-12 pt-8 border-t border-gray-200">
           <p className="text-sm text-gray-500">
-            Can't find what you're looking for?{' '}
+            Can&apos;t find what you&apos;re looking for?{' '}
             <Link href="/admin" className="text-green-600 hover:text-green-700 font-medium">
               Contact our support team
             </Link>

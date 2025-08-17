@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Search, Filter, Edit, Trash2, Eye, Plus, MoreHorizontal, Package } from 'lucide-react'
+import { Search, Filter, Edit, Trash2, Plus, Package } from 'lucide-react'
 import { GroceryProduct, GroceryCategory } from '@/types/grocery'
 import { formatPrice, formatDate, truncateText } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import Image from 'next/image'
 
 interface ProductsTableProps {
   products: GroceryProduct[]
@@ -207,10 +208,12 @@ export default function ProductsTable({
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center space-x-3">
                       <div className="flex-shrink-0 w-12 h-12">
-                        <img
+                        <Image
                           className="w-12 h-12 rounded-lg object-cover"
                           src={product.images[0] || '/placeholder-image.png'}
                           alt={product.name}
+                          width={48}
+                          height={48}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement
                             target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAyNkMyMy4zMTM3IDI2IDI2IDIzLjMxMzcgMjYgMjBDMjYgMTYuNjg2MyAyMy4zMTM3IDE0IDIwIDE0QzE2LjY4NjMgMTQgMTQgMTYuNjg2MyAxNCAyMEMxNCAyMy4zMTM3IDE2LjY4NjMgMjYgMjAgMjZaIiBmaWxsPSIjOUI5QkEwIi8+CjxwYXRoIGQ9Ik0yNiAxNkMyNiAxOC4yMDkxIDI0LjIwOTEgMjAgMjIgMjBDMTkuNzkwOSAyMCAxOCAxOC4yMDkxIDE4IDE2QzE4IDEzLjc5MDkgMTkuNzkwOSAxMiAyMiAxMkMyNC4yMDkxIDEyIDI2IDEzLjc5MDkgMjYgMTZaIiBmaWxsPSIjOUI5QkEwIi8+Cjwvc3ZnPgo='

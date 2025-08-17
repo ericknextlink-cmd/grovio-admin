@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useCallback, useRef } from 'react'
-import { Upload, X, Image as ImageIcon, Link, FileImage } from 'lucide-react'
+import { Upload, X, Link, FileImage } from 'lucide-react'
 import { cn, validateImageUrl } from '@/lib/utils'
+import Image from 'next/image'
 
 interface ImageUploadProps {
   images: string[]
@@ -193,10 +194,12 @@ export default function ImageUpload({
             {images.map((image, index) => (
               <div key={index} className="relative group">
                 <div className="aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                  <img
+                  <Image
                     src={image}
                     alt={`Product image ${index + 1}`}
                     className="w-full h-full object-cover"
+                    width={100}
+                    height={100}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement
                       target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAyNkMyMy4zMTM3IDI2IDI2IDIzLjMxMzcgMjYgMjBDMjYgMTYuNjg2MyAyMy4zMTM3IDE0IDIwIDE0QzE2LjY4NjMgMTQgMTQgMTYuNjg2MyAxNCAyMEMxNCAyMy4zMTM3IDE2LjY4NjMgMjYgMjAgMjZaIiBmaWxsPSIjOUI5QkEwIi8+CjxwYXRoIGQ9Ik0yNiAxNkMyNiAxOC4yMDkxIDI0LjIwOTEgMjAgMjIgMjBDMTkuNzkwOSAyMCAxOCAxOC4yMDkxIDE4IDE2QzE4IDEzLjc5MDkgMTkuNzkwOSAxMiAyMiAxMkMyNC4yMDkxIDEyIDI2IDEzLjc5MDkgMjYgMTZaIiBmaWxsPSIjOUI5QkEwIi8+Cjwvc3ZnPgo='

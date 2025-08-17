@@ -6,6 +6,7 @@ import OrdersTable from '@/components/OrdersTable'
 import AdminSidebar from '@/components/AdminSidebar'
 import { Order, OrderStatus } from '@/types/grocery'
 import { X } from 'lucide-react'
+import Image from 'next/image'
 
 export default function OrdersPage() {
   const {
@@ -129,10 +130,12 @@ export default function OrdersPage() {
                 <div className="space-y-3">
                   {selectedOrder.items.map((item, index) => (
                     <div key={index} className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <img
+                      <Image
                         src={item.productImage}
                         alt={item.productName}
                         className="w-16 h-16 rounded-lg object-cover"
+                        width={64}
+                        height={64}
                       />
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900 dark:text-white">{item.productName}</h4>

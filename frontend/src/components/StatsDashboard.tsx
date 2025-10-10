@@ -90,7 +90,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
 
   const formatStatValue = (key: string, value: any) => {
     if (key === 'totalRevenue') {
-      return formatPrice(value, 'GHS')
+      return formatPrice(value, 'GH₵')
     }
     return value.toLocaleString()
   }
@@ -196,13 +196,13 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</span>
               <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                {formatPrice(stats.totalRevenue, 'GHS')}
+                {formatPrice(stats.totalRevenue, 'GH₵')}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Average Order Value</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {stats.totalOrders > 0 ? formatPrice(stats.totalRevenue / stats.totalOrders, 'GHS') : formatPrice(0, 'GHS')}
+                {stats.totalOrders > 0 ? formatPrice(stats.totalRevenue / stats.totalOrders, 'GH₵') : formatPrice(0, 'GH₵')}
               </span>
             </div>
           </div>

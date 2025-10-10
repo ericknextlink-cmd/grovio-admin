@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config dist/server.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec \"node -r /Users/kaleel/Documents/projects/tmp/grovio-admin/backend/src/config/register-env.ts -r ts-node/register\" src/server.ts",
+    "start": "node dist/server.js",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec \"ts-node\" src/server.ts",
     "lint": "eslint 'src/**/*.ts'"
   },
   "dependencies": {

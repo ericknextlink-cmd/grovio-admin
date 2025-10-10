@@ -17,7 +17,6 @@ export function createClient() {
  * Create Supabase admin client with service role key (for admin operations)
  */
 export function createAdminClient() {
-  console.log('supabaseServiceKey', supabaseServiceKey);
   if (!supabaseServiceKey) {
     throw new Error('Missing Supabase service role key')
   }

@@ -1,3 +1,6 @@
+// Load environment variables first
+import './config/register-env'
+
 import express, { Application, Request, Response } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -15,11 +18,6 @@ import { dashboardRoutes } from './routes/dashboard.routes'
 import { aiRoutes } from './routes/ai.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
-import dotenv from "dotenv";
-dotenv.config({ path: '../.env' });
-
-// Load environment variables from .env.local file
-// config({ path: '../.env' })
 
 const app: Application = express()
 const PORT = process.env.PORT || 5000

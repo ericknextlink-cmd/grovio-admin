@@ -59,9 +59,10 @@ app.use('/api/categories', categoriesRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/ai', aiRoutes)
 
+
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
-  res.json({
+  return res.json({
     message: 'Grovio Backend API',
     version: '1.0.0',
     status: 'running',

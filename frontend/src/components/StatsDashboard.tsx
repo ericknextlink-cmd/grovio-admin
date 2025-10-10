@@ -90,7 +90,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
 
   const formatStatValue = (key: string, value: any) => {
     if (key === 'totalRevenue') {
-      return formatPrice(value, 'GH₵')
+      return formatPrice(value, 'GHS')
     }
     return value.toLocaleString()
   }
@@ -107,7 +107,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
             Key metrics and performance indicators
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <TrendingUp className="h-4 w-4" />
           <span>Last updated: {new Date().toLocaleTimeString()}</span>
@@ -119,7 +119,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
         {statCards.map((card) => {
           const Icon = card.icon
           const value = getStatValue(card.key)
-          
+
           return (
             <div
               key={card.key}
@@ -196,20 +196,20 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</span>
               <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                {formatPrice(stats.totalRevenue, 'GH₵')}
+                {formatPrice(stats.totalRevenue, 'GHS')}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Average Order Value</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {stats.totalOrders > 0 ? formatPrice(stats.totalRevenue / stats.totalOrders, 'GH₵') : formatPrice(0, 'GH₵')}
+                {stats.totalOrders > 0 ? formatPrice(stats.totalRevenue / stats.totalOrders, 'GHS') : formatPrice(0, 'GHS')}
               </span>
             </div>
           </div>
         </div>
 
         {/* Transactions */}
-        <div className="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <div className="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gr,ay-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Transactions
           </h3>

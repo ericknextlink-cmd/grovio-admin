@@ -24,7 +24,7 @@ export interface UserPreferences {
   }
   deliveryAddress?: string
   language: 'en' | 'tw' | 'fr'
-  currency: 'GH₵' | 'USD'
+  currency: 'GHS' | 'USD'
 }
 
 export interface SignupRequest {

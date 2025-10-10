@@ -20,7 +20,7 @@ const sampleProducts: GroceryProduct[] = [
     category: 'Fruits & Vegetables',
     subcategory: 'Fresh Fruits',
     price: 15.99,
-    currency: 'GH₵',
+    currency: 'GHS',
     quantity: 50,
     weight: 1.5,
     type: 'Organic',
@@ -40,7 +40,7 @@ const sampleProducts: GroceryProduct[] = [
     category: 'Dairy & Eggs',
     subcategory: 'Milk',
     price: 18.49,
-    currency: 'GH₵',
+    currency: 'GHS',
     quantity: 30,
     volume: 1,
     type: 'Regular',
@@ -60,7 +60,7 @@ const sampleProducts: GroceryProduct[] = [
     category: 'Meat & Seafood',
     subcategory: 'Beef',
     price: 89.99,
-    currency: 'GH₵',
+    currency: 'GHS',
     quantity: 15,
     weight: 1,
     type: 'Grass-Fed',
@@ -99,7 +99,7 @@ const sampleOrders: Order[] = [
       },
     ],
     totalAmount: 50.47,
-    currency: 'GH₵',
+    currency: 'GHS',
     status: 'delivered',
     paymentMethod: 'mobile_money',
     deliveryAddress: '123 Accra Street, Accra, Ghana',
@@ -123,7 +123,7 @@ const sampleOrders: Order[] = [
       },
     ],
     totalAmount: 89.99,
-    currency: 'GH₵',
+    currency: 'GHS',
     status: 'processing',
     paymentMethod: 'card',
     deliveryAddress: '456 Kumasi Road, Kumasi, Ghana',
@@ -154,7 +154,7 @@ const sampleOrders: Order[] = [
       },
     ],
     totalAmount: 84.95,
-    currency: 'GH₵',
+    currency: 'GHS',
     status: 'pending',
     paymentMethod: 'cash',
     deliveryAddress: '789 Cape Coast Drive, Cape Coast, Ghana',
@@ -170,7 +170,7 @@ const sampleTransactions: Transaction[] = [
     customerName: 'Kwame Asante',
     customerEmail: 'kwame@example.com',
     amount: 50.47,
-    currency: 'GH₵',
+    currency: 'GHS',
     paymentMethod: 'mobile_money',
     status: 'completed',
     transactionId: 'TXN001',
@@ -185,7 +185,7 @@ const sampleTransactions: Transaction[] = [
     customerName: 'Ama Osei',
     customerEmail: 'ama@example.com',
     amount: 89.99,
-    currency: 'GH₵',
+    currency: 'GHS',
     paymentMethod: 'card',
     status: 'completed',
     transactionId: 'TXN002',
@@ -200,7 +200,7 @@ const sampleTransactions: Transaction[] = [
     customerName: 'Kofi Mensah',
     customerEmail: 'kofi@example.com',
     amount: 84.95,
-    currency: 'GH₵',
+    currency: 'GHS',
     paymentMethod: 'cash',
     status: 'pending',
     notes: 'Cash on delivery - payment pending',
@@ -244,11 +244,11 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       updatedAt: new Date(),
       images: productData.images.map(img => validateImageUrl(img)),
     }
-    
+
     set((state) => ({
       products: [...state.products, newProduct],
     }))
-    
+
     get().updateStats()
   },
 
@@ -257,15 +257,15 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       products: state.products.map(product =>
         product.id === id
           ? {
-              ...product,
-              ...updates,
-              updatedAt: new Date(),
-              images: updates.images ? updates.images.map(img => validateImageUrl(img)) : product.images,
-            }
+            ...product,
+            ...updates,
+            updatedAt: new Date(),
+            images: updates.images ? updates.images.map(img => validateImageUrl(img)) : product.images,
+          }
           : product
       ),
     }))
-    
+
     get().updateStats()
   },
 
@@ -273,7 +273,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
     set((state) => ({
       products: state.products.filter(product => product.id !== id),
     }))
-    
+
     get().updateStats()
   },
 
@@ -287,11 +287,11 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       ...categoryData,
       id: generateId(),
     }
-    
+
     set((state) => ({
       categories: [...state.categories, newCategory],
     }))
-    
+
     get().updateStats()
   },
 
@@ -301,7 +301,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
         category.id === id ? { ...category, ...updates } : category
       ),
     }))
-    
+
     get().updateStats()
   },
 
@@ -309,7 +309,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
     set((state) => ({
       categories: state.categories.filter(category => category.id !== id),
     }))
-    
+
     get().updateStats()
   },
 
@@ -325,11 +325,11 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       createdAt: new Date(),
       updatedAt: new Date(),
     }
-    
+
     set((state) => ({
       orders: [...state.orders, newOrder],
     }))
-    
+
     get().updateStats()
   },
 
@@ -338,14 +338,14 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       orders: state.orders.map(order =>
         order.id === id
           ? {
-              ...order,
-              ...updates,
-              updatedAt: new Date(),
-            }
+            ...order,
+            ...updates,
+            updatedAt: new Date(),
+          }
           : order
       ),
     }))
-    
+
     get().updateStats()
   },
 
@@ -353,7 +353,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
     set((state) => ({
       orders: state.orders.filter(order => order.id !== id),
     }))
-    
+
     get().updateStats()
   },
 
@@ -373,11 +373,11 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       createdAt: new Date(),
       updatedAt: new Date(),
     }
-    
+
     set((state) => ({
       transactions: [...state.transactions, newTransaction],
     }))
-    
+
     get().updateStats()
   },
 
@@ -387,7 +387,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
         transaction.id === id ? { ...transaction, ...updates, updatedAt: new Date() } : transaction
       ),
     }))
-    
+
     get().updateStats()
   },
 
@@ -395,7 +395,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
     set((state) => ({
       transactions: state.transactions.filter(transaction => transaction.id !== id),
     }))
-    
+
     get().updateStats()
   },
 
@@ -414,28 +414,28 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
 
   getFilteredProducts: () => {
     const { products, searchQuery, selectedCategory } = get()
-    
+
     return products.filter(product => {
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.category.toLowerCase().includes(searchQuery.toLowerCase())
-      
+
       const matchesCategory = selectedCategory === '' || product.category === selectedCategory
-      
+
       return matchesSearch && matchesCategory
     })
   },
 
   getFilteredOrders: () => {
     const { orders, searchQuery } = get()
-    
+
     return orders.filter(order => {
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.status.toLowerCase().includes(searchQuery.toLowerCase())
-      
+
       return matchesSearch
     })
   },
@@ -467,14 +467,14 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
   // Get Filtered Transactions
   getFilteredTransactions: () => {
     const { transactions, searchQuery } = get()
-    
+
     return transactions.filter(transaction => {
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         transaction.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         transaction.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
         transaction.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (transaction.transactionId && transaction.transactionId.toLowerCase().includes(searchQuery.toLowerCase()))
-      
+
       return matchesSearch
     })
   },

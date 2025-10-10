@@ -83,11 +83,11 @@ export class ProductsService {
       }
 
       // Apply sorting
-      const sortColumn = filters.sortBy === 'created_at' ? 'created_at' : 
-                        filters.sortBy === 'name' ? 'name' :
-                        filters.sortBy === 'price' ? 'price' :
-                        filters.sortBy === 'quantity' ? 'quantity' :
-                        'created_at'
+      const sortColumn = filters.sortBy === 'created_at' ? 'created_at' :
+        filters.sortBy === 'name' ? 'name' :
+          filters.sortBy === 'price' ? 'price' :
+            filters.sortBy === 'quantity' ? 'quantity' :
+              'created_at'
 
       query = query.order(sortColumn, { ascending: filters.sortOrder === 'asc' })
 
@@ -159,7 +159,7 @@ export class ProductsService {
         .insert({
           ...productData,
           slug,
-          currency: productData.currency || 'GH₵'
+          currency: productData.currency || 'GHS'
         })
         .select()
         .single()
@@ -271,7 +271,7 @@ export class ProductsService {
     try {
       const { data: product, error } = await this.supabase
         .from('products')
-        .update({ 
+        .update({
           quantity,
           in_stock: inStock
         })

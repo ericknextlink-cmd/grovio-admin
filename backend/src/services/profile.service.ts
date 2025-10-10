@@ -220,7 +220,7 @@ export class ProfileService {
           role: updatedUser.role,
           preferences: updatedPreferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: updatedUser.created_at,
           updatedAt: updatedUser.updated_at
@@ -282,7 +282,7 @@ export class ProfileService {
           role: userData.role,
           preferences: preferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: userData.created_at,
           updatedAt: userData.updated_at

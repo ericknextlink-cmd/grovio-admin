@@ -1,31 +1,41 @@
 # Grovio Backend API Documentation
 
 ## Base URL
+
 ```
 Development: http://localhost:5000
 Production: https://your-backend-domain.com
 ```
 
 ## Authentication
+
 Most endpoints require authentication. Include the access token in the Authorization header:
+
 ```
 Authorization: Bearer <access_token>
 ```
 
 ## Response Format
+
 All endpoints return JSON responses in this format:
 
 **Success Response:**
+
 ```json
 {
   "success": true,
   "message": "Operation successful",
-  "data": { /* response data */ },
-  "user": { /* user object if applicable */ }
+  "data": {
+    /* response data */
+  },
+  "user": {
+    /* user object if applicable */
+  }
 }
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -39,9 +49,11 @@ All endpoints return JSON responses in this format:
 ### Health Check
 
 #### GET /api/health
+
 Check server status and uptime.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -58,9 +70,11 @@ Check server status and uptime.
 ### Authentication
 
 #### POST /api/auth/signup
+
 Register a new user account.
 
 **Request Body:**
+
 ```json
 {
   "firstName": "John",
@@ -72,6 +86,7 @@ Register a new user account.
 ```
 
 **Success Response (201):**
+
 ```json
 {
   "success": true,
@@ -91,9 +106,11 @@ Register a new user account.
 ```
 
 #### POST /api/auth/signin
+
 Sign in with email and password.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -102,20 +119,25 @@ Sign in with email and password.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Signed in successfully",
-  "user": { /* user object */ },
+  "user": {
+    /* user object */
+  },
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refreshToken": "refresh_token_string"
 }
 ```
 
 #### POST /api/auth/google
+
 Authenticate with Google OAuth.
 
 **Request Body:**
+
 ```json
 {
   "idToken": "google_id_token",
@@ -124,21 +146,26 @@ Authenticate with Google OAuth.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Signed in with Google successfully",
-  "user": { /* user object */ },
+  "user": {
+    /* user object */
+  },
   "accessToken": "jwt_token",
   "refreshToken": "refresh_token"
 }
 ```
 
 #### POST /api/auth/signout
+
 Sign out current user.
 **Headers:** `Authorization: Bearer <token>`
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -147,10 +174,12 @@ Sign out current user.
 ```
 
 #### GET /api/auth/me
+
 Get current user profile.
 **Headers:** `Authorization: Bearer <token>`
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -168,7 +197,7 @@ Get current user profile.
     "role": "customer",
     "preferences": {
       "language": "en",
-      "currency": "GH₵",
+      "currency": "GHS",
       "familySize": 4
     }
   }
@@ -176,9 +205,11 @@ Get current user profile.
 ```
 
 #### POST /api/auth/refresh
+
 Refresh access token.
 
 **Request Body:**
+
 ```json
 {
   "refreshToken": "refresh_token_string"
@@ -186,6 +217,7 @@ Refresh access token.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -200,9 +232,11 @@ Refresh access token.
 ### Account Management
 
 #### POST /api/account/check-email
+
 Check email status (available, exists, deleted).
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com"
@@ -210,6 +244,7 @@ Check email status (available, exists, deleted).
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -222,10 +257,12 @@ Check email status (available, exists, deleted).
 **Possible status values:** `"available"`, `"exists"`, `"deleted"`
 
 #### DELETE /api/account/delete
+
 Soft delete user account.
 **Headers:** `Authorization: Bearer <token>`
 
 **Request Body:**
+
 ```json
 {
   "reason": "No longer need the service"
@@ -233,6 +270,7 @@ Soft delete user account.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -241,9 +279,11 @@ Soft delete user account.
 ```
 
 #### POST /api/account/recovery/initiate
+
 Initiate account recovery for deleted accounts.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com"
@@ -251,6 +291,7 @@ Initiate account recovery for deleted accounts.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -259,9 +300,11 @@ Initiate account recovery for deleted accounts.
 ```
 
 #### POST /api/account/recovery/complete
+
 Complete account recovery.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -271,11 +314,14 @@ Complete account recovery.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Account recovered successfully. Please verify your email address.",
-  "user": { /* user object */ }
+  "user": {
+    /* user object */
+  }
 }
 ```
 
@@ -284,9 +330,11 @@ Complete account recovery.
 ### OTP & Email Verification
 
 #### POST /api/otp/send
+
 Send email verification OTP.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -295,6 +343,7 @@ Send email verification OTP.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -303,9 +352,11 @@ Send email verification OTP.
 ```
 
 #### POST /api/otp/verify
+
 Verify email OTP.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -314,38 +365,48 @@ Verify email OTP.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Email verified successfully",
   "data": {
-    "session": { /* session object */ }
+    "session": {
+      /* session object */
+    }
   }
 }
 ```
 
 #### GET /api/otp/verify-hash
+
 Verify email with token hash (PKCE flow).
 
 **Query Parameters:**
+
 - `token_hash`: Token hash from email link
 - `type`: `email` or `recovery`
 
 **Success Response (200 or redirect):**
+
 ```json
 {
   "success": true,
   "message": "Email verified successfully",
   "data": {
-    "session": { /* session object */ }
+    "session": {
+      /* session object */
+    }
   }
 }
 ```
 
 #### POST /api/otp/reset-password
+
 Send password reset email.
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com"
@@ -353,6 +414,7 @@ Send password reset email.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -365,23 +427,29 @@ Send password reset email.
 ### Profile Management
 
 #### GET /api/profile
+
 Get current user profile.
 **Headers:** `Authorization: Bearer <token>`
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Profile retrieved successfully",
-  "user": { /* complete user object with preferences */ }
+  "user": {
+    /* complete user object with preferences */
+  }
 }
 ```
 
 #### PUT /api/profile
+
 Update user profile.
 **Headers:** `Authorization: Bearer <token>`
 
 **Request Body:**
+
 ```json
 {
   "firstName": "Updated Name",
@@ -390,7 +458,7 @@ Update user profile.
   "preferences": {
     "familySize": 4,
     "language": "en",
-    "currency": "GH₵",
+    "currency": "GHS",
     "dietaryRestrictions": ["vegetarian"],
     "preferredCategories": ["vegetables", "grains"]
   }
@@ -398,23 +466,29 @@ Update user profile.
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
   "message": "Profile updated successfully",
-  "user": { /* updated user object */ }
+  "user": {
+    /* updated user object */
+  }
 }
 ```
 
 #### POST /api/profile/picture
+
 Upload profile picture.
 **Headers:** `Authorization: Bearer <token>`
 **Content-Type:** `multipart/form-data`
 
 **Form Data:**
+
 - `profilePicture`: Image file (JPEG, PNG, WebP, max 5MB)
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -424,10 +498,12 @@ Upload profile picture.
 ```
 
 #### DELETE /api/profile/picture
+
 Delete profile picture.
 **Headers:** `Authorization: Bearer <token>`
 
 **Success Response (200):**
+
 ```json
 {
   "success": true,
@@ -440,6 +516,7 @@ Delete profile picture.
 ## Error Codes & Status
 
 ### HTTP Status Codes
+
 - `200` - Success
 - `201` - Created
 - `400` - Bad Request (validation errors)
@@ -453,18 +530,17 @@ Delete profile picture.
 ### Common Error Responses
 
 **Validation Error (400):**
+
 ```json
 {
   "success": false,
   "message": "Validation failed",
-  "errors": [
-    "Email is required",
-    "Password must be at least 8 characters long"
-  ]
+  "errors": ["Email is required", "Password must be at least 8 characters long"]
 }
 ```
 
 **Authentication Error (401):**
+
 ```json
 {
   "success": false,
@@ -474,6 +550,7 @@ Delete profile picture.
 ```
 
 **Rate Limit Error (429):**
+
 ```json
 {
   "success": false,
@@ -486,40 +563,42 @@ Delete profile picture.
 ## Request Examples
 
 ### JavaScript/Fetch
+
 ```javascript
 // Sign up
-const response = await fetch('/api/auth/signup', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+const response = await fetch("/api/auth/signup", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john@example.com',
-    phoneNumber: '+233241234567',
-    password: 'SecurePass123!'
-  })
-})
+    firstName: "John",
+    lastName: "Doe",
+    email: "john@example.com",
+    phoneNumber: "+233241234567",
+    password: "SecurePass123!",
+  }),
+});
 
 // Authenticated request
-const response = await fetch('/api/profile', {
-  headers: { 
-    'Authorization': `Bearer ${accessToken}`,
-    'Content-Type': 'application/json'
-  }
-})
+const response = await fetch("/api/profile", {
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  },
+});
 
 // File upload
-const formData = new FormData()
-formData.append('profilePicture', file)
+const formData = new FormData();
+formData.append("profilePicture", file);
 
-const response = await fetch('/api/profile/picture', {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${accessToken}` },
-  body: formData
-})
+const response = await fetch("/api/profile/picture", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${accessToken}` },
+  body: formData,
+});
 ```
 
 ### cURL
+
 ```bash
 # Sign up
 curl -X POST http://localhost:5000/api/auth/signup \
@@ -540,11 +619,13 @@ curl -X GET http://localhost:5000/api/profile \
 ---
 
 ## Rate Limiting
+
 - **General API**: 100 requests per 15 minutes per IP
 - **Authentication endpoints**: Additional rate limiting may apply
 - **File uploads**: 10 requests per 5 minutes per user
 
 ## Security Features
+
 - **Password hashing**: bcrypt with 12 rounds
 - **JWT tokens**: Secure access tokens with refresh mechanism
 - **Input validation**: All inputs validated and sanitized

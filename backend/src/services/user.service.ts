@@ -48,7 +48,7 @@ export class UserService {
           role: userData.role,
           preferences: preferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: userData.created_at,
           updatedAt: userData.updated_at
@@ -153,7 +153,7 @@ export class UserService {
           role: updatedUser.role,
           preferences: updatedPreferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: updatedUser.created_at,
           updatedAt: updatedUser.updated_at
@@ -204,7 +204,7 @@ export class UserService {
         role: user.role,
         preferences: user.user_preferences || {
           language: 'en',
-          currency: 'GH₵'
+          currency: 'GHS'
         },
         createdAt: user.created_at,
         updatedAt: user.updated_at

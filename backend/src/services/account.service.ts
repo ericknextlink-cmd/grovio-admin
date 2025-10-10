@@ -251,7 +251,7 @@ export class AccountService {
           role: 'customer',
           preferences: {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           }
         })
 
@@ -284,7 +284,7 @@ export class AccountService {
           role: 'customer',
           preferences: {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()

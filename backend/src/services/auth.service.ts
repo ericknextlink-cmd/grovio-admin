@@ -30,7 +30,7 @@ export class AuthService {
     if (!lastName?.trim()) errors.push('Last name is required')
     if (!email?.trim()) errors.push('Email is required')
     else if (!isValidEmail(email)) errors.push('Invalid email format')
-    
+
     if (!phoneNumber?.trim()) errors.push('Phone number is required')
     else if (!isValidPhoneNumber(phoneNumber)) {
       errors.push('Phone number must be in international format (e.g., +233241234567)')
@@ -123,7 +123,7 @@ export class AuthService {
           role: 'customer',
           preferences: {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           }
         })
 
@@ -131,7 +131,7 @@ export class AuthService {
         console.error('Database insert error:', dbError)
         // Try to clean up the auth user if database insert fails
         await supabase.auth.admin.deleteUser(authData.user.id)
-        
+
         return {
           success: false,
           message: 'Failed to create user profile',
@@ -145,7 +145,7 @@ export class AuthService {
         .insert({
           user_id: authData.user.id,
           language: 'en',
-          currency: 'GH₵'
+          currency: 'GHS'
         })
 
       return {
@@ -163,7 +163,7 @@ export class AuthService {
           role: 'customer',
           preferences: {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -190,7 +190,7 @@ export class AuthService {
 
     if (!email?.trim()) errors.push('Email is required')
     else if (!isValidEmail(email)) errors.push('Invalid email format')
-    
+
     if (!password) errors.push('Password is required')
 
     if (errors.length > 0) {
@@ -283,7 +283,7 @@ export class AuthService {
           role: userData.role,
           preferences: preferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: userData.created_at,
           updatedAt: userData.updated_at
@@ -358,7 +358,7 @@ export class AuthService {
         // New user - create profile
         const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
         const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
-        
+
         const phoneNumber = userMetadata.phone || ''
         const countryCode = '+233'
 
@@ -378,7 +378,7 @@ export class AuthService {
             google_id: userMetadata.sub || googleUser.id,
             preferences: {
               language: 'en',
-              currency: 'GH₵'
+              currency: 'GHS'
             }
           })
           .select()
@@ -399,7 +399,7 @@ export class AuthService {
           .insert({
             user_id: googleUser.id,
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           })
 
         userData = newUser
@@ -446,7 +446,7 @@ export class AuthService {
           role: userData.role,
           preferences: preferences || {
             language: 'en',
-            currency: 'GH₵'
+            currency: 'GHS'
           },
           createdAt: userData.created_at,
           updatedAt: userData.updated_at

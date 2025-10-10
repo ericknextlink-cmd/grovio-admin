@@ -3,7 +3,6 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
-import { config } from 'dotenv'
 import { authRoutes } from './routes/auth.routes'
 import { healthRoutes } from './routes/health.routes'
 import { accountRoutes } from './routes/account.routes'
@@ -16,9 +15,11 @@ import { dashboardRoutes } from './routes/dashboard.routes'
 import { aiRoutes } from './routes/ai.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
+import dotenv from "dotenv";
+dotenv.config({ path: '../.env' });
 
 // Load environment variables from .env.local file
-config({ path: '.env.local' })
+// config({ path: '../.env' })
 
 const app: Application = express()
 const PORT = process.env.PORT || 5000

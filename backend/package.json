@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec ts-node src/server.ts",
+    "start": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config dist/server.js",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec \"node -r /Users/kaleel/Documents/projects/tmp/grovio-admin/backend/src/config/register-env.ts -r ts-node/register\" src/server.ts",
     "lint": "eslint 'src/**/*.ts'"
   },
   "dependencies": {
@@ -21,7 +21,7 @@
     "@types/uuid": "^11.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.3",
     "ethers": "^6.15.0",
     "express": "^5.1.0",
     "express-rate-limiter": "^1.3.1",

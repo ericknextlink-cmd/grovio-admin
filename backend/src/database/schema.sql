@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   total_amount DECIMAL(10,2) NOT NULL,
-  currency TEXT DEFAULT 'GH₵',
+  currency TEXT DEFAULT 'GHS',
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled')),
   payment_method TEXT CHECK (payment_method IN ('cash', 'mobile_money', 'card', 'bank_transfer')),
   payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded')),
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   customer_name TEXT NOT NULL,
   customer_email TEXT NOT NULL,
   amount DECIMAL(10,2) NOT NULL CHECK (amount >= 0),
-  currency TEXT DEFAULT 'GH₵',
+  currency TEXT DEFAULT 'GHS',
   payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'mobile_money', 'card', 'bank_transfer')),
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded', 'cancelled')),
   transaction_id TEXT UNIQUE,
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
   budget_range JSONB,
   delivery_address JSONB,
   language TEXT DEFAULT 'en',
-  currency TEXT DEFAULT 'GH₵',
+  currency TEXT DEFAULT 'GHS',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

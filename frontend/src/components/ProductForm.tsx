@@ -22,7 +22,7 @@ const initialFormData = {
   category: '',
   subcategory: '',
   price: 0,
-  currency: 'GH₵',
+  currency: 'GHS',
   quantity: 0,
   weight: undefined as number | undefined,
   volume: undefined as number | undefined,
@@ -34,12 +34,12 @@ const initialFormData = {
   images: [] as string[],
 }
 
-export default function ProductForm({ 
-  product, 
-  categories, 
-  onSubmit, 
-  onCancel, 
-  isOpen 
+export default function ProductForm({
+  product,
+  categories,
+  onSubmit,
+  onCancel,
+  isOpen
 }: ProductFormProps) {
   const [formData, setFormData] = useState(initialFormData)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -89,7 +89,7 @@ export default function ProductForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) return
 
     setIsSubmitting(true)
@@ -276,7 +276,7 @@ export default function ProductForm({
                 onChange={(e) => handleInputChange('currency', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
               >
-                <option value="GH₵">GH₵ (₵)</option>
+                <option value="GHS">GHS (₵)</option>
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
                 <option value="GBP">GBP (£)</option>

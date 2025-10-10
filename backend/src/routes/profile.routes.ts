@@ -54,8 +54,8 @@ router.put('/', [
     .withMessage('Language must be one of: en, tw, fr'),
   body('preferences.currency')
     .optional()
-    .isIn(['GH₵', 'USD'])
-    .withMessage('Currency must be one of: GH₵, USD'),
+    .isIn(['GHS', 'USD'])
+    .withMessage('Currency must be one of: GHS, USD'),
   handleValidationErrors
 ], asyncHandler(profileController.updateProfile))
 

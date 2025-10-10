@@ -5,6 +5,7 @@
 This document provides comprehensive documentation for the Grovio Backend API endpoints. The API is built with Express.js and TypeScript, providing secure authentication, admin panel functionality, product management, and AI-powered features.
 
 **🔐 Admin Credentials:**
+
 - Username: `admin`
 - Password: `admin123`
 
@@ -17,6 +18,7 @@ http://localhost:5000/api
 ## Authentication
 
 ### User Authentication
+
 The API uses JWT tokens for user authentication. Include the token in the Authorization header:
 
 ```
@@ -24,6 +26,7 @@ Authorization: Bearer <your-jwt-token>
 ```
 
 ### Admin Authentication
+
 Admin endpoints require admin JWT tokens with elevated privileges:
 
 ```
@@ -49,9 +52,11 @@ All API responses follow this standard format:
 ## 🏥 Health Check Endpoints
 
 ### GET /health
+
 Check if the server is running and healthy.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -65,9 +70,11 @@ Check if the server is running and healthy.
 ```
 
 ### GET /health/detailed
+
 Get detailed health information including database connectivity.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -87,9 +94,11 @@ Get detailed health information including database connectivity.
 ## 🔐 Admin Authentication Endpoints
 
 ### POST /admin/login
+
 Admin login to get access token.
 
 **Request Body:**
+
 ```json
 {
   "username": "admin",
@@ -98,6 +107,7 @@ Admin login to get access token.
 ```
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -120,9 +130,11 @@ Admin login to get access token.
 ```
 
 ### GET /admin/profile
+
 Get admin profile information. **Requires Admin Auth**
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -140,9 +152,11 @@ Get admin profile information. **Requires Admin Auth**
 ```
 
 ### PUT /admin/profile
+
 Update admin profile. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "full_name": "Updated Name",
@@ -151,9 +165,11 @@ Update admin profile. **Requires Admin Auth**
 ```
 
 ### POST /admin/change-password
+
 Change admin password. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "currentPassword": "admin123",
@@ -162,6 +178,7 @@ Change admin password. **Requires Admin Auth**
 ```
 
 ### POST /admin/logout
+
 Admin logout. **Requires Admin Auth**
 
 ---
@@ -169,9 +186,11 @@ Admin logout. **Requires Admin Auth**
 ## 📦 Products Endpoints
 
 ### GET /products
+
 Get all products with optional filtering and pagination.
 
 **Query Parameters:**
+
 - `page` (number, default: 1)
 - `limit` (number, default: 20, max: 100)
 - `category` (string)
@@ -182,6 +201,7 @@ Get all products with optional filtering and pagination.
 - `sortOrder` (string: asc, desc)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -195,8 +215,8 @@ Get all products with optional filtering and pagination.
       "description": "Premium quality basmati rice",
       "category_name": "Rice & Grains",
       "subcategory": "Imported Rice",
-      "price": 130.00,
-      "currency": "GH₵",
+      "price": 130.0,
+      "currency": "GHS",
       "quantity": 50,
       "weight": 5.0,
       "volume": null,
@@ -220,25 +240,29 @@ Get all products with optional filtering and pagination.
 ```
 
 ### GET /products/:id
+
 Get product by ID.
 
 **Response:**
+
 ```json
 {
   "success": true,
   "message": "Product retrieved successfully",
   "data": {
     "id": "uuid",
-    "name": "Royal White Basmati Rice",
+    "name": "Royal White Basmati Rice"
     // ... full product object
   }
 }
 ```
 
 ### POST /products
+
 Create new product. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "name": "New Product Name",
@@ -246,8 +270,8 @@ Create new product. **Requires Admin Auth**
   "description": "Product description",
   "category_name": "Category Name",
   "subcategory": "Subcategory Name",
-  "price": 25.50,
-  "currency": "GH₵",
+  "price": 25.5,
+  "currency": "GHS",
   "quantity": 100,
   "weight": 1.5,
   "type": "Type",
@@ -260,17 +284,21 @@ Create new product. **Requires Admin Auth**
 ```
 
 ### PUT /products/:id
+
 Update product. **Requires Admin Auth**
 
 **Request Body:** (partial product object)
 
 ### DELETE /products/:id
+
 Delete product. **Requires Admin Auth**
 
 ### PATCH /products/:id/stock
+
 Update product stock. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "quantity": 50,
@@ -279,9 +307,11 @@ Update product stock. **Requires Admin Auth**
 ```
 
 ### GET /products/admin/stats
+
 Get product statistics. **Requires Admin Auth**
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -291,8 +321,8 @@ Get product statistics. **Requires Admin Auth**
     "inStock": 120,
     "outOfStock": 30,
     "categories": 12,
-    "averagePrice": 45.50,
-    "totalValue": 15000.00,
+    "averagePrice": 45.5,
+    "totalValue": 15000.0,
     "lowStockProducts": 5
   }
 }
@@ -303,12 +333,15 @@ Get product statistics. **Requires Admin Auth**
 ## 🏷️ Categories Endpoints
 
 ### GET /categories
+
 Get all categories with optional search.
 
 **Query Parameters:**
+
 - `search` (string)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -329,12 +362,15 @@ Get all categories with optional search.
 ```
 
 ### GET /categories/:id
+
 Get category by ID.
 
 ### POST /categories
+
 Create new category. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "name": "New Category",
@@ -346,15 +382,19 @@ Create new category. **Requires Admin Auth**
 ```
 
 ### PUT /categories/:id
+
 Update category. **Requires Admin Auth**
 
 ### DELETE /categories/:id
+
 Delete category. **Requires Admin Auth**
 
 ### POST /categories/:id/subcategories
+
 Add subcategory. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "subcategory": "New Subcategory"
@@ -362,9 +402,11 @@ Add subcategory. **Requires Admin Auth**
 ```
 
 ### DELETE /categories/:id/subcategories
+
 Remove subcategory. **Requires Admin Auth**
 
 **Request Body:**
+
 ```json
 {
   "subcategory": "Subcategory to Remove"
@@ -372,6 +414,7 @@ Remove subcategory. **Requires Admin Auth**
 ```
 
 ### GET /categories/admin/stats
+
 Get category statistics. **Requires Admin Auth**
 
 ---
@@ -381,9 +424,11 @@ Get category statistics. **Requires Admin Auth**
 All dashboard endpoints require Admin Authentication.
 
 ### GET /dashboard/stats
+
 Get comprehensive dashboard statistics.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -402,9 +447,9 @@ Get comprehensive dashboard statistics.
     "pendingTransactions": 20,
     "completedTransactions": 470,
     "failedTransactions": 10,
-    "totalRevenue": 45000.00,
-    "monthlyRevenue": 5000.00,
-    "dailyRevenue": 200.00,
+    "totalRevenue": 45000.0,
+    "monthlyRevenue": 5000.0,
+    "dailyRevenue": 200.0,
     "orderGrowth": 15.5,
     "revenueGrowth": 12.3,
     "topCategory": "Rice & Grains",
@@ -414,12 +459,15 @@ Get comprehensive dashboard statistics.
 ```
 
 ### GET /dashboard/activities
+
 Get recent activities.
 
 **Query Parameters:**
+
 - `limit` (number, default: 10, max: 50)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -437,24 +485,27 @@ Get recent activities.
 ```
 
 ### GET /dashboard/analytics
+
 Get sales analytics.
 
 **Query Parameters:**
+
 - `period` (number, days, default: 30)
 
 **Response:**
+
 ```json
 {
   "success": true,
   "message": "Sales analytics retrieved successfully",
   "data": {
-    "totalSales": 15000.00,
+    "totalSales": 15000.0,
     "totalOrders": 300,
-    "averageOrderValue": 50.00,
+    "averageOrderValue": 50.0,
     "dailySales": [
       {
         "date": "2024-01-20",
-        "sales": 500.00,
+        "sales": 500.0,
         "orders": 10
       }
     ],
@@ -463,13 +514,13 @@ Get sales analytics.
         "productId": "uuid",
         "productName": "Royal Basmati Rice",
         "totalSold": 50,
-        "revenue": 2500.00
+        "revenue": 2500.0
       }
     ],
     "salesByCategory": [
       {
         "category": "Rice & Grains",
-        "sales": 5000.00,
+        "sales": 5000.0,
         "percentage": 33.3
       }
     ]
@@ -478,12 +529,15 @@ Get sales analytics.
 ```
 
 ### GET /dashboard/alerts
+
 Get low stock alerts.
 
 **Query Parameters:**
+
 - `threshold` (number, default: 10)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -506,9 +560,11 @@ Get low stock alerts.
 ## 🤖 AI Endpoints
 
 ### POST /ai/chat
+
 Get AI chat response.
 
 **Request Body:**
+
 ```json
 {
   "message": "I have ₵50 for groceries for a family of 4",
@@ -519,6 +575,7 @@ Get AI chat response.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -530,9 +587,11 @@ Get AI chat response.
 ```
 
 ### POST /ai/recommendations
+
 Get product recommendations.
 
 **Request Body:**
+
 ```json
 {
   "budget": 100,
@@ -544,6 +603,7 @@ Get product recommendations.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -553,18 +613,18 @@ Get product recommendations.
       {
         "id": "uuid",
         "name": "Royal Basmati Rice",
-        "price": 45.00,
+        "price": 45.0,
         "quantity": 1,
         "category": "Rice & Grains",
         "subcategory": "Imported Rice",
         "images": ["/products/royal-rice.png"],
         "rating": 4.6,
         "inStock": true,
-        "subtotal": 45.00
+        "subtotal": 45.0
       }
     ],
-    "total": 95.00,
-    "savings": 5.00,
+    "total": 95.0,
+    "savings": 5.0,
     "rationale": "Optimized a budget-friendly basket for a student (family size 3). Selected 5 essential items prioritizing staples, proteins, and fresh produce to maximize nutritional value within your budget.",
     "budgetUtilization": 95.0
   }
@@ -572,13 +632,16 @@ Get product recommendations.
 ```
 
 ### GET /ai/search
+
 Search products with AI.
 
 **Query Parameters:**
+
 - `query` (string, required)
 - `limit` (number, default: 10, max: 50)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -587,23 +650,25 @@ Search products with AI.
     {
       "id": "uuid",
       "name": "Royal Basmati Rice",
-      "price": 45.00,
+      "price": 45.0,
       "quantity": 1,
       "category": "Rice & Grains",
       "subcategory": "Imported Rice",
       "images": ["/products/royal-rice.png"],
       "rating": 4.6,
       "inStock": true,
-      "subtotal": 45.00
+      "subtotal": 45.0
     }
   ]
 }
 ```
 
 ### POST /ai/budget-analysis
+
 Analyze budget and provide insights.
 
 **Request Body:**
+
 ```json
 {
   "budget": 200,
@@ -613,6 +678,7 @@ Analyze budget and provide insights.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -626,7 +692,7 @@ Analyze budget and provide insights.
       "other": 10
     },
     "estimatedMeals": 8,
-    "costPerMeal": 25.00,
+    "costPerMeal": 25.0,
     "suggestions": [
       "Include fresh proteins like chicken or fish",
       "Add variety with seasonal vegetables and fruits",
@@ -638,9 +704,11 @@ Analyze budget and provide insights.
 ```
 
 ### POST /ai/meal-suggestions
+
 Get meal suggestions based on ingredients.
 
 **Request Body:**
+
 ```json
 {
   "ingredients": ["rice", "chicken", "tomatoes"],
@@ -651,6 +719,7 @@ Get meal suggestions based on ingredients.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -674,9 +743,11 @@ Get meal suggestions based on ingredients.
 ## 👤 User Authentication Endpoints
 
 ### POST /auth/signup
+
 User registration with email and password.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -688,9 +759,11 @@ User registration with email and password.
 ```
 
 ### POST /auth/signin
+
 User login with email and password.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -699,15 +772,19 @@ User login with email and password.
 ```
 
 ### POST /auth/google
+
 Google OAuth authentication.
 
 ### POST /auth/signout
+
 User logout.
 
 ### GET /auth/me
+
 Get current user profile. **Requires User Auth**
 
 ### POST /auth/refresh
+
 Refresh access token.
 
 ---
@@ -715,9 +792,11 @@ Refresh access token.
 ## 📧 OTP Endpoints
 
 ### POST /otp/send
+
 Send OTP for email verification.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -726,9 +805,11 @@ Send OTP for email verification.
 ```
 
 ### POST /otp/verify
+
 Verify OTP code.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -738,9 +819,11 @@ Verify OTP code.
 ```
 
 ### POST /otp/verify-hash
+
 Verify OTP hash (PKCE flow).
 
 ### POST /otp/reset-password
+
 Reset password with OTP.
 
 ---
@@ -748,9 +831,11 @@ Reset password with OTP.
 ## 👥 Account Management Endpoints
 
 ### POST /account/check-email
+
 Check email status (available, exists, deleted).
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com"
@@ -758,12 +843,15 @@ Check email status (available, exists, deleted).
 ```
 
 ### DELETE /account/delete
+
 Soft delete user account. **Requires User Auth**
 
 ### POST /account/recovery/initiate
+
 Initiate account recovery for deleted accounts.
 
 ### POST /account/recovery/complete
+
 Complete account recovery process.
 
 ---
@@ -771,15 +859,19 @@ Complete account recovery process.
 ## 👤 Profile Endpoints
 
 ### GET /profile
+
 Get user profile. **Requires User Auth**
 
 ### PUT /profile
+
 Update user profile. **Requires User Auth**
 
 ### POST /profile/picture/upload
+
 Upload profile picture. **Requires User Auth**
 
 ### DELETE /profile/picture
+
 Delete profile picture. **Requires User Auth**
 
 ---
@@ -805,10 +897,7 @@ Delete profile picture. **Requires User Auth**
 {
   "success": false,
   "message": "Error description",
-  "errors": [
-    "Specific validation error 1",
-    "Specific validation error 2"
-  ]
+  "errors": ["Specific validation error 1", "Specific validation error 2"]
 }
 ```
 

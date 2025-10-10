@@ -39,8 +39,8 @@ const createProductValidation = [
     .withMessage('Price must be a positive number'),
   body('currency')
     .optional()
-    .isIn(['GH₵', 'USD', 'EUR', 'GBP'])
-    .withMessage('Currency must be one of: GH₵, USD, EUR, GBP'),
+    .isIn(['GHS', 'USD', 'EUR', 'GBP'])
+    .withMessage('Currency must be one of: GHS, USD, EUR, GBP'),
   body('quantity')
     .isInt({ min: 0 })
     .withMessage('Quantity must be a non-negative integer'),
@@ -120,8 +120,8 @@ const updateProductValidation = [
     .withMessage('Price must be a positive number'),
   body('currency')
     .optional()
-    .isIn(['GH₵', 'USD', 'EUR', 'GBP'])
-    .withMessage('Currency must be one of: GH₵, USD, EUR, GBP'),
+    .isIn(['GHS', 'USD', 'EUR', 'GBP'])
+    .withMessage('Currency must be one of: GHS, USD, EUR, GBP'),
   body('quantity')
     .optional()
     .isInt({ min: 0 })

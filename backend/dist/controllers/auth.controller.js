@@ -52,7 +52,71 @@ class AuthController {
             }
         };
         /**
-         * Google OAuth authentication
+         * Initiate Google OAuth flow (returns redirect URL)
+         */
+        this.initiateGoogleAuth = async (req, res) => {
+            try {
+                const redirectTo = req.query.redirectTo || '/dashboard';
+                const result = await this.authService.initiateGoogleAuth(redirectTo);
+                if (result.success) {
+                    res.status(200).json(result);
+                }
+                else {
+                    res.status(500).json(result);
+                }
+            }
+            catch (error) {
+                console.error('Initiate Google auth error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Failed to initiate Google authentication']
+                });
+            }
+        };
+        /**
+         * Handle Google OAuth callback
+         */
+        this.googleCallback = async (req, res) => {
+            try {
+                const code = req.query.code;
+                const state = req.query.state;
+                const error = req.query.error;
+                if (error) {
+                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+                    res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error)}`);
+                    return;
+                }
+                if (!code) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Missing authorization code',
+                        errors: ['No code provided in callback']
+                    });
+                    return;
+                }
+                const result = await this.authService.handleGoogleCallback(code);
+                if (result.success) {
+                    // Redirect to frontend with session info in URL params (or set cookies)
+                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+                    const redirectUrl = new URL('/auth/callback', frontendUrl);
+                    redirectUrl.searchParams.set('access_token', result.accessToken || '');
+                    redirectUrl.searchParams.set('refresh_token', result.refreshToken || '');
+                    res.redirect(redirectUrl.toString());
+                }
+                else {
+                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+                    res.redirect(`${frontendUrl}/login?error=auth_failed`);
+                }
+            }
+            catch (error) {
+                console.error('Google callback error:', error);
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+                res.redirect(`${frontendUrl}/login?error=server_error`);
+            }
+        };
+        /**
+         * Google OAuth authentication (ID token method - legacy)
          */
         this.googleAuth = async (req, res) => {
             try {

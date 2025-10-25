@@ -3,6 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// Load environment variables first
+require("./config/register-env");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
@@ -20,12 +22,8 @@ const dashboard_routes_1 = require("./routes/dashboard.routes");
 const ai_routes_1 = require("./routes/ai.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config({ path: '../.env' });
-// Load environment variables from .env.local file
-// config({ path: '../.env' })
+const port_1 = require("./utils/port");
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 5000;
 // Security middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -60,7 +58,7 @@ app.use('/api/dashboard', dashboard_routes_1.dashboardRoutes);
 app.use('/api/ai', ai_routes_1.aiRoutes);
 // Root endpoint
 app.get('/', (req, res) => {
-    res.json({
+    return res.json({
         message: 'Grovio Backend API',
         version: '1.0.0',
         status: 'running',
@@ -81,11 +79,26 @@ app.get('/', (req, res) => {
 // Error handling middleware (must be last)
 app.use(notFound_middleware_1.notFoundHandler);
 app.use(error_middleware_1.errorHandler);
-// Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Grovio Backend Server running on port ${PORT}`);
-    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
-    console.log(`⚡ Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`);
-});
+// Start server with auto port detection
+const startServer = async () => {
+    try {
+        // Get the desired port from environment or default to 3000
+        const desiredPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+        // Find an available port starting from the desired port
+        const PORT = await (0, port_1.findAvailablePort)(desiredPort);
+        app.listen(PORT, () => {
+            console.log(`🚀 Grovio Backend Server running on port ${PORT}`);
+            console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
+            console.log(`⚡ Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`);
+            console.log(`📡 Server URL: http://localhost:${PORT}`);
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+};
+// Start the server
+startServer();
 exports.default = app;

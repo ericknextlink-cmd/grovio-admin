@@ -28,8 +28,22 @@ router.post('/signup', validateSignup, asyncHandler(authController.signup))
 router.post('/signin', validateSignin, asyncHandler(authController.signin))
 
 /**
+ * @route   GET /api/auth/google
+ * @desc    Initiate Google OAuth flow (returns redirect URL)
+ * @access  Public
+ */
+router.get('/google', asyncHandler(authController.initiateGoogleAuth))
+
+/**
+ * @route   GET /api/auth/google/callback
+ * @desc    Handle Google OAuth callback
+ * @access  Public
+ */
+router.get('/google/callback', asyncHandler(authController.googleCallback))
+
+/**
  * @route   POST /api/auth/google
- * @desc    Authenticate user with Google OAuth
+ * @desc    Authenticate user with Google OAuth (ID token method)
  * @access  Public
  */
 router.post('/google', validateGoogleAuth, asyncHandler(authController.googleAuth))

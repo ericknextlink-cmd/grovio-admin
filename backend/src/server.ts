@@ -18,9 +18,9 @@ import { dashboardRoutes } from './routes/dashboard.routes'
 import { aiRoutes } from './routes/ai.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
+import { findAvailablePort } from './utils/port'
 
 const app: Application = express()
-const PORT = process.env.PORT || 5000
 
 // Security middleware
 app.use(helmet())
@@ -84,12 +84,29 @@ app.get('/', (req: Request, res: Response) => {
 app.use(notFoundHandler)
 app.use(errorHandler)
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Grovio Backend Server running on port ${PORT}`)
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`)
-  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`)
-  console.log(`⚡ Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`)
-})
+// Start server with auto port detection
+const startServer = async () => {
+  try {
+    // Get the desired port from environment or default to 3000
+    const desiredPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000
+    
+    // Find an available port starting from the desired port
+    const PORT = await findAvailablePort(desiredPort)
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 Grovio Backend Server running on port ${PORT}`)
+      console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`)
+      console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`)
+      console.log(`⚡ Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`)
+      console.log(`📡 Server URL: http://localhost:${PORT}`)
+    })
+  } catch (error) {
+    console.error('❌ Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+// Start the server
+startServer()
 
 export default app

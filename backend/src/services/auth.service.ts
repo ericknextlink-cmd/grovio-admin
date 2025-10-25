@@ -302,7 +302,197 @@ export class AuthService {
   }
 
   /**
-   * Google OAuth authentication
+   * Initiate Google OAuth flow - returns redirect URL
+   */
+  async initiateGoogleAuth(redirectTo: string = '/dashboard'): Promise<AuthResponse & { url?: string }> {
+    try {
+      const supabase = createClient()
+      
+      // Generate the OAuth URL
+      const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${backendUrl}/api/auth/google/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      })
+
+      if (error) {
+        console.error('Error initiating Google OAuth:', error)
+        return {
+          success: false,
+          message: 'Failed to initiate Google authentication',
+          errors: [error.message],
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Google OAuth URL generated successfully',
+        url: data.url,
+      }
+    } catch (error) {
+      console.error('Initiate Google auth service error:', error)
+      return {
+        success: false,
+        message: 'Internal server error',
+        errors: ['Something went wrong while initiating Google authentication'],
+      }
+    }
+  }
+
+  /**
+   * Handle Google OAuth callback
+   */
+  async handleGoogleCallback(code: string): Promise<AuthResponse> {
+    try {
+      const supabase = createClient()
+
+      // Exchange code for session
+      const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (authError) {
+        console.error('Error exchanging code for session:', authError)
+        return {
+          success: false,
+          message: 'Failed to complete Google authentication',
+          errors: [authError.message],
+        }
+      }
+
+      if (!authData.user || !authData.session) {
+        return {
+          success: false,
+          message: 'No user data received from Google',
+          errors: ['Authentication failed'],
+        }
+      }
+
+      const googleUser = authData.user
+      const userMetadata = googleUser.user_metadata
+
+      // Check if user exists in our database
+      const { data: existingUser, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', googleUser.id)
+        .single()
+
+      let userData
+
+      if (userError || !existingUser) {
+        // New user - create profile
+        const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
+        const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
+        const phoneNumber = userMetadata.phone || ''
+        const countryCode = '+233'
+
+        const { data: newUser, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: googleUser.id,
+            email: googleUser.email!,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: phoneNumber,
+            country_code: countryCode,
+            profile_picture: userMetadata.avatar_url || userMetadata.picture,
+            is_email_verified: googleUser.email_confirmed_at ? true : false,
+            is_phone_verified: false,
+            role: 'customer',
+            google_id: userMetadata.sub || googleUser.id,
+            preferences: {
+              language: 'en',
+              currency: 'GHS',
+            },
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Database insert error:', insertError)
+          return {
+            success: false,
+            message: 'Failed to create user profile',
+            errors: [insertError.message],
+          }
+        }
+
+        // Create initial user preferences
+        await supabase.from('user_preferences').insert({
+          user_id: googleUser.id,
+          language: 'en',
+          currency: 'GHS',
+        })
+
+        userData = newUser
+      } else {
+        // Existing user - update profile picture if needed
+        const updateData: any = {
+          updated_at: new Date().toISOString(),
+        }
+
+        if (userMetadata.avatar_url || userMetadata.picture) {
+          updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture
+        }
+
+        const { data: updatedUser, error: updateError } = await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', googleUser.id)
+          .select()
+          .single()
+
+        userData = updatedUser || existingUser
+      }
+
+      // Get user preferences
+      const { data: preferences } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', userData.id)
+        .single()
+
+      return {
+        success: true,
+        message: 'Signed in with Google successfully',
+        user: {
+          id: userData.id,
+          email: userData.email,
+          firstName: userData.first_name,
+          lastName: userData.last_name,
+          phoneNumber: userData.phone_number,
+          countryCode: userData.country_code,
+          profilePicture: userData.profile_picture,
+          isEmailVerified: userData.is_email_verified,
+          isPhoneVerified: userData.is_phone_verified,
+          role: userData.role,
+          preferences: preferences || {
+            language: 'en',
+            currency: 'GHS',
+          },
+          createdAt: userData.created_at,
+          updatedAt: userData.updated_at,
+        },
+        accessToken: authData.session?.access_token,
+        refreshToken: authData.session?.refresh_token,
+      }
+    } catch (error) {
+      console.error('Google callback service error:', error)
+      return {
+        success: false,
+        message: 'Internal server error',
+        errors: ['Something went wrong during Google authentication'],
+      }
+    }
+  }
+
+  /**
+   * Google OAuth authentication (ID token method - legacy)
    */
   async googleAuth(googleData: GoogleAuthRequest): Promise<AuthResponse> {
     const { idToken, nonce } = googleData

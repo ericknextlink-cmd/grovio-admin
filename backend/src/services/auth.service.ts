@@ -109,8 +109,10 @@ export class AuthService {
         }
       }
 
-      // Insert user data into our custom users table
-      const { error: dbError } = await supabase
+      // Insert user data into our custom users table using admin client to bypass RLS
+      const adminSupabase = createAdminClient()
+      
+      const { error: dbError } = await adminSupabase
         .from('users')
         .insert({
           id: authData.user.id,
@@ -140,7 +142,7 @@ export class AuthService {
       }
 
       // Create initial user preferences
-      await supabase
+      await adminSupabase
         .from('user_preferences')
         .insert({
           user_id: authData.user.id,
@@ -385,13 +387,14 @@ export class AuthService {
       let userData
 
       if (userError || !existingUser) {
-        // New user - create profile
+        // New user - create profile using admin client to bypass RLS
         const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
         const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
         const phoneNumber = userMetadata.phone || ''
         const countryCode = '+233'
+        const adminSupabase = createAdminClient()
 
-        const { data: newUser, error: insertError } = await supabase
+        const { data: newUser, error: insertError } = await adminSupabase
           .from('users')
           .insert({
             id: googleUser.id,
@@ -423,7 +426,7 @@ export class AuthService {
         }
 
         // Create initial user preferences
-        await supabase.from('user_preferences').insert({
+        await adminSupabase.from('user_preferences').insert({
           user_id: googleUser.id,
           language: 'en',
           currency: 'GHS',
@@ -545,14 +548,15 @@ export class AuthService {
       let userData
 
       if (userError || !existingUser) {
-        // New user - create profile
+        // New user - create profile using admin client to bypass RLS
         const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
         const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
 
         const phoneNumber = userMetadata.phone || ''
         const countryCode = '+233'
+        const adminSupabase = createAdminClient()
 
-        const { data: newUser, error: insertError } = await supabase
+        const { data: newUser, error: insertError } = await adminSupabase
           .from('users')
           .insert({
             id: googleUser.id,
@@ -584,7 +588,7 @@ export class AuthService {
         }
 
         // Create initial user preferences
-        await supabase
+        await adminSupabase
           .from('user_preferences')
           .insert({
             user_id: googleUser.id,

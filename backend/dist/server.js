@@ -20,6 +20,9 @@ const products_routes_1 = require("./routes/products.routes");
 const categories_routes_1 = require("./routes/categories.routes");
 const dashboard_routes_1 = require("./routes/dashboard.routes");
 const ai_routes_1 = require("./routes/ai.routes");
+const order_routes_1 = require("./routes/order.routes");
+const user_preferences_routes_1 = require("./routes/user-preferences.routes");
+const bundles_routes_1 = require("./routes/bundles.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
 const port_1 = require("./utils/port");
@@ -56,6 +59,11 @@ app.use('/api/products', products_routes_1.productsRoutes);
 app.use('/api/categories', categories_routes_1.categoriesRoutes);
 app.use('/api/dashboard', dashboard_routes_1.dashboardRoutes);
 app.use('/api/ai', ai_routes_1.aiRoutes);
+app.use('/api/orders', order_routes_1.orderRoutes);
+app.use('/api/users', user_preferences_routes_1.userPreferencesRoutes);
+app.use('/api/bundles', bundles_routes_1.bundlesRoutes);
+// Webhook endpoint (before general routes)
+app.use('/api/webhook', order_routes_1.orderRoutes);
 // Root endpoint
 app.get('/', (req, res) => {
     return res.json({
@@ -72,7 +80,11 @@ app.get('/', (req, res) => {
             products: '/api/products',
             categories: '/api/categories',
             dashboard: '/api/dashboard',
-            ai: '/api/ai'
+            ai: '/api/ai',
+            orders: '/api/orders',
+            users: '/api/users',
+            bundles: '/api/bundles',
+            webhook: '/api/webhook'
         }
     });
 });

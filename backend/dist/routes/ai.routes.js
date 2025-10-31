@@ -5,6 +5,8 @@ const express_1 = require("express");
 const ai_controller_1 = require("../controllers/ai.controller");
 const express_validator_1 = require("express-validator");
 const validation_middleware_1 = require("../middleware/validation.middleware");
+const optionalAuth_middleware_1 = require("../middleware/optionalAuth.middleware");
+const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 exports.aiRoutes = router;
 const aiController = new ai_controller_1.AIController();
@@ -29,6 +31,10 @@ const chatValidation = [
         .optional()
         .isFloat({ min: 0 })
         .withMessage('Budget must be a positive number'),
+    (0, express_validator_1.body)('threadId')
+        .optional()
+        .isUUID()
+        .withMessage('Thread ID must be a valid UUID'),
     validation_middleware_1.handleValidationErrors
 ];
 const recommendationsValidation = [
@@ -120,9 +126,14 @@ const mealSuggestionsValidation = [
         .withMessage('Family size must be between 1 and 20'),
     validation_middleware_1.handleValidationErrors
 ];
-// Public AI routes
-router.post('/chat', chatValidation, aiController.getChatResponse);
-router.post('/recommendations', recommendationsValidation, aiController.getRecommendations);
-router.get('/search', searchValidation, aiController.searchProducts);
-router.post('/budget-analysis', budgetAnalysisValidation, aiController.getBudgetAnalysis);
-router.post('/meal-suggestions', mealSuggestionsValidation, aiController.getMealSuggestions);
+// Public AI routes (work for both authenticated and anonymous users)
+// Optional auth = better personalization for logged-in users
+router.post('/chat', optionalAuth_middleware_1.optionalAuth, chatValidation, aiController.getChatResponse);
+router.post('/recommendations', optionalAuth_middleware_1.optionalAuth, recommendationsValidation, aiController.getRecommendations);
+router.get('/search', optionalAuth_middleware_1.optionalAuth, searchValidation, aiController.searchProducts);
+router.post('/budget-analysis', optionalAuth_middleware_1.optionalAuth, budgetAnalysisValidation, aiController.getBudgetAnalysis);
+router.post('/meal-suggestions', optionalAuth_middleware_1.optionalAuth, mealSuggestionsValidation, aiController.getMealSuggestions);
+// Thread management routes (require full authentication)
+router.get('/threads/:threadId', auth_middleware_1.authenticateToken, aiController.getConversationHistory);
+router.get('/threads', auth_middleware_1.authenticateToken, aiController.getUserThreads);
+router.delete('/threads/:threadId', auth_middleware_1.authenticateToken, aiController.deleteThread);

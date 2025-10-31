@@ -150,7 +150,7 @@ export class PDFInvoiceService {
       const { width, height } = firstPage.getSize()
       
       // Embed fonts
-      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
       
       // Embed QR code
@@ -180,7 +180,7 @@ export class PDFInvoiceService {
         x: width - 180,
         y: height - 110,
         size: 10,
-        font: helveticaFont,
+        font: helvetica,
         color: rgb(0, 0, 0),
       })
       
@@ -199,7 +199,7 @@ export class PDFInvoiceService {
         x: leftMargin,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
         color: rgb(0.2, 0.2, 0.2),
       })
       
@@ -208,7 +208,7 @@ export class PDFInvoiceService {
         x: leftMargin,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
         color: rgb(0.2, 0.2, 0.2),
       })
       
@@ -225,7 +225,7 @@ export class PDFInvoiceService {
           x: leftMargin,
           y: yPos,
           size: 9,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
         
@@ -234,7 +234,7 @@ export class PDFInvoiceService {
           x: width - 300,
           y: yPos,
           size: 9,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
         
@@ -243,7 +243,7 @@ export class PDFInvoiceService {
           x: width - 200,
           y: yPos,
           size: 9,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
         
@@ -252,7 +252,7 @@ export class PDFInvoiceService {
           x: width - 100,
           y: yPos,
           size: 9,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
         
@@ -279,7 +279,7 @@ export class PDFInvoiceService {
           x: width - 110,
           y: yPos,
           size: 10,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0.83, 0.37, 0.05),  // Orange color
         })
         yPos -= 25
@@ -291,7 +291,7 @@ export class PDFInvoiceService {
           x: width - 110,
           y: yPos,
           size: 10,
-          font: helveticaFont,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
         yPos -= 25
@@ -360,7 +360,7 @@ export class PDFInvoiceService {
       x: width - 250,
       y: height - 90,
       size: 10,
-      font: helveticaFont,
+      font: helvetica,
       color: rgb(0, 0, 0),
     })
     
@@ -368,17 +368,17 @@ export class PDFInvoiceService {
       x: width - 250,
       y: height - 110,
       size: 10,
-      font: helveticaFont,
+      font: helvetica,
       color: rgb(0, 0, 0),
     })
     
     // Grovio address
     let yPos = height - 110
-    page.drawText('Adjuma Crescent Road', { x: 50, y: yPos, size: 9, font: helveticaFont })
+    page.drawText('Adjuma Crescent Road', { x: 50, y: yPos, size: 9, font: helvetica })
     yPos -= 15
-    page.drawText('South Industrial Area', { x: 50, y: yPos, size: 9, font: helveticaFont })
+    page.drawText('South Industrial Area', { x: 50, y: yPos, size: 9, font: helvetica })
     yPos -= 15
-    page.drawText('Accra, Ghana', { x: 50, y: yPos, size: 9, font: helveticaFont })
+    page.drawText('Accra, Ghana', { x: 50, y: yPos, size: 9, font: helvetica })
     
     // Billed To
     yPos = height - 200
@@ -386,9 +386,9 @@ export class PDFInvoiceService {
     yPos -= 20
     page.drawText(data.customerName, { x: 50, y: yPos, size: 10, font: helveticaBold })
     yPos -= 15
-    page.drawText(data.customerAddress, { x: 50, y: yPos, size: 9, font: helveticaFont })
+    page.drawText(data.customerAddress, { x: 50, y: yPos, size: 9, font: helvetica })
     yPos -= 15
-    page.drawText(data.customerPhone, { x: 50, y: yPos, size: 9, font: helveticaFont })
+    page.drawText(data.customerPhone, { x: 50, y: yPos, size: 9, font: helvetica })
     
     // Table header
     yPos = height - 340
@@ -415,28 +415,28 @@ export class PDFInvoiceService {
         x: 50,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
       })
       
       page.drawText(item.quantity.toString(), {
         x: width - 300,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
       })
       
       page.drawText(item.unitPrice.toFixed(2), {
         x: width - 220,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
       })
       
       page.drawText(item.total.toFixed(2), {
         x: width - 120,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
       })
       
       yPos -= 22
@@ -458,12 +458,12 @@ export class PDFInvoiceService {
     
     // Discount
     if (data.discount > 0) {
-      page.drawText('Discounts:', { x: width - 220, y: yPos, size: 9, font: helveticaFont })
+      page.drawText('Discounts:', { x: width - 220, y: yPos, size: 9, font: helvetica })
       page.drawText(`GHC ${data.discount.toFixed(2)}`, {
         x: width - 120,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
         color: rgb(0.83, 0.37, 0.05),
       })
       yPos -= 20
@@ -471,12 +471,12 @@ export class PDFInvoiceService {
     
     // Credits
     if (data.credits > 0) {
-      page.drawText('Credits:', { x: width - 220, y: yPos, size: 9, font: helveticaFont })
+      page.drawText('Credits:', { x: width - 220, y: yPos, size: 9, font: helvetica })
       page.drawText(`GHC ${data.credits.toFixed(2)}`, {
         x: width - 120,
         y: yPos,
         size: 9,
-        font: helveticaFont,
+        font: helvetica,
       })
       yPos -= 20
     }
@@ -514,7 +514,7 @@ export class PDFInvoiceService {
       x: 50,
       y: 30,
       size: 8,
-      font: helveticaFont,
+      font: helvetica,
       color: rgb(0.4, 0.4, 0.4),
     })
     

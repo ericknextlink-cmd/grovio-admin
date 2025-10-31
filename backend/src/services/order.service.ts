@@ -281,7 +281,7 @@ export class OrderService {
       if (pendingOrder.converted_to_order_id) {
         const { data: existingOrder } = await this.supabase
           .from('orders')
-          .select('order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
           .eq('id', pendingOrder.converted_to_order_id)
           .single()
 

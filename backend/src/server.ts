@@ -16,6 +16,9 @@ import { productsRoutes } from './routes/products.routes'
 import { categoriesRoutes } from './routes/categories.routes'
 import { dashboardRoutes } from './routes/dashboard.routes'
 import { aiRoutes } from './routes/ai.routes'
+import { orderRoutes } from './routes/order.routes'
+import { userPreferencesRoutes } from './routes/user-preferences.routes'
+import { bundlesRoutes } from './routes/bundles.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
 import { findAvailablePort } from './utils/port'
@@ -58,6 +61,12 @@ app.use('/api/products', productsRoutes)
 app.use('/api/categories', categoriesRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/ai', aiRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/users', userPreferencesRoutes)
+app.use('/api/bundles', bundlesRoutes)
+
+// Webhook endpoint (before general routes)
+app.use('/api/webhook', orderRoutes)
 
 
 // Root endpoint
@@ -76,7 +85,11 @@ app.get('/', (req: Request, res: Response) => {
       products: '/api/products',
       categories: '/api/categories',
       dashboard: '/api/dashboard',
-      ai: '/api/ai'
+      ai: '/api/ai',
+      orders: '/api/orders',
+      users: '/api/users',
+      bundles: '/api/bundles',
+      webhook: '/api/webhook'
     }
   })
 })

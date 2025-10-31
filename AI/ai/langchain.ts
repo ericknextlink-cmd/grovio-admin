@@ -21,14 +21,14 @@ function buildContext(limit = 60): string {
   return rows.join("\n")
 }
 
-export async function generateWithGroq(message: string, opts: ChatOptions = {}): Promise<string | null> {
+export async function generateWithOpenAI(message: string, opts: ChatOptions = {}): Promise<string | null> {
   try {
     // Dynamic imports to avoid hard dependency during build if packages are not installed yet
-    const { ChatGroq } = await import("@langchain/groq")
+    const { ChatOpenAI } = await import("@langchain/openai")
     const { ChatPromptTemplate } = await import("@langchain/core/prompts")
     const { StringOutputParser } = await import("@langchain/core/output_parsers")
 
-    const apiKey = process.env.GROQ_API_KEY
+    const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) return null
 
     const role = opts.role ?? "user"
@@ -63,14 +63,22 @@ ${candidate ? `Potential baseline basket (may revise): total=₵${candidate.tota
       ["user", user],
     ])
 
-    const model = new ChatGroq({ apiKey, model: "llama-3.3-70b-versatile", temperature: 0.3 })
+    const model = new ChatOpenAI({ 
+      apiKey, 
+      model: "gpt-4o-mini", 
+      temperature: 0.3 
+    })
     const chain = prompt.pipe(model).pipe(new StringOutputParser())
     const out = await chain.invoke({})
     return typeof out === "string" ? out : JSON.stringify(out)
-  } catch {
+  } catch (error) {
+    console.error("OpenAI generation error:", error)
     // Packages not available or runtime error
     return null
   }
 }
+
+// Keep the old function name for backward compatibility
+export const generateWithGroq = generateWithOpenAI
 
 

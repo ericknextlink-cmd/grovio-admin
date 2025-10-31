@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { AIController } from '../controllers/ai.controller'
 import { body, query } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
+import { optionalAuth } from '../middleware/optionalAuth.middleware'
+import { authenticateToken } from '../middleware/auth.middleware'
 
 const router = Router()
 const aiController = new AIController()
@@ -27,6 +29,10 @@ const chatValidation = [
     .optional()
     .isFloat({ min: 0 })
     .withMessage('Budget must be a positive number'),
+  body('threadId')
+    .optional()
+    .isUUID()
+    .withMessage('Thread ID must be a valid UUID'),
   handleValidationErrors
 ]
 
@@ -123,11 +129,17 @@ const mealSuggestionsValidation = [
   handleValidationErrors
 ]
 
-// Public AI routes
-router.post('/chat', chatValidation, aiController.getChatResponse)
-router.post('/recommendations', recommendationsValidation, aiController.getRecommendations)
-router.get('/search', searchValidation, aiController.searchProducts)
-router.post('/budget-analysis', budgetAnalysisValidation, aiController.getBudgetAnalysis)
-router.post('/meal-suggestions', mealSuggestionsValidation, aiController.getMealSuggestions)
+// Public AI routes (work for both authenticated and anonymous users)
+// Optional auth = better personalization for logged-in users
+router.post('/chat', optionalAuth, chatValidation, aiController.getChatResponse)
+router.post('/recommendations', optionalAuth, recommendationsValidation, aiController.getRecommendations)
+router.get('/search', optionalAuth, searchValidation, aiController.searchProducts)
+router.post('/budget-analysis', optionalAuth, budgetAnalysisValidation, aiController.getBudgetAnalysis)
+router.post('/meal-suggestions', optionalAuth, mealSuggestionsValidation, aiController.getMealSuggestions)
+
+// Thread management routes (require full authentication)
+router.get('/threads/:threadId', authenticateToken, aiController.getConversationHistory)
+router.get('/threads', authenticateToken, aiController.getUserThreads)
+router.delete('/threads/:threadId', authenticateToken, aiController.deleteThread)
 
 export { router as aiRoutes }

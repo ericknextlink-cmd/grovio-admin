@@ -80,6 +80,7 @@ export class AuthService {
       const passwordHash = await hashPassword(password)
 
       // Create user in Supabase Auth
+      console.log('Creating auth user for:', email)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -93,6 +94,12 @@ export class AuthService {
         }
       })
 
+      console.log('Auth signup result:', { 
+        hasUser: !!authData.user, 
+        userId: authData.user?.id,
+        error: authError?.message 
+      })
+
       if (authError) {
         console.error('Supabase auth error:', authError)
         return {
@@ -103,12 +110,15 @@ export class AuthService {
       }
 
       if (!authData.user) {
+        console.error('❌ No user returned from signUp')
         return {
           success: false,
           message: 'Failed to create account',
           errors: ['User creation failed']
         }
       }
+
+      console.log('✅ Auth user created:', authData.user.id)
 
       // Insert user data into our custom users table using admin client to bypass RLS
       const adminSupabase = createAdminClient()

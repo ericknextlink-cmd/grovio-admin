@@ -25,6 +25,11 @@ import { findAvailablePort } from './utils/port'
 
 const app: Application = express()
 
+// Trust proxy for rate limiting in production (Railway, Render, etc.)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
+
 // Security middleware
 app.use(helmet())
 app.use(cors({
@@ -39,7 +44,9 @@ app.use(cors({
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 })
 app.use('/api/', limiter)
 

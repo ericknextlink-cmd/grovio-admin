@@ -1,6 +1,7 @@
 import { Request } from 'express'
 import { createClient, createAdminClient } from '../config/supabase'
 import { hashPassword, verifyPassword, isValidEmail, isValidPassword, isValidPhoneNumber, generateToken } from '../utils/auth'
+import { sanitizeDatabaseError, sanitizeAuthError, sanitizeError } from '../utils/error-sanitizer'
 import { SignupRequest, SigninRequest, GoogleAuthRequest, AuthResponse } from '../types/auth'
 import { UserService } from './user.service'
 import { EmailService } from './email.service'
@@ -97,7 +98,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Failed to create account',
-          errors: [authError.message]
+          errors: [sanitizeAuthError(authError)]
         }
       }
 
@@ -132,12 +133,16 @@ export class AuthService {
       if (dbError) {
         console.error('Database insert error:', dbError)
         // Try to clean up the auth user if database insert fails
-        await supabase.auth.admin.deleteUser(authData.user.id)
+        try {
+          await supabase.auth.admin.deleteUser(authData.user.id)
+        } catch (cleanupError) {
+          console.error('Failed to cleanup auth user:', cleanupError)
+        }
 
         return {
           success: false,
           message: 'Failed to create user profile',
-          errors: [dbError.message]
+          errors: [sanitizeDatabaseError(dbError)]
         }
       }
 
@@ -250,7 +255,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Sign in failed',
-          errors: [authError.message]
+          errors: [sanitizeAuthError(authError)]
         }
       }
 
@@ -328,7 +333,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Failed to initiate Google authentication',
-          errors: [error.message],
+          errors: [sanitizeError(error)],
         }
       }
 
@@ -362,7 +367,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Failed to complete Google authentication',
-          errors: [authError.message],
+          errors: [sanitizeAuthError(authError)],
         }
       }
 
@@ -421,7 +426,7 @@ export class AuthService {
           return {
             success: false,
             message: 'Failed to create user profile',
-            errors: [insertError.message],
+            errors: [sanitizeDatabaseError(insertError)],
           }
         }
 
@@ -523,7 +528,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Google authentication failed',
-          errors: [authError.message]
+          errors: [sanitizeAuthError(authError)]
         }
       }
 
@@ -672,7 +677,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Failed to sign out',
-          errors: [error.message]
+          errors: [sanitizeError(error)]
         }
       }
 
@@ -706,7 +711,7 @@ export class AuthService {
         return {
           success: false,
           message: 'Failed to refresh token',
-          errors: [error.message]
+          errors: [sanitizeAuthError(error)]
         }
       }
 

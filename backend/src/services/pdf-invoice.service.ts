@@ -6,13 +6,6 @@ import fs from 'fs/promises'
 import path from 'path'
 import { existsSync } from 'fs'
 
-/**
- * PDF Invoice Generation Service
- * Generates professional invoices using Template.pdf
- * Uploads to Supabase storage
- * Generates QR codes for invoice verification
- */
-
 export interface InvoiceData {
   invoiceNumber: string  // 4787837473
   orderNumber: string    // ORD-AC23-233E

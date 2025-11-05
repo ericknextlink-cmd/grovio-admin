@@ -2,7 +2,7 @@
 'use client'
 
 import React from 'react'
-import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard } from 'lucide-react'
+import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SidebarItem {
@@ -21,6 +21,8 @@ interface AdminSidebarProps {
 export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarOpen }: AdminSidebarProps) {
   const sidebarItems: SidebarItem[] = [
     { icon: ShoppingBag, label: 'Dashboard', active: currentPage === 'dashboard', href: '/admin' },
+    { icon: Package, label: 'Products', active: currentPage === 'products', href: '/admin/products' },
+    { icon: Sparkles, label: 'AI Products', active: currentPage === 'ai-products', href: '/admin/ai-products' },
     { icon: Tag, label: 'Categories', active: currentPage === 'categories', href: '/admin/categories' },
     { icon: Package, label: 'Orders', active: currentPage === 'orders', href: '/admin/orders' },
     { icon: CreditCard, label: 'Transactions', active: currentPage === 'transactions', href: '/admin/transactions' },

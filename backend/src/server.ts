@@ -19,6 +19,7 @@ import { aiRoutes } from './routes/ai.routes'
 import { orderRoutes } from './routes/order.routes'
 import { userPreferencesRoutes } from './routes/user-preferences.routes'
 import { bundlesRoutes } from './routes/bundles.routes'
+import { aiProductsRoutes } from './routes/ai-products.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
 import { findAvailablePort } from './utils/port'
@@ -71,6 +72,7 @@ app.use('/api/ai', aiRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/users', userPreferencesRoutes)
 app.use('/api/bundles', bundlesRoutes)
+app.use('/api/ai-products', aiProductsRoutes)
 
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', orderRoutes)
@@ -96,6 +98,7 @@ app.get('/', (req: Request, res: Response) => {
       orders: '/api/orders',
       users: '/api/users',
       bundles: '/api/bundles',
+      aiProducts: '/api/ai-products',
       webhook: '/api/webhook'
     }
   })

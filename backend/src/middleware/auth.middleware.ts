@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { createClient } from '../config/supabase'
+import { createClient, createAdminClient } from '../config/supabase'
 
 export interface AuthRequest extends Request {
   user?: {
@@ -38,18 +38,39 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       })
     }
 
-    // Get user data from our database
-    const { data: userData, error: dbError } = await supabase
+    // Get user data from our database using admin client to bypass RLS
+    const adminSupabase = createAdminClient()
+    const { data: userData, error: dbError } = await adminSupabase
       .from('users')
       .select('id, email, role')
       .eq('id', user.id)
       .single()
 
     if (dbError || !userData) {
-      return res.status(401).json({
+      // Log the error for debugging
+      console.error('User profile not found in database:', {
+        userId: user.id,
+        userEmail: user.email,
+        dbError: dbError?.message,
+        code: dbError?.code
+      })
+
+      // Check if it's a "not found" error (PGRST116) vs other errors
+      if (dbError?.code === 'PGRST116' || !userData) {
+        // User exists in auth.users but not in public.users
+        // This can happen if signup failed partway through
+        return res.status(404).json({
+          success: false,
+          message: 'User profile not found',
+          errors: ['Your account exists but profile data is missing. Please contact support or try signing up again.']
+        })
+      }
+
+      // Other database errors
+      return res.status(500).json({
         success: false,
-        message: 'User not found',
-        errors: ['User profile not found']
+        message: 'Database error',
+        errors: ['Failed to retrieve user profile']
       })
     }
 

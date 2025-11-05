@@ -73,6 +73,7 @@ export default function ImageUpload({
 
   const handleUrlSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation() // Prevent event from bubbling to parent form
     if (urlInput.trim()) {
       addImage(urlInput.trim())
       setUrlInput('')
@@ -116,7 +117,10 @@ export default function ImageUpload({
           <div className="flex flex-wrap gap-2 justify-center">
             <button
               type="button"
-              onClick={openFileSelector}
+              onClick={(e) => {
+                e.stopPropagation() // Prevent button click from bubbling to parent form
+                openFileSelector()
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <FileImage className="h-4 w-4" />
@@ -125,7 +129,10 @@ export default function ImageUpload({
             
             <button
               type="button"
-              onClick={() => setShowUrlInput(!showUrlInput)}
+              onClick={(e) => {
+                e.stopPropagation() // Prevent button click from bubbling to parent form
+                setShowUrlInput(!showUrlInput)
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
               <Link className="h-4 w-4" />
@@ -147,7 +154,7 @@ export default function ImageUpload({
 
       {/* URL Input */}
       {showUrlInput && (
-        <form onSubmit={handleUrlSubmit} className="space-y-2">
+        <form onSubmit={handleUrlSubmit} className="space-y-2" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-2">
             <input
               type="url"
@@ -155,16 +162,25 @@ export default function ImageUpload({
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://example.com/image.jpg"
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.stopPropagation() // Prevent Enter key from submitting parent form
+                }
+              }}
             />
             <button
               type="submit"
+              onClick={(e) => e.stopPropagation()} // Prevent button click from bubbling
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               Add
             </button>
             <button
               type="button"
-              onClick={() => setShowUrlInput(false)}
+              onClick={(e) => {
+                e.stopPropagation() // Prevent button click from bubbling
+                setShowUrlInput(false)
+              }}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
               Cancel

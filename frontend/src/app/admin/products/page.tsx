@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Plus, Edit, Trash2, Package, Filter, Loader2 } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
@@ -51,7 +51,7 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -93,7 +93,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, searchQuery])
 
   useEffect(() => {
     fetchProducts()
@@ -110,7 +110,7 @@ export default function ProductsPage() {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [searchQuery, fetchProducts])
+  }, [searchQuery, fetchProducts, page])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) {
@@ -120,7 +120,7 @@ export default function ProductsPage() {
     try {
       const response = await productsApi.delete(id)
       if (response.success) {
-        fetchProducts()
+        await fetchProducts()
       } else {
         alert(response.message || 'Failed to delete product')
       }
@@ -296,7 +296,7 @@ export default function ProductsPage() {
                         <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="h-10 w-10 flex-shrink-0 mr-3">
+                              <div className="h-10 w-10 shrink-0 mr-3">
                                 {product.images && product.images.length > 0 ? (
                                   <Image
                                     src={product.images[0]}

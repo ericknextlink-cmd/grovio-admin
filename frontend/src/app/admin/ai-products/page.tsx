@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, CheckCircle, XCircle, Archive } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
@@ -52,7 +52,7 @@ export default function AIProductsPage() {
   const [statusFilter, setStatusFilter] = useState<'draft' | 'published' | 'archived' | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState('')
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -92,7 +92,7 @@ export default function AIProductsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, statusFilter, selectedCategory, searchQuery])
 
   useEffect(() => {
     fetchProducts()
@@ -356,7 +356,7 @@ export default function AIProductsPage() {
                         <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="h-10 w-10 flex-shrink-0 mr-3">
+                              <div className="h-10 w-10 shrink-0 mr-3">
                                 {product.images && product.images.length > 0 ? (
                                   <Image
                                     src={product.images[0]}

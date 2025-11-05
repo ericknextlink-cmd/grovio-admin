@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -85,24 +87,24 @@ export default function AdminDashboard() {
     })
     .map(product => ({
       id: product.id,
-      name: product.name,
-      brand: product.brand,
-      description: product.description,
-      category: product.category_name,
-      subcategory: product.subcategory,
-      price: product.price,
-      currency: product.currency,
-      quantity: product.quantity,
+      name: product.name || '',
+      brand: product.brand || '',
+      description: product.description || '',
+      category: product.category_name || '',
+      subcategory: product.subcategory || '',
+      price: product.price || 0,
+      currency: product.currency || 'GHS',
+      quantity: product.quantity || 0,
       weight: product.weight,
       volume: product.volume,
-      type: product.type,
-      packaging: product.packaging,
-      inStock: product.in_stock,
-      rating: product.rating,
-      reviews: product.reviews_count,
+      type: product.type || '',
+      packaging: product.packaging || '',
+      inStock: product.in_stock ?? true,
+      rating: product.rating || 0,
+      reviews: product.reviews_count || 0,
       images: product.images || [],
-      createdAt: new Date(product.created_at),
-      updatedAt: new Date(product.updated_at),
+      createdAt: new Date(product.created_at || Date.now()),
+      updatedAt: new Date(product.updated_at || Date.now()),
     }))
 
   const handleAddProduct = () => {

@@ -33,12 +33,51 @@ if (process.env.NODE_ENV === 'production') {
 
 // Security middleware
 app.use(helmet())
+
+// CORS configuration
+const allowedOrigins: (string | RegExp)[] = [
+  process.env.FRONTEND_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  process.env.ADMIN_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+].filter((origin): origin is string => !!origin)
+
+// In development, allow all localhost origins
+const localhostRegex = /^http:\/\/localhost:\d+$/
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.push(localhostRegex)
+}
+
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3001',
-    process.env.ADMIN_URL || 'http://localhost:3000'
-  ],
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true)
+    }
+
+    // Check if origin is in allowed list
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return origin === allowedOrigin
+      }
+      if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin)
+      }
+      return false
+    })
+
+    if (isAllowed) {
+      callback(null, true)
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`)
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
 // Rate limiting

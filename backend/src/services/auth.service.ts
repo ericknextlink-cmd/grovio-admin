@@ -221,14 +221,13 @@ export class AuthService {
     try {
       const supabase = createClient()
 
-      // Get user from our database first
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .single()
+      // First, try to authenticate with Supabase Auth (this validates the password)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password
+      })
 
-      if (userError || !userData) {
+      if (authError || !authData.user) {
         return {
           success: false,
           message: 'Invalid email or password',
@@ -236,17 +235,84 @@ export class AuthService {
         }
       }
 
-      // If user has a password hash, verify it
-      if (userData.password_hash) {
-        const isPasswordValid = await verifyPassword(password, userData.password_hash)
-        if (!isPasswordValid) {
+      // Get user from our database using admin client to bypass RLS
+      const adminSupabase = createAdminClient()
+      const { data: userData, error: userError } = await adminSupabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single()
+
+      // If user doesn't exist in our database but exists in auth, create profile
+      if (userError || !userData) {
+        // User exists in auth.users but not in public.users
+        // This shouldn't happen, but we'll handle it gracefully
+        console.warn(`User ${authData.user.id} exists in auth but not in public.users`)
+        
+        // Try to create the profile from auth metadata
+        const { data: newUserData, error: createError } = await adminSupabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            email: authData.user.email?.toLowerCase().trim() || email.toLowerCase().trim(),
+            first_name: authData.user.user_metadata?.first_name || '',
+            last_name: authData.user.user_metadata?.last_name || '',
+            phone_number: authData.user.user_metadata?.phone_number || '',
+            country_code: authData.user.user_metadata?.country_code || '+233',
+            role: 'customer',
+            preferences: {
+              language: 'en',
+              currency: 'GHS'
+            }
+          })
+          .select()
+          .single()
+
+        if (createError || !newUserData) {
+          console.error('Failed to create user profile during signin:', createError)
           return {
             success: false,
-            message: 'Invalid email or password',
-            errors: ['Invalid credentials']
+            message: 'Account exists but profile is incomplete',
+            errors: ['Please contact support to complete your account setup']
           }
         }
-      } else {
+
+        // Use the newly created user data
+        const { data: preferences } = await adminSupabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', newUserData.id)
+          .single()
+
+        return {
+          success: true,
+          message: 'Signed in successfully',
+          user: {
+            id: newUserData.id,
+            email: newUserData.email,
+            firstName: newUserData.first_name,
+            lastName: newUserData.last_name,
+            phoneNumber: newUserData.phone_number,
+            countryCode: newUserData.country_code,
+            profilePicture: newUserData.profile_picture,
+            isEmailVerified: newUserData.is_email_verified,
+            isPhoneVerified: newUserData.is_phone_verified,
+            role: newUserData.role,
+            preferences: preferences || {
+              language: 'en',
+              currency: 'GHS'
+            },
+            createdAt: newUserData.created_at,
+            updatedAt: newUserData.updated_at
+          },
+          accessToken: authData.session.access_token,
+          refreshToken: authData.session.refresh_token
+        }
+      }
+
+      // If user doesn't have a password hash, they might be OAuth-only
+      // (Supabase Auth already validated the password above, so this is just a check)
+      if (!userData.password_hash && authData.user.app_metadata?.provider !== 'email') {
         return {
           success: false,
           message: 'This account was created with Google. Please sign in with Google.',
@@ -254,31 +320,8 @@ export class AuthService {
         }
       }
 
-      // Sign in with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password
-      })
-
-      if (authError) {
-        console.error('Supabase auth error:', authError)
-        return {
-          success: false,
-          message: 'Sign in failed',
-          errors: [sanitizeAuthError(authError)]
-        }
-      }
-
-      if (!authData.user || !authData.session) {
-        return {
-          success: false,
-          message: 'Sign in failed',
-          errors: ['Authentication failed']
-        }
-      }
-
-      // Get user preferences
-      const { data: preferences } = await supabase
+      // Get user preferences using admin client
+      const { data: preferences } = await adminSupabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userData.id)

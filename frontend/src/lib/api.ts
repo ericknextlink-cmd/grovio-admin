@@ -1,6 +1,31 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:3002'
+// Get backend URL from environment variables
+// In Next.js, client-side env vars must be prefixed with NEXT_PUBLIC_
+const getBackendUrl = () => {
+  // First try NEXT_PUBLIC_BACKEND_URL (available in browser)
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_BACKEND_URL) {
+    return process.env.NEXT_PUBLIC_BACKEND_URL
+  }
+  
+  // Then try BACKEND_URL (server-side only)
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL
+  }
+  
+  // Fallback: use deployed URL if in production, otherwise localhost
+  if (typeof window !== 'undefined') {
+    // In browser, use deployed URL or empty string (relative URLs)
+    return process.env.NODE_ENV === 'production' 
+      ? 'https://grovio-admin-production.up.railway.app' 
+      : 'http://localhost:3002'
+  }
+  
+  // Server-side fallback
+  return 'http://localhost:3002'
+}
+
+export const API_BASE_URL = getBackendUrl()
 
 export interface ApiResponse<T> {
   success: boolean

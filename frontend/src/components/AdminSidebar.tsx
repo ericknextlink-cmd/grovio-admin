@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 
 interface SidebarItem {
   icon: any
@@ -19,6 +21,49 @@ interface AdminSidebarProps {
 }
 
 export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarOpen }: AdminSidebarProps) {
+  const router = useRouter()
+  const [userEmail, setUserEmail] = useState('Admin User')
+
+  useEffect(() => {
+    // Get user info from localStorage
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr)
+        setUserEmail(user.email || 'Admin User')
+      } catch (e) {
+        console.error('Failed to parse user data:', e)
+      }
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        // Call logout endpoint
+        await fetch(`${API_BASE_URL}/api/auth/signout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      // Clear all auth data
+      localStorage.removeItem('auth_token')
+      sessionStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user')
+      
+      // Redirect to signin
+      router.push('/admin/signin')
+    }
+  }
+
   const sidebarItems: SidebarItem[] = [
     { icon: ShoppingBag, label: 'Dashboard', active: currentPage === 'dashboard', href: '/admin' },
     { icon: Package, label: 'Products', active: currentPage === 'products', href: '/admin/products' },
@@ -91,11 +136,15 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
               <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                 <span className="text-white font-medium text-sm">A</span>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Admin User</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">admin@grovio.com</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">Admin User</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
               </div>
-              <button className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <button 
+                onClick={handleLogout}
+                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                title="Sign out"
+              >
                 <LogOut className="h-4 w-4" />
               </button>
             </div>

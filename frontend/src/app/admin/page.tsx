@@ -8,8 +8,8 @@ import StatsDashboard from '@/components/StatsDashboard'
 import ProductsTable from '@/components/ProductsTable'
 import ProductForm from '@/components/ProductForm'
 import AdminSidebar from '@/components/AdminSidebar'
-import { GroceryProduct } from '@/types/grocery'
-import { productsApi } from '@/lib/api'
+import { GroceryProduct, AdminStats } from '@/types/grocery'
+import { productsApi, dashboardApi } from '@/lib/api'
 
 interface Product {
   id: string
@@ -29,7 +29,6 @@ interface Product {
 export default function AdminDashboard() {
   const {
     categories,
-    stats,
     searchQuery,
     selectedCategory,
     setSearchQuery,
@@ -40,9 +39,44 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [stats, setStats] = useState<AdminStats>({
+    totalProducts: 0,
+    inStock: 0,
+    outOfStock: 0,
+    categories: 0,
+    totalOrders: 0,
+    pendingOrders: 0,
+    totalRevenue: 0,
+    totalTransactions: 0,
+    pendingTransactions: 0,
+    completedTransactions: 0,
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<GroceryProduct | undefined>()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+
+  // Fetch dashboard stats from API
+  useEffect(() => {
+    const fetchStats = async () => {
+      setStatsLoading(true)
+      try {
+        const response = await dashboardApi.getStats()
+        
+        if (response.success && response.data) {
+          setStats(response.data)
+        } else {
+          console.error('Failed to fetch stats:', response.message)
+        }
+      } catch (err) {
+        console.error('Fetch stats error:', err)
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   // Fetch products from API
   useEffect(() => {
@@ -236,7 +270,13 @@ export default function AdminDashboard() {
         {/* Page Content */}
         <div className="p-6 space-y-8">
           {/* Statistics Dashboard */}
-          <StatsDashboard stats={stats} />
+          {statsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-gray-600">Loading statistics...</p>
+            </div>
+          ) : (
+            <StatsDashboard stats={stats} />
+          )}
 
           {/* Products Management */}
           {loading ? (

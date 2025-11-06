@@ -194,3 +194,11 @@ export const aiProductsApi = {
 
   archive: (id: string) => apiClient.post<any>(`/api/ai-products/${id}/archive`),
 }
+
+// Dashboard API
+export const dashboardApi = {
+  getStats: () => apiClient.get<any>('/api/dashboard/stats'),
+  getActivities: (limit?: number) => apiClient.get<any>('/api/dashboard/activities', { limit }),
+  getAnalytics: (period?: number) => apiClient.get<any>('/api/dashboard/analytics', { period }),
+  getAlerts: (threshold?: number) => apiClient.get<any>('/api/dashboard/alerts', { threshold }),
+}

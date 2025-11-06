@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
+import { getAdminToken, clearAdminCookies } from '@/lib/cookies'
 
 interface AdminAuthGuardProps {
   children: React.ReactNode
@@ -21,7 +22,8 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('admin_token')
+      // Try cookie first, then localStorage for backward compatibility
+      const token = getAdminToken() || localStorage.getItem('admin_token')
       
       if (!token) {
         router.push('/admin/signin')
@@ -32,11 +34,13 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       })
 
       if (!response.ok) {
-        // Clear invalid tokens
+        // Clear invalid tokens from both cookie and localStorage
+        clearAdminCookies()
         localStorage.removeItem('admin_token')
         localStorage.removeItem('admin_user')
         router.push('/admin/signin')
@@ -46,6 +50,9 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
       const data = await response.json()
 
       if (!data.success || !data.data) {
+        clearAdminCookies()
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
         router.push('/admin/signin')
         return
       }
@@ -53,6 +60,9 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
       setIsAuthenticated(true)
     } catch (error) {
       console.error('Auth check error:', error)
+      clearAdminCookies()
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
       router.push('/admin/signin')
     } finally {
       setIsLoading(false)

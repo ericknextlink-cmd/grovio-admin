@@ -52,6 +52,9 @@ const changePasswordValidation = [
 // Public routes
 router.post('/login', loginValidation, adminController.login)
 
+// Refresh token route (requires authentication but needs special handling)
+router.post('/refresh', authenticateAdmin, adminController.refreshToken)
+
 // Protected routes (require admin authentication)
 router.use(authenticateAdmin)
 

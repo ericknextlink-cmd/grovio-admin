@@ -16,17 +16,26 @@ export const authenticateAdmin = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization
+    // Try to get token from Authorization header first
+    let token: string | undefined
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7) // Remove 'Bearer ' prefix
+    }
+    
+    // If no token in header, try to get from cookie
+    if (!token && req.cookies?.admin_token) {
+      token = req.cookies.admin_token
+    }
+    
+    if (!token) {
       res.status(401).json({
         success: false,
         message: 'Access token required'
       })
       return
     }
-
-    const token = authHeader.substring(7) // Remove 'Bearer ' prefix
     
     const adminService = new AdminService()
     const decoded = adminService.verifyToken(token)

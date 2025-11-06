@@ -6,6 +6,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
+import cookieParser from 'cookie-parser'
 import { authRoutes } from './routes/auth.routes'
 import { healthRoutes } from './routes/health.routes'
 import { accountRoutes } from './routes/account.routes'
@@ -79,6 +80,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
+
+// Cookie parser (must come before routes)
+app.use(cookieParser())
 
 // Rate limiting
 const limiter = rateLimit({

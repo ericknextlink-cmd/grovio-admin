@@ -239,4 +239,50 @@ export class AdminService {
       return null
     }
   }
+
+  /**
+   * Refresh admin token - generates a new token for an existing valid token
+   */
+  async refreshToken(adminId: string): Promise<{
+    success: boolean
+    message: string
+    data?: { token: string; admin: Omit<AdminUser, 'password_hash'> }
+  }> {
+    try {
+      const admin = await this.getAdminById(adminId)
+
+      if (!admin || !admin.is_active) {
+        return {
+          success: false,
+          message: 'Admin account not found or inactive'
+        }
+      }
+
+      // Generate new JWT token
+      const token = jwt.sign(
+        { 
+          adminId: admin.id, 
+          username: admin.username, 
+          role: admin.role 
+        },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: '24h' }
+      )
+
+      return {
+        success: true,
+        message: 'Token refreshed successfully',
+        data: {
+          token,
+          admin
+        }
+      }
+    } catch (error) {
+      console.error('Refresh token error:', error)
+      return {
+        success: false,
+        message: 'Failed to refresh token'
+      }
+    }
+  }
 }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
+import { getAdminToken, getAdminUser, clearAdminCookies } from '@/lib/cookies'
 
 interface SidebarItem {
   icon: any
@@ -25,21 +26,27 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
   const [userEmail, setUserEmail] = useState('Admin User')
 
   useEffect(() => {
-    // Get admin info from localStorage
-    const adminStr = localStorage.getItem('admin_user')
-    if (adminStr) {
-      try {
-        const admin = JSON.parse(adminStr)
-        setUserEmail(admin.email || admin.username || 'Admin User')
-      } catch (e) {
-        console.error('Failed to parse admin data:', e)
+    // Get admin info from cookie first, then localStorage
+    const admin = getAdminUser()
+    if (admin) {
+      setUserEmail(admin.email || admin.username || 'Admin User')
+    } else {
+      // Fallback to localStorage
+      const adminStr = localStorage.getItem('admin_user')
+      if (adminStr) {
+        try {
+          const adminData = JSON.parse(adminStr)
+          setUserEmail(adminData.email || adminData.username || 'Admin User')
+        } catch (e) {
+          console.error('Failed to parse admin data:', e)
+        }
       }
     }
   }, [])
 
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminToken() || localStorage.getItem('admin_token')
       if (token) {
         // Call logout endpoint
         await fetch(`${API_BASE_URL}/api/admin/logout`, {
@@ -47,13 +54,15 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
-          }
+          },
+          credentials: 'include'
         })
       }
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
-      // Clear all admin auth data
+      // Clear all admin auth data from cookies and localStorage
+      clearAdminCookies()
       localStorage.removeItem('admin_token')
       localStorage.removeItem('admin_user')
       

@@ -34,6 +34,17 @@ export class AdminController {
         return
       }
 
+      // Set token in cookie
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax' as const,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        path: '/',
+      }
+
+      res.cookie('admin_token', result.data!.token, cookieOptions)
+
       res.json({
         success: true,
         message: 'Login successful',
@@ -151,10 +162,60 @@ export class AdminController {
   }
 
   /**
+   * Refresh admin token
+   */
+  refreshToken = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = (req as any).adminId
+
+      const result = await this.adminService.refreshToken(adminId)
+
+      if (!result.success) {
+        res.status(401).json({
+          success: false,
+          message: result.message
+        } as ApiResponse<null>)
+        return
+      }
+
+      // Set token in cookie
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax' as const,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        path: '/',
+      }
+
+      res.cookie('admin_token', result.data!.token, cookieOptions)
+
+      res.json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: result.data
+      } as ApiResponse<typeof result.data>)
+    } catch (error) {
+      console.error('Refresh token error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      } as ApiResponse<null>)
+    }
+  }
+
+  /**
    * Admin logout
    */
   logout = async (req: Request, res: Response): Promise<void> => {
     try {
+      // Clear cookie
+      res.clearCookie('admin_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      })
+
       // In a more complex system, you might want to blacklist the token
       res.json({
         success: true,

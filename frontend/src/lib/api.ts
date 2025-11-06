@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { getAdminToken, getCookie } from './cookies'
+
 // Get backend URL from environment variables
 // In Next.js, client-side env vars must be prefixed with NEXT_PUBLIC_
 const getBackendUrl = () => {
@@ -40,11 +42,96 @@ export interface ApiResponse<T> {
   errors?: string[]
 }
 
+/**
+ * Check if an endpoint requires admin authentication
+ * Admin routes include: /api/admin/*, /api/dashboard/*, and write operations on /api/products, /api/categories, etc.
+ */
+function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
+  // Admin-specific routes
+  if (endpoint.includes('/api/admin/') || endpoint.includes('/api/dashboard/')) {
+    return true
+  }
+  
+  // Write operations on products, categories, etc. require admin auth
+  const writeMethods = ['POST', 'PUT', 'PATCH', 'DELETE']
+  if (writeMethods.includes(method.toUpperCase())) {
+    if (
+      endpoint.includes('/api/products') ||
+      endpoint.includes('/api/categories') ||
+      endpoint.includes('/api/ai-products') ||
+      endpoint.includes('/api/orders') ||
+      endpoint.includes('/api/transactions')
+    ) {
+      return true
+    }
+  }
+  
+  return false
+}
+
 class ApiClient {
   private baseUrl: string
+  private refreshingToken: boolean = false
+  private refreshPromise: Promise<string | null> | null = null
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
+  }
+
+  /**
+   * Refresh admin token
+   */
+  private async refreshAdminToken(): Promise<string | null> {
+    // If already refreshing, return the existing promise
+    if (this.refreshingToken && this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    this.refreshingToken = true
+    this.refreshPromise = this._doRefreshToken()
+    
+    try {
+      const token = await this.refreshPromise
+      return token
+    } finally {
+      this.refreshingToken = false
+      this.refreshPromise = null
+    }
+  }
+
+  private async _doRefreshToken(): Promise<string | null> {
+    try {
+      const currentToken = getAdminToken()
+      if (!currentToken) return null
+
+      const response = await fetch(`${this.baseUrl}/api/admin/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies
+      })
+
+      if (!response.ok) {
+        // If refresh fails, clear tokens
+        if (typeof window !== 'undefined') {
+          const { clearAdminCookies } = await import('./cookies')
+          clearAdminCookies()
+        }
+        return null
+      }
+
+      const data = await response.json()
+      if (data.success && data.data?.token) {
+        // Token is set via cookie by the server, but we also get it in response
+        return data.data.token
+      }
+
+      return null
+    } catch (error) {
+      console.error('Token refresh error:', error)
+      return null
+    }
   }
 
   private async request<T>(
@@ -52,6 +139,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+    const method = options.method || 'GET'
     
     const config: RequestInit = {
       ...options,
@@ -59,26 +147,75 @@ class ApiClient {
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      credentials: 'include', // Include cookies in all requests
     }
 
     // Add auth token if available
-    // For admin routes, use admin_token; for regular routes, use auth_token
+    // Check cookies first, then fallback to localStorage for backward compatibility
     if (typeof window !== 'undefined') {
-      const isAdminRoute = endpoint.includes('/api/admin/') || endpoint.includes('/api/dashboard/')
-      const token = isAdminRoute 
-        ? localStorage.getItem('admin_token')
-        : localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+      const needsAdminAuth = isAdminRoute(endpoint, method)
       
-      if (token) {
-        config.headers = {
-          ...config.headers,
-          Authorization: `Bearer ${token}`,
+      if (needsAdminAuth) {
+        // Try cookie first, then localStorage as fallback
+        let token = getAdminToken()
+        if (!token) {
+          token = localStorage.getItem('admin_token')
+        }
+        
+        if (token) {
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${token}`,
+          }
+        }
+      } else {
+        // Regular user auth token
+        const authToken = getCookie('auth_token') || 
+                         localStorage.getItem('auth_token') || 
+                         sessionStorage.getItem('auth_token')
+        
+        if (authToken) {
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${authToken}`,
+          }
         }
       }
     }
 
     try {
       const response = await fetch(url, config)
+      
+      // If 401 and admin route, try to refresh token
+      if (response.status === 401 && typeof window !== 'undefined' && isAdminRoute(endpoint, method)) {
+        const newToken = await this.refreshAdminToken()
+        
+        if (newToken) {
+          // Retry request with new token
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${newToken}`,
+          }
+          const retryResponse = await fetch(url, config)
+          const retryData = await retryResponse.json()
+          
+          if (!retryResponse.ok) {
+            return {
+              success: false,
+              message: retryData.message || 'Request failed',
+              errors: retryData.errors || [],
+            } as ApiResponse<T>
+          }
+          
+          return retryData as ApiResponse<T>
+        } else {
+          // Refresh failed, redirect to login
+          if (typeof window !== 'undefined') {
+            window.location.href = '/admin/signin'
+          }
+        }
+      }
+      
       const data = await response.json()
 
       if (!response.ok) {

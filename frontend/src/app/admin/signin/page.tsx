@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Lock, User, AlertCircle } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
+import { setAdminToken, setAdminUser, getAdminToken } from '@/lib/cookies'
 
 export default function AdminSignInPage() {
   const router = useRouter()
@@ -19,7 +20,7 @@ export default function AdminSignInPage() {
 
   // Check if already authenticated
   useEffect(() => {
-    const token = localStorage.getItem('admin_token')
+    const token = getAdminToken() || localStorage.getItem('admin_token')
     if (token) {
       // Verify token is still valid by checking admin profile
       checkAuth()
@@ -28,7 +29,7 @@ export default function AdminSignInPage() {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminToken() || localStorage.getItem('admin_token')
       if (!token) return
 
       // Check if admin token is valid by calling admin profile endpoint
@@ -36,7 +37,8 @@ export default function AdminSignInPage() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       })
 
       if (response.ok) {
@@ -59,19 +61,23 @@ export default function AdminSignInPage() {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include', // Include cookies
         body: JSON.stringify({ usernameOrEmail, password })
       })
 
       const data = await response.json()
 
       if (data.success && data.data) {
-        // Store admin token
+        // Store admin token in cookie (primary) and localStorage (fallback)
         if (data.data.token) {
+          setAdminToken(data.data.token)
+          // Also store in localStorage for backward compatibility
           localStorage.setItem('admin_token', data.data.token)
         }
 
-        // Store admin info
+        // Store admin info in cookie (primary) and localStorage (fallback)
         if (data.data.admin) {
+          setAdminUser(data.data.admin)
           localStorage.setItem('admin_user', JSON.stringify(data.data.admin))
         }
 

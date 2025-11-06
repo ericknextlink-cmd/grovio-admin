@@ -10,21 +10,21 @@ export class AdminController {
   }
 
   /**
-   * Admin login
+   * Admin login - accepts username or email
    */
   login = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { username, password } = req.body
+      const { usernameOrEmail, password } = req.body
 
-      if (!username || !password) {
+      if (!usernameOrEmail || !password) {
         res.status(400).json({
           success: false,
-          message: 'Username and password are required'
+          message: 'Username/email and password are required'
         } as ApiResponse<null>)
         return
       }
 
-      const result = await this.adminService.login(username, password)
+      const result = await this.adminService.login(usernameOrEmail, password)
 
       if (!result.success) {
         res.status(401).json({

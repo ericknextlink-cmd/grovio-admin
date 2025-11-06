@@ -7,31 +7,32 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Lock, Mail, AlertCircle } from 'lucide-react'
+import { Loader2, Lock, User, AlertCircle } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 
 export default function AdminSignInPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [usernameOrEmail, setUsernameOrEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Check if already authenticated
   useEffect(() => {
-    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+    const token = localStorage.getItem('admin_token')
     if (token) {
-      // Verify token is still valid by checking user profile
+      // Verify token is still valid by checking admin profile
       checkAuth()
     }
   }, [])
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+      const token = localStorage.getItem('admin_token')
       if (!token) return
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      // Check if admin token is valid by calling admin profile endpoint
+      const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -39,11 +40,7 @@ export default function AdminSignInPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        // Check if user is admin
-        if (data.user?.role === 'admin') {
-          router.push('/admin')
-        }
+        router.push('/admin')
       }
     } catch (err) {
       // Not authenticated, stay on signin page
@@ -57,34 +54,26 @@ export default function AdminSignInPage() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/signin`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ usernameOrEmail, password })
       })
 
       const data = await response.json()
 
-      if (data.success && data.user) {
-        // Check if user is admin
-        if (data.user.role !== 'admin') {
-          setError('Access denied. Admin privileges required.')
-          setLoading(false)
-          return
+      if (data.success && data.data) {
+        // Store admin token
+        if (data.data.token) {
+          localStorage.setItem('admin_token', data.data.token)
         }
 
-        // Store tokens
-        if (data.accessToken) {
-          localStorage.setItem('auth_token', data.accessToken)
+        // Store admin info
+        if (data.data.admin) {
+          localStorage.setItem('admin_user', JSON.stringify(data.data.admin))
         }
-        if (data.refreshToken) {
-          localStorage.setItem('refresh_token', data.refreshToken)
-        }
-
-        // Store user info
-        localStorage.setItem('user', JSON.stringify(data.user))
 
         // Redirect to admin dashboard
         router.push('/admin')
@@ -121,15 +110,15 @@ export default function AdminSignInPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="usernameOrEmail">Username or Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="usernameOrEmail"
+                  type="text"
+                  placeholder="username or admin@example.com"
+                  value={usernameOrEmail}
+                  onChange={(e) => setUsernameOrEmail(e.target.value)}
                   className="pl-10"
                   required
                   disabled={loading}

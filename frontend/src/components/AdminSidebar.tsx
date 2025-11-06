@@ -25,24 +25,24 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
   const [userEmail, setUserEmail] = useState('Admin User')
 
   useEffect(() => {
-    // Get user info from localStorage
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
+    // Get admin info from localStorage
+    const adminStr = localStorage.getItem('admin_user')
+    if (adminStr) {
       try {
-        const user = JSON.parse(userStr)
-        setUserEmail(user.email || 'Admin User')
+        const admin = JSON.parse(adminStr)
+        setUserEmail(admin.email || admin.username || 'Admin User')
       } catch (e) {
-        console.error('Failed to parse user data:', e)
+        console.error('Failed to parse admin data:', e)
       }
     }
   }, [])
 
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('admin_token')
       if (token) {
         // Call logout endpoint
-        await fetch(`${API_BASE_URL}/api/auth/signout`, {
+        await fetch(`${API_BASE_URL}/api/admin/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -53,11 +53,9 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
-      // Clear all auth data
-      localStorage.removeItem('auth_token')
-      sessionStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user')
+      // Clear all admin auth data
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
       
       // Redirect to signin
       router.push('/admin/signin')

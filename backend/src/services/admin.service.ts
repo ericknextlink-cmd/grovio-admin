@@ -23,26 +23,35 @@ export class AdminService {
   private supabase = createAdminClient()
 
   /**
-   * Admin login
+   * Admin login - accepts username or email
    */
-  async login(username: string, password: string): Promise<{
+  async login(usernameOrEmail: string, password: string): Promise<{
     success: boolean
     message: string
     data?: AdminLoginResponse
   }> {
     try {
-      // Get admin user by username
-      const { data: admin, error } = await this.supabase
+      // Determine if input is email or username
+      const isEmail = usernameOrEmail.includes('@')
+      
+      // Get admin user by username or email
+      const query = this.supabase
         .from('admin_users')
         .select('*')
-        .eq('username', username)
         .eq('is_active', true)
-        .single()
+      
+      if (isEmail) {
+        query.eq('email', usernameOrEmail.toLowerCase().trim())
+      } else {
+        query.eq('username', usernameOrEmail.trim())
+      }
+      
+      const { data: admin, error } = await query.single()
 
       if (error || !admin) {
         return {
           success: false,
-          message: 'Invalid credentials'
+          message: 'Invalid username/email or password'
         }
       }
 

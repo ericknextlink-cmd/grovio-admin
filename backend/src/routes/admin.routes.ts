@@ -9,12 +9,12 @@ const adminController = new AdminController()
 
 // Validation rules
 const loginValidation = [
-  body('username')
+  body('usernameOrEmail')
     .trim()
     .notEmpty()
-    .withMessage('Username is required')
-    .isLength({ min: 3, max: 50 })
-    .withMessage('Username must be between 3 and 50 characters'),
+    .withMessage('Username or email is required')
+    .isLength({ min: 3, max: 255 })
+    .withMessage('Username or email must be between 3 and 255 characters'),
   body('password')
     .notEmpty()
     .withMessage('Password is required')

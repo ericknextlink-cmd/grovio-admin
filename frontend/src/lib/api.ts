@@ -62,8 +62,13 @@ class ApiClient {
     }
 
     // Add auth token if available
+    // For admin routes, use admin_token; for regular routes, use auth_token
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+      const isAdminRoute = endpoint.includes('/api/admin/') || endpoint.includes('/api/dashboard/')
+      const token = isAdminRoute 
+        ? localStorage.getItem('admin_token')
+        : localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+      
       if (token) {
         config.headers = {
           ...config.headers,

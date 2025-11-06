@@ -21,14 +21,14 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+      const token = localStorage.getItem('admin_token')
       
       if (!token) {
         router.push('/admin/signin')
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -37,24 +37,16 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
 
       if (!response.ok) {
         // Clear invalid tokens
-        localStorage.removeItem('auth_token')
-        sessionStorage.removeItem('auth_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user')
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
         router.push('/admin/signin')
         return
       }
 
       const data = await response.json()
 
-      if (!data.success || !data.user) {
+      if (!data.success || !data.data) {
         router.push('/admin/signin')
-        return
-      }
-
-      // Check if user is admin
-      if (data.user.role !== 'admin') {
-        router.push('/admin/signin?error=access_denied')
         return
       }
 

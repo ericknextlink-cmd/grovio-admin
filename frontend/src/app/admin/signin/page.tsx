@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,16 +18,7 @@ export default function AdminSignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Check if already authenticated
-  useEffect(() => {
-    const token = getAdminToken() || localStorage.getItem('admin_token')
-    if (token) {
-      // Verify token is still valid by checking admin profile
-      checkAuth()
-    }
-  }, [])
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const token = getAdminToken() || localStorage.getItem('admin_token')
       if (!token) return
@@ -48,7 +39,17 @@ export default function AdminSignInPage() {
       // Not authenticated, stay on signin page
       console.error('Auth check failed:', err)
     }
-  }
+  }, [router])
+
+  // Check if already authenticated
+  useEffect(() => {
+    const token = getAdminToken() || localStorage.getItem('admin_token')
+    if (token) {
+      // Verify token is still valid by checking admin profile
+      checkAuth()
+    }
+  }, [checkAuth])
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,7 +96,7 @@ export default function AdminSignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto w-12 h-12 bg-[#D35F0E] rounded-lg flex items-center justify-center mb-4">

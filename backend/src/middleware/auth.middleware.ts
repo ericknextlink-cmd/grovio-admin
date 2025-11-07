@@ -137,3 +137,20 @@ export const requireUser = (req: AuthRequest, res: Response, next: NextFunction)
 
   next()
 }
+
+/**
+ * Alias for authenticateToken - for consistency
+ */
+export const authenticateUser = authenticateToken
+
+/**
+ * Extended request interface with userId for convenience
+ */
+export interface UserRequest extends Request {
+  userId?: string
+  user?: {
+    id: string
+    email: string
+    role: string
+  }
+}

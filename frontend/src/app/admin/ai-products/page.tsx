@@ -92,7 +92,7 @@ export default function AIProductsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, selectedCategory, searchQuery])
+  }, [page, statusFilter, selectedCategory, searchQuery, limit])
 
   useEffect(() => {
     fetchProducts()
@@ -109,7 +109,7 @@ export default function AIProductsPage() {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [searchQuery])
+  }, [searchQuery, fetchProducts, page])
 
   const handleGenerate = async () => {
     if (!confirm('Generate 10 new AI products? This may take a moment.')) {

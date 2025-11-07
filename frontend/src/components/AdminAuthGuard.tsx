@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
@@ -15,15 +15,11 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-
-  useEffect(() => {
-    checkAuth()
-  }, [pathname])
-
-  const checkAuth = async () => {
+  
+  const checkAuth = useCallback(async () => {
     try {
-      // Try cookie first, then localStorage for backward compatibility
-      const token = getAdminToken() || localStorage.getItem('admin_token')
+      // Use ONLY cookies - never localStorage
+      const token = getAdminToken()
       
       if (!token) {
         router.push('/admin/signin')
@@ -37,38 +33,36 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         },
         credentials: 'include'
       })
-
+      
       if (!response.ok) {
-        // Clear invalid tokens from both cookie and localStorage
+        // Clear cookies only
         clearAdminCookies()
-        localStorage.removeItem('admin_token')
-        localStorage.removeItem('admin_user')
         router.push('/admin/signin')
         return
       }
-
+      
       const data = await response.json()
-
+      
       if (!data.success || !data.data) {
         clearAdminCookies()
-        localStorage.removeItem('admin_token')
-        localStorage.removeItem('admin_user')
         router.push('/admin/signin')
         return
       }
-
+      
       setIsAuthenticated(true)
     } catch (error) {
       console.error('Auth check error:', error)
       clearAdminCookies()
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('admin_user')
       router.push('/admin/signin')
     } finally {
       setIsLoading(false)
     }
-  }
-
+  }, [router])
+  
+  useEffect(() => {
+    checkAuth()
+  }, [pathname, checkAuth])
+  
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">

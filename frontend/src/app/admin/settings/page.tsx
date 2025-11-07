@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
 import { useState } from 'react'
 import PasswordUpdateForm from '@/components/PasswordUpdateForm'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Settings } from 'lucide-react'
 
 export default function AdminSettingsPage() {

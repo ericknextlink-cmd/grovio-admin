@@ -21,6 +21,9 @@ import { orderRoutes } from './routes/order.routes'
 import { userPreferencesRoutes } from './routes/user-preferences.routes'
 import { bundlesRoutes } from './routes/bundles.routes'
 import { aiProductsRoutes } from './routes/ai-products.routes'
+import { uploadRoutes } from './routes/upload.routes'
+import { cartRoutes } from './routes/cart.routes'
+import { favoritesRoutes } from './routes/favorites.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
 import { findAvailablePort } from './utils/port'
@@ -116,6 +119,9 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/users', userPreferencesRoutes)
 app.use('/api/bundles', bundlesRoutes)
 app.use('/api/ai-products', aiProductsRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/cart', cartRoutes)
+app.use('/api/favorites', favoritesRoutes)
 
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', orderRoutes)

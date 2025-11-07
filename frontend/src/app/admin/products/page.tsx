@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit, Trash2, Package, Filter, Loader2 } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Package, Filter, Loader2, X } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
 import { productsApi } from '@/lib/api'
 import Image from 'next/image'
@@ -50,6 +50,9 @@ export default function ProductsPage() {
   const [inStockFilter, setInStockFilter] = useState<boolean | undefined>(undefined)
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  
+  // Modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -93,7 +96,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, searchQuery])
+  }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, searchQuery, limit])
 
   useEffect(() => {
     fetchProducts()
@@ -162,7 +165,7 @@ export default function ProductsPage() {
               <p className="text-gray-600 dark:text-gray-400">Manage your product inventory</p>
             </div>
             <button
-              onClick={() => router.push('/admin?action=add-product')}
+              onClick={() => setIsAddModalOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -404,6 +407,44 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {/* Add Product Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setIsAddModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Add New Product
+              </h2>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X className="h-6 w-6 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-12">
+                <Package className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+                <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  Product Form Coming Soon
+                </p>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  The ProductForm component needs to be integrated here.
+                  <br />
+                  It will include all product fields, image upload, and category selection.
+                </p>
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

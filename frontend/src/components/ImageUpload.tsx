@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useCallback, useRef } from 'react'
-import { Upload, X, Link, FileImage } from 'lucide-react'
+import { Upload, X, Link, FileImage, Loader2 } from 'lucide-react'
 import { cn, validateImageUrl } from '@/lib/utils'
+import { uploadImage, isLocalImage } from '@/lib/upload'
 import Image from 'next/image'
 
 interface ImageUploadProps {
@@ -10,17 +11,20 @@ interface ImageUploadProps {
   onImagesChange: (images: string[]) => void
   maxImages?: number
   className?: string
+  folder?: 'products' | 'categories'
 }
 
 export default function ImageUpload({ 
   images, 
   onImagesChange, 
   maxImages = 10,
-  className 
+  className,
+  folder = 'products'
 }: ImageUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [showUrlInput, setShowUrlInput] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addImage = useCallback((newImage: string) => {
@@ -36,22 +40,42 @@ export default function ImageUpload({
     onImagesChange(images.filter((_, i) => i !== index))
   }, [images, onImagesChange])
 
-  const handleFileSelect = useCallback((files: FileList | null) => {
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files) return
+    
+    setIsUploading(true)
+    const uploadPromises: Promise<void>[] = []
     
     Array.from(files).forEach(file => {
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const result = e.target?.result as string
-          if (result) {
-            addImage(result)
+        const promise = new Promise<void>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = async (e) => {
+            const result = e.target?.result as string
+            if (result) {
+              // Upload immediately and add the uploaded URL
+              try {
+                const uploadResult = await uploadImage(result, folder)
+                if (uploadResult.success && uploadResult.url) {
+                  addImage(uploadResult.url)
+                } else {
+                  console.error('Upload failed:', uploadResult.error)
+                }
+              } catch (error) {
+                console.error('Upload error:', error)
+              }
+            }
+            resolve()
           }
-        }
-        reader.readAsDataURL(file)
+          reader.readAsDataURL(file)
+        })
+        uploadPromises.push(promise)
       }
     })
-  }, [addImage])
+    
+    await Promise.all(uploadPromises)
+    setIsUploading(false)
+  }, [addImage, folder])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -71,15 +95,47 @@ export default function ImageUpload({
     handleFileSelect(files)
   }, [handleFileSelect])
 
-  const handleUrlSubmit = useCallback((e: React.FormEvent) => {
+  const handleUrlSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     e.stopPropagation() // Prevent event from bubbling to parent form
-    if (urlInput.trim()) {
-      addImage(urlInput.trim())
+    if (!urlInput.trim()) return
+
+    const url = urlInput.trim()
+    
+    // For HTTP/HTTPS URLs, add them directly (already uploaded)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      addImage(url)
+      setUrlInput('')
+      setShowUrlInput(false)
+      return
+    }
+
+    // For base64 or local images, upload them first
+    if (isLocalImage(url)) {
+      setIsUploading(true)
+      try {
+        const result = await uploadImage(url, folder)
+        if (result.success && result.url) {
+          addImage(result.url) // Add the uploaded URL
+          setUrlInput('')
+          setShowUrlInput(false)
+        } else {
+          console.error('Upload failed:', result.error)
+          alert(result.error || 'Failed to upload image')
+        }
+      } catch (error) {
+        console.error('Upload error:', error)
+        alert('Failed to upload image')
+      } finally {
+        setIsUploading(false)
+      }
+    } else {
+      // For other formats, just add directly
+      addImage(url)
       setUrlInput('')
       setShowUrlInput(false)
     }
-  }, [urlInput, addImage])
+  }, [urlInput, addImage, folder])
 
   const openFileSelector = useCallback(() => {
     fileInputRef.current?.click()
@@ -100,17 +156,21 @@ export default function ImageUpload({
         onDrop={handleDrop}
       >
         <div className="space-y-3">
-          <Upload className={cn(
-            "mx-auto h-12 w-12 transition-colors",
-            isDragOver ? "text-blue-500" : "text-gray-400"
-          )} />
+          {isUploading ? (
+            <Loader2 className="mx-auto h-12 w-12 animate-spin text-blue-500" />
+          ) : (
+            <Upload className={cn(
+              "mx-auto h-12 w-12 transition-colors",
+              isDragOver ? "text-blue-500" : "text-gray-400"
+            )} />
+          )}
           
           <div className="space-y-2">
             <p className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              {isDragOver ? "Drop images here" : "Upload Images"}
+              {isUploading ? "Uploading..." : isDragOver ? "Drop images here" : "Upload Images"}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Drag & drop images, or click to browse
+              {isUploading ? "Please wait while images are being uploaded" : "Drag & drop images, or click to browse"}
             </p>
           </div>
 
@@ -121,7 +181,8 @@ export default function ImageUpload({
                 e.stopPropagation() // Prevent button click from bubbling to parent form
                 openFileSelector()
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isUploading}
             >
               <FileImage className="h-4 w-4" />
               Select from Computer
@@ -133,7 +194,8 @@ export default function ImageUpload({
                 e.stopPropagation() // Prevent button click from bubbling to parent form
                 setShowUrlInput(!showUrlInput)
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isUploading}
             >
               <Link className="h-4 w-4" />
               Add URL
@@ -187,7 +249,7 @@ export default function ImageUpload({
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Tip: Blob URLs will automatically get .png extension added
+            Tip: Enter a public image URL or base64 data URL. Local images will be previewed only.
           </p>
         </form>
       )}

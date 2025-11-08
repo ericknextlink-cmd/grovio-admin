@@ -228,6 +228,7 @@ export default function ProductsPage() {
         name: formValues.name.trim(),
         brand: formValues.brand.trim() || null,
         description: formValues.description.trim(),
+        category: formValues.category,
         category_name: formValues.category,
         subcategory: formValues.subcategory || null,
         price: formValues.price,

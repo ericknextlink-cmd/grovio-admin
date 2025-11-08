@@ -6,6 +6,7 @@ export interface Product {
   slug?: string
   brand?: string
   description?: string
+  category?: string
   category_id?: string
   category_name: string
   subcategory?: string
@@ -158,6 +159,7 @@ export class ProductsService {
         .from('products')
         .insert({
           ...productData,
+          category: productData.category_name ?? productData.category,
           slug,
           currency: productData.currency || 'GHS'
         })
@@ -197,6 +199,10 @@ export class ProductsService {
       // If name is being updated, regenerate slug
       if (updates.name) {
         updates.slug = this.generateSlug(updates.name)
+      }
+
+      if (updates.category_name) {
+        updates.category = updates.category_name
       }
 
       const { data: product, error } = await this.supabase

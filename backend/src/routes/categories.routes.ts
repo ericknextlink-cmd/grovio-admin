@@ -40,6 +40,14 @@ const createCategoryValidation = [
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Each subcategory must be between 1 and 100 characters'),
+  body('images')
+    .optional()
+    .isArray()
+    .withMessage('Images must be an array'),
+  body('images.*')
+    .optional()
+    .isURL()
+    .withMessage('Each image must be a valid URL'),
   handleValidationErrors
 ]
 
@@ -77,6 +85,14 @@ const updateCategoryValidation = [
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Each subcategory must be between 1 and 100 characters'),
+  body('images')
+    .optional()
+    .isArray()
+    .withMessage('Images must be an array'),
+  body('images.*')
+    .optional()
+    .isURL()
+    .withMessage('Each image must be a valid URL'),
   handleValidationErrors
 ]
 

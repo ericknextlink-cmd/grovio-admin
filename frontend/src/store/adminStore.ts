@@ -4,11 +4,11 @@ import { generateId, validateImageUrl } from '@/lib/utils'
 
 // Sample data for demonstration
 const sampleCategories: GroceryCategory[] = [
-  { id: '1', name: 'Fruits & Vegetables', subcategories: ['Fresh Fruits', 'Fresh Vegetables', 'Organic', 'Frozen'] },
-  { id: '2', name: 'Dairy & Eggs', subcategories: ['Milk', 'Cheese', 'Yogurt', 'Eggs', 'Butter'] },
-  { id: '3', name: 'Meat & Seafood', subcategories: ['Beef', 'Pork', 'Chicken', 'Fish', 'Seafood'] },
-  { id: '4', name: 'Pantry', subcategories: ['Grains', 'Pasta', 'Canned Goods', 'Condiments', 'Snacks'] },
-  { id: '5', name: 'Beverages', subcategories: ['Water', 'Juice', 'Soda', 'Coffee', 'Tea'] },
+  { id: '1', name: 'Fruits & Vegetables', images: [], subcategories: ['Fresh Fruits', 'Fresh Vegetables', 'Organic', 'Frozen'] },
+  { id: '2', name: 'Dairy & Eggs', images: [], subcategories: ['Milk', 'Cheese', 'Yogurt', 'Eggs', 'Butter'] },
+  { id: '3', name: 'Meat & Seafood', images: [], subcategories: ['Beef', 'Pork', 'Chicken', 'Fish', 'Seafood'] },
+  { id: '4', name: 'Pantry', images: [], subcategories: ['Grains', 'Pasta', 'Canned Goods', 'Condiments', 'Snacks'] },
+  { id: '5', name: 'Beverages', images: [], subcategories: ['Water', 'Juice', 'Soda', 'Coffee', 'Tea'] },
 ]
 
 const sampleProducts: GroceryProduct[] = [
@@ -284,8 +284,9 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
   // Category CRUD Operations
   addCategory: (categoryData) => {
     const newCategory: GroceryCategory = {
-      ...categoryData,
       id: generateId(),
+      ...categoryData,
+      images: categoryData.images?.map(img => validateImageUrl(img)) ?? [],
     }
 
     set((state) => ({
@@ -298,7 +299,15 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
   updateCategory: (id, updates) => {
     set((state) => ({
       categories: state.categories.map(category =>
-        category.id === id ? { ...category, ...updates } : category
+        category.id === id
+          ? {
+              ...category,
+              ...updates,
+              images: updates.images
+                ? updates.images.map(img => validateImageUrl(img))
+                : category.images,
+            }
+          : category
       ),
     }))
 

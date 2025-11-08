@@ -23,7 +23,13 @@ export interface GroceryProduct {
 export interface GroceryCategory {
   id: string;
   name: string;
+  slug?: string;
+  description?: string;
+  icon?: string;
+  images: string[];
   subcategories: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Order {

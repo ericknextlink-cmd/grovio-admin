@@ -6,6 +6,7 @@ export interface Category {
   slug: string
   description?: string
   icon?: string
+  images?: string[]
   subcategories: string[]
   created_at: string
   updated_at: string
@@ -102,6 +103,7 @@ export class CategoriesService {
         .insert({
           ...categoryData,
           slug,
+          images: categoryData.images || [],
           subcategories: categoryData.subcategories || []
         })
         .select()

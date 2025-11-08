@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Image from 'next/image'
 import { Search, Edit, Trash2, Plus, Tag, X } from 'lucide-react'
 import { GroceryCategory } from '@/types/grocery'
 // import { cn } from '@/lib/utils'
@@ -12,6 +13,7 @@ interface CategoriesTableProps {
   onAdd: () => void
   searchQuery: string
   onSearchChange: (query: string) => void
+  onUpdateSubcategories: (category: GroceryCategory, subcategories: string[]) => void
 }
 
 export default function CategoriesTable({
@@ -21,6 +23,7 @@ export default function CategoriesTable({
   onAdd,
   searchQuery,
   onSearchChange,
+  onUpdateSubcategories,
 }: CategoriesTableProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [editingSubcategories, setEditingSubcategories] = useState<string | null>(null)
@@ -49,11 +52,8 @@ export default function CategoriesTable({
     if (newSubcategory.trim()) {
       const category = categories.find(c => c.id === categoryId)
       if (category) {
-        const updatedCategory = {
-          ...category,
-          subcategories: [...category.subcategories, newSubcategory.trim()]
-        }
-        onEdit(updatedCategory)
+        const updatedSubcategories = [...category.subcategories, newSubcategory.trim()]
+        onUpdateSubcategories(category, updatedSubcategories)
         setNewSubcategory('')
         setEditingSubcategories(null)
       }
@@ -63,11 +63,8 @@ export default function CategoriesTable({
   const handleRemoveSubcategory = (categoryId: string, subcategory: string) => {
     const category = categories.find(c => c.id === categoryId)
     if (category) {
-      const updatedCategory = {
-        ...category,
-        subcategories: category.subcategories.filter(sub => sub !== subcategory)
-      }
-      onEdit(updatedCategory)
+      const updatedSubcategories = category.subcategories.filter(sub => sub !== subcategory)
+      onUpdateSubcategories(category, updatedSubcategories)
     }
   }
 
@@ -117,9 +114,19 @@ export default function CategoriesTable({
           >
             {/* Category Header */}
             <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-                  <Tag className="h-5 w-5 text-blue-600" />
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                  {category.images && category.images.length > 0 ? (
+                    <Image
+                      src={category.images[0]}
+                      alt={category.name}
+                      width={48}
+                      height={48}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Tag className="h-5 w-5 text-blue-600" />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">

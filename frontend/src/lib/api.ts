@@ -344,3 +344,18 @@ export const dashboardApi = {
   getAnalytics: (period?: number) => apiClient.get<any>('/api/dashboard/analytics', { period }),
   getAlerts: (threshold?: number) => apiClient.get<any>('/api/dashboard/alerts', { threshold }),
 }
+
+// Categories API
+export const categoriesApi = {
+  getAll: (params?: {
+    search?: string
+  }) => apiClient.get<any>('/api/categories', params),
+
+  getById: (id: string) => apiClient.get<any>(`/api/categories/${id}`),
+
+  create: (data: any) => apiClient.post<any>('/api/categories', data),
+
+  update: (id: string, data: any) => apiClient.put<any>(`/api/categories/${id}`, data),
+
+  delete: (id: string) => apiClient.delete<any>(`/api/categories/${id}`),
+}

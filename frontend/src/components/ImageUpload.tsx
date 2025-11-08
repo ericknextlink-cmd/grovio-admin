@@ -6,6 +6,7 @@ import { cn, validateImageUrl } from '@/lib/utils'
 import { isLocalImage } from '@/lib/upload'
 import { compressImage } from '@/lib/imageCompression'
 import Image from 'next/image'
+import { toast } from 'sonner'
 
 interface ImageUploadProps {
   images: string[]
@@ -122,7 +123,7 @@ export default function ImageUpload({
         setShowUrlInput(false)
       } catch (error) {
         console.error('Failed to process blob image URL', error)
-        alert('Failed to process this image URL')
+        toast.error('Failed to process this image URL')
       } finally {
         setIsProcessing(false)
       }
@@ -139,7 +140,7 @@ export default function ImageUpload({
         setShowUrlInput(false)
       } catch (error) {
         console.error('Failed to process image URL', error)
-        alert('Failed to process image URL')
+        toast.error('Failed to process image URL')
       } finally {
         setIsProcessing(false)
       }

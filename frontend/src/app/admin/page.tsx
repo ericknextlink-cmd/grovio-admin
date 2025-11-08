@@ -10,6 +10,7 @@ import ProductForm from '@/components/ProductForm'
 import AdminSidebar from '@/components/AdminSidebar'
 import { GroceryProduct, AdminStats } from '@/types/grocery'
 import { productsApi, dashboardApi } from '@/lib/api'
+import { toast } from 'sonner'
 
 interface Product {
   id: string
@@ -157,12 +158,13 @@ export default function AdminDashboard() {
         const response = await productsApi.delete(product.id)
         if (response.success) {
           setProducts(products.filter(p => p.id !== product.id))
+          toast.success('Product deleted')
         } else {
-          alert(response.message || 'Failed to delete product')
+          toast.error(response.message || 'Failed to delete product')
         }
       } catch (err) {
         console.error('Delete product error:', err)
-        alert('Failed to delete product')
+        toast.error('Failed to delete product')
       }
     }
   }
@@ -194,8 +196,9 @@ export default function AdminDashboard() {
             setProducts(Array.isArray(refreshResponse.data) ? refreshResponse.data : [])
           }
           setIsFormOpen(false)
+          toast.success('Product updated')
         } else {
-          alert(response.message || 'Failed to update product')
+          toast.error(response.message || 'Failed to update product')
         }
       } else {
         const response = await productsApi.create({
@@ -222,13 +225,14 @@ export default function AdminDashboard() {
             setProducts(Array.isArray(refreshResponse.data) ? refreshResponse.data : [])
           }
           setIsFormOpen(false)
+          toast.success('Product created')
         } else {
-          alert(response.message || 'Failed to create product')
+          toast.error(response.message || 'Failed to create product')
         }
       }
     } catch (err) {
       console.error('Submit product error:', err)
-      alert('Failed to save product')
+      toast.error('Failed to save product')
     }
   }
 

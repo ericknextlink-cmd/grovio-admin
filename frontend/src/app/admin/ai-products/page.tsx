@@ -8,6 +8,7 @@ import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, CheckCircle, XC
 import AdminSidebar from '@/components/AdminSidebar'
 import { aiProductsApi } from '@/lib/api'
 import Image from 'next/image'
+import { toast } from 'sonner'
 
 interface AIProduct {
   id: string
@@ -123,14 +124,17 @@ export default function AIProductsPage() {
       const response = await aiProductsApi.generate(10)
 
       if (response.success) {
-        alert(`Successfully generated ${response.data?.length || 0} products!`)
+        const count = Array.isArray(response.data) ? response.data.length : 0
+        toast.success(`Generated ${count} AI product${count === 1 ? '' : 's'}`)
         fetchProducts()
       } else {
         setError(response.message || 'Failed to generate products')
+        toast.error(response.message || 'Failed to generate products')
       }
     } catch (err) {
       setError('An error occurred while generating products')
       console.error('Generate AI products error:', err)
+      toast.error('An error occurred while generating products')
     } finally {
       setGenerating(false)
     }
@@ -145,12 +149,13 @@ export default function AIProductsPage() {
       const response = await aiProductsApi.delete(id)
       if (response.success) {
         fetchProducts()
+        toast.success('AI product deleted')
       } else {
-        alert(response.message || 'Failed to delete product')
+        toast.error(response.message || 'Failed to delete product')
       }
     } catch (err) {
-      alert('An error occurred while deleting the product')
       console.error('Delete AI product error:', err)
+      toast.error('An error occurred while deleting the product')
     }
   }
 
@@ -159,12 +164,13 @@ export default function AIProductsPage() {
       const response = await aiProductsApi.publish(id)
       if (response.success) {
         fetchProducts()
+        toast.success('AI product published')
       } else {
-        alert(response.message || 'Failed to publish product')
+        toast.error(response.message || 'Failed to publish product')
       }
     } catch (err) {
-      alert('An error occurred while publishing the product')
       console.error('Publish AI product error:', err)
+      toast.error('An error occurred while publishing the product')
     }
   }
 
@@ -173,12 +179,13 @@ export default function AIProductsPage() {
       const response = await aiProductsApi.unpublish(id)
       if (response.success) {
         fetchProducts()
+        toast.success('AI product moved back to draft')
       } else {
-        alert(response.message || 'Failed to unpublish product')
+        toast.error(response.message || 'Failed to unpublish product')
       }
     } catch (err) {
-      alert('An error occurred while unpublishing the product')
       console.error('Unpublish AI product error:', err)
+      toast.error('An error occurred while unpublishing the product')
     }
   }
 
@@ -187,12 +194,13 @@ export default function AIProductsPage() {
       const response = await aiProductsApi.archive(id)
       if (response.success) {
         fetchProducts()
+        toast.success('AI product archived')
       } else {
-        alert(response.message || 'Failed to archive product')
+        toast.error(response.message || 'Failed to archive product')
       }
     } catch (err) {
-      alert('An error occurred while archiving the product')
       console.error('Archive AI product error:', err)
+      toast.error('An error occurred while archiving the product')
     }
   }
 

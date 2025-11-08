@@ -11,6 +11,7 @@ import { productsApi, categoriesApi } from '@/lib/api'
 import { uploadLocalImages } from '@/lib/upload'
 import { GroceryCategory, GroceryProduct } from '@/types/grocery'
 import Image from 'next/image'
+import { toast } from 'sonner'
 
 interface Product {
   id: string
@@ -152,13 +153,14 @@ export default function ProductsPage() {
     try {
       const response = await productsApi.delete(id)
       if (response.success) {
+        toast.success('Product deleted')
         await fetchProducts()
       } else {
-        alert(response.message || 'Failed to delete product')
+        toast.error(response.message || 'Failed to delete product')
       }
     } catch (err) {
-      alert('An error occurred while deleting the product')
       console.error('Delete product error:', err)
+      toast.error('An error occurred while deleting the product')
     }
   }
 
@@ -219,7 +221,7 @@ export default function ProductsPage() {
       const { images: uploadedImages, errors } = await uploadLocalImages(formValues.images, 'products')
       if (errors.length > 0) {
         console.warn('Some product images failed to upload:', errors)
-        alert(`Some images failed to upload: ${errors.join(', ')}`)
+        toast.warning(`Some images failed to upload: ${errors.join(', ')}`)
       }
 
       const payload = {
@@ -252,10 +254,11 @@ export default function ProductsPage() {
         throw new Error(response.message || 'Failed to save product')
       }
 
+      toast.success(editingProduct ? 'Product updated' : 'Product created')
       await fetchProducts()
     } catch (error) {
       console.error('Save product error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to save product')
+      toast.error(error instanceof Error ? error.message : 'Failed to save product')
       throw error
     }
   }

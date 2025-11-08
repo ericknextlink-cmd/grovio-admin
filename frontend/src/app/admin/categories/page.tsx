@@ -9,6 +9,7 @@ import ImageUpload from '@/components/ImageUpload'
 import { categoriesApi } from '@/lib/api'
 import { uploadLocalImages } from '@/lib/upload'
 import { X } from 'lucide-react'
+import { toast } from 'sonner'
 
 const emptyForm = {
   name: '',
@@ -92,10 +93,11 @@ export default function CategoriesPage() {
       if (!response.success) {
         throw new Error(response.message || 'Failed to delete category')
       }
+      toast.success('Category deleted')
       await fetchCategories()
     } catch (err) {
       console.error('Delete category error:', err)
-      alert(err instanceof Error ? err.message : 'Failed to delete category')
+      toast.error(err instanceof Error ? err.message : 'Failed to delete category')
     } finally {
       setSubmitting(false)
     }
@@ -111,7 +113,7 @@ export default function CategoriesPage() {
       const { images: uploadedImages, errors } = await uploadLocalImages(formData.images, 'categories')
       if (errors.length > 0) {
         console.warn('Some images failed to upload:', errors)
-        alert(`Some images failed to upload: ${errors.join(', ')}`)
+        toast.warning(`Some images failed to upload: ${errors.join(', ')}`)
       }
 
       const payload = {
@@ -132,12 +134,13 @@ export default function CategoriesPage() {
         throw new Error(response.message || 'Failed to save category')
       }
 
+      toast.success(editingCategory ? 'Category updated' : 'Category created')
       await fetchCategories()
       setIsFormOpen(false)
       resetForm()
     } catch (err) {
       console.error('Save category error:', err)
-      alert(err instanceof Error ? err.message : 'Failed to save category')
+      toast.error(err instanceof Error ? err.message : 'Failed to save category')
     } finally {
       setSubmitting(false)
     }
@@ -173,10 +176,11 @@ export default function CategoriesPage() {
       if (!response.success) {
         throw new Error(response.message || 'Failed to update subcategories')
       }
+      toast.success('Subcategories updated')
       await fetchCategories()
     } catch (err) {
       console.error('Update subcategories error:', err)
-      alert(err instanceof Error ? err.message : 'Failed to update subcategories')
+      toast.error(err instanceof Error ? err.message : 'Failed to update subcategories')
     } finally {
       setSubmitting(false)
       setEditingCategory(null)

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GroceryProduct, GroceryCategory } from '@/types/grocery'
@@ -34,6 +34,8 @@ const initialFormData = {
   images: [] as string[],
 }
 
+const FORM_DRAFT_STORAGE_KEY = 'admin_product_form_draft'
+
 export default function ProductForm({
   product,
   categories,
@@ -44,6 +46,34 @@ export default function ProductForm({
   const [formData, setFormData] = useState(initialFormData)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const hasRestoredDraftRef = useRef(false)
+
+  const clearFormDraft = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.removeItem(FORM_DRAFT_STORAGE_KEY)
+    } catch (error) {
+      console.warn('Failed to clear product form draft', error)
+    }
+  }, [])
+
+  const restoreDraftIfAvailable = useCallback(() => {
+    if (typeof window === 'undefined') return
+    if (hasRestoredDraftRef.current) return
+    try {
+      const cached = window.sessionStorage.getItem(FORM_DRAFT_STORAGE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        setFormData(prev => ({
+          ...prev,
+          ...parsed,
+        }))
+        hasRestoredDraftRef.current = true
+      }
+    } catch (error) {
+      console.warn('Failed to restore product form draft', error)
+    }
+  }, [])
 
   useEffect(() => {
     if (product) {
@@ -69,7 +99,24 @@ export default function ProductForm({
       setFormData(initialFormData)
     }
     setErrors({})
+    hasRestoredDraftRef.current = false
   }, [product])
+
+  useEffect(() => {
+    if (!isOpen || product) return
+    restoreDraftIfAvailable()
+  }, [isOpen, product, restoreDraftIfAvailable])
+
+  useEffect(() => {
+    if (product || !isOpen) return
+    if (typeof window === 'undefined') return
+
+    try {
+      window.sessionStorage.setItem(FORM_DRAFT_STORAGE_KEY, JSON.stringify(formData))
+    } catch (error) {
+      console.warn('Failed to cache product form draft', error)
+    }
+  }, [formData, product, isOpen])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -81,6 +128,12 @@ export default function ProductForm({
     if (!formData.subcategory) newErrors.subcategory = 'Subcategory is required'
     if (formData.price <= 0) newErrors.price = 'Price must be greater than 0'
     if (formData.quantity < 0) newErrors.quantity = 'Quantity cannot be negative'
+    if (formData.weight !== undefined && formData.weight <= 0) {
+      newErrors.weight = 'Weight must be greater than 0'
+    }
+    if (formData.volume !== undefined && formData.volume <= 0) {
+      newErrors.volume = 'Volume must be greater than 0'
+    }
     if (formData.images.length === 0) newErrors.images = 'At least one image is required'
 
     setErrors(newErrors)
@@ -95,12 +148,19 @@ export default function ProductForm({
     setIsSubmitting(true)
     try {
       await onSubmit(formData)
-      onCancel()
+      handleCancel()
     } catch (error) {
       console.error('Error submitting product:', error)
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleCancel = () => {
+    if (!product) {
+      clearFormDraft()
+    }
+    onCancel()
   }
 
   const handleInputChange = (field: string, value: any) => {
@@ -124,7 +184,7 @@ export default function ProductForm({
             {product ? 'Edit Product' : 'Add New Product'}
           </h2>
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
             <X className="h-6 w-6 text-gray-500" />
@@ -315,9 +375,14 @@ export default function ProductForm({
                 min="0"
                 value={formData.weight || ''}
                 onChange={(e) => handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+                className={cn(
+                  "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                  errors.weight ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+                  "dark:bg-gray-800 dark:text-white"
+                )}
                 placeholder="0.0"
               />
+              {errors.weight && <p className="text-sm text-red-500">{errors.weight}</p>}
             </div>
 
             <div className="space-y-2">
@@ -330,9 +395,14 @@ export default function ProductForm({
                 min="0"
                 value={formData.volume || ''}
                 onChange={(e) => handleInputChange('volume', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+                className={cn(
+                  "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                  errors.volume ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+                  "dark:bg-gray-800 dark:text-white"
+                )}
                 placeholder="0.0"
               />
+              {errors.volume && <p className="text-sm text-red-500">{errors.volume}</p>}
             </div>
           </div>
 
@@ -429,7 +499,7 @@ export default function ProductForm({
           <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleCancel}
               className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               Cancel

@@ -4,9 +4,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit, Trash2, Package, Filter, Loader2, X } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Package, Loader2 } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { productsApi } from '@/lib/api'
+import ProductForm from '@/components/ProductForm'
+import { productsApi, categoriesApi } from '@/lib/api'
+import { uploadLocalImages } from '@/lib/upload'
+import { GroceryCategory, GroceryProduct } from '@/types/grocery'
 import Image from 'next/image'
 
 interface Product {
@@ -37,6 +40,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [categories, setCategories] = useState<GroceryCategory[]>([])
   
   // Pagination
   const [page, setPage] = useState(1)
@@ -52,7 +56,8 @@ export default function ProductsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   
   // Modal state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -102,6 +107,30 @@ export default function ProductsPage() {
     fetchProducts()
   }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, fetchProducts])
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const response = await categoriesApi.getAll()
+      if (response.success && response.data) {
+        const normalized = (response.data as any[]).map((category) => ({
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          description: category.description || '',
+          icon: category.icon || '',
+          images: Array.isArray(category.images) ? category.images : [],
+          subcategories: Array.isArray(category.subcategories) ? category.subcategories : [],
+        })) as GroceryCategory[]
+        setCategories(normalized)
+      }
+    } catch (err) {
+      console.error('Fetch categories error:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCategories()
+  }, [fetchCategories])
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -148,6 +177,89 @@ export default function ProductsPage() {
     })
   }
 
+  const openCreateModal = () => {
+    setEditingProduct(null)
+    setIsProductModalOpen(true)
+  }
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product)
+    setIsProductModalOpen(true)
+  }
+
+  const closeProductModal = () => {
+    setIsProductModalOpen(false)
+    setEditingProduct(null)
+  }
+
+  const mapProductToFormProduct = (product: Product): GroceryProduct => ({
+    id: product.id,
+    name: product.name,
+    brand: product.brand || '',
+    description: product.description || '',
+    category: product.category_name,
+    subcategory: product.subcategory || '',
+    price: product.price,
+    currency: product.currency,
+    quantity: product.quantity,
+    weight: product.weight,
+    volume: product.volume,
+    type: product.type || '',
+    packaging: product.packaging || '',
+    inStock: product.in_stock,
+    rating: product.rating ?? 0,
+    reviews: product.reviews_count ?? 0,
+    images: product.images || [],
+    createdAt: new Date(product.created_at),
+    updatedAt: new Date(product.updated_at),
+  })
+
+  const handleProductFormSubmit = async (formValues: Omit<GroceryProduct, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const { images: uploadedImages, errors } = await uploadLocalImages(formValues.images, 'products')
+      if (errors.length > 0) {
+        console.warn('Some product images failed to upload:', errors)
+        alert(`Some images failed to upload: ${errors.join(', ')}`)
+      }
+
+      const payload = {
+        name: formValues.name.trim(),
+        brand: formValues.brand.trim() || null,
+        description: formValues.description.trim(),
+        category_name: formValues.category,
+        subcategory: formValues.subcategory || null,
+        price: formValues.price,
+        currency: formValues.currency,
+        quantity: formValues.quantity,
+        weight: formValues.weight ?? null,
+        volume: formValues.volume ?? null,
+        type: formValues.type || null,
+        packaging: formValues.packaging || null,
+        in_stock: formValues.inStock,
+        rating: formValues.rating ?? 0,
+        reviews_count: formValues.reviews ?? 0,
+        images: uploadedImages,
+      }
+
+      let response
+      if (editingProduct) {
+        response = await productsApi.update(editingProduct.id, payload)
+      } else {
+        response = await productsApi.create(payload)
+      }
+
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to save product')
+      }
+
+      await fetchProducts()
+    } catch (error) {
+      console.error('Save product error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save product')
+      throw error
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <AdminSidebar
@@ -165,7 +277,7 @@ export default function ProductsPage() {
               <p className="text-gray-600 dark:text-gray-400">Manage your product inventory</p>
             </div>
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={openCreateModal}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -201,7 +313,11 @@ export default function ProductsPage() {
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
             >
               <option value="">All Categories</option>
-              {/* Categories would be fetched separately */}
+              {categories.map((category) => (
+                <option key={category.id} value={category.name}>
+                  {category.name}
+                </option>
+              ))}
             </select>
 
             {/* Stock Filter */}
@@ -359,7 +475,7 @@ export default function ProductsPage() {
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => router.push(`/admin?action=edit-product&id=${product.id}`)}
+                                onClick={() => handleEditProduct(product)}
                                 className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                               >
                                 <Edit className="h-4 w-4" />
@@ -408,43 +524,13 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Add Product Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setIsAddModalOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Add New Product
-              </h2>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                <X className="h-6 w-6 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="text-center py-12">
-                <Package className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-                <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  Product Form Coming Soon
-                </p>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  The ProductForm component needs to be integrated here.
-                  <br />
-                  It will include all product fields, image upload, and category selection.
-                </p>
-                <button
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ProductForm
+        isOpen={isProductModalOpen}
+        product={editingProduct ? mapProductToFormProduct(editingProduct) : undefined}
+        categories={categories}
+        onSubmit={handleProductFormSubmit}
+        onCancel={closeProductModal}
+      />
     </div>
   )
 }

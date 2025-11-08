@@ -60,7 +60,8 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
       endpoint.includes('/api/categories') ||
       endpoint.includes('/api/ai-products') ||
       endpoint.includes('/api/orders') ||
-      endpoint.includes('/api/transactions')
+      endpoint.includes('/api/transactions') ||
+      endpoint.includes('/api/upload')
     ) {
       return true
     }

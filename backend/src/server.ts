@@ -41,7 +41,7 @@ app.use(helmet())
 // CORS configuration
 const allowedOrigins: (string | RegExp)[] = [
   process.env.FRONTEND_URL,
-  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_URL, process.env.DOMAIN_URL,
   process.env.ADMIN_URL,
   'http://localhost:3000',
   'http://localhost:3001',

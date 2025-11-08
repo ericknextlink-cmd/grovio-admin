@@ -11,7 +11,70 @@ export interface UploadResult {
 
 export class UploadService {
   private supabase = createAdminClient()
-  private bucketName = 'product-images' // Change this to your bucket name
+  private defaultBucketName = 'product-images'
+  private bucketMap: Record<'products' | 'categories', string> = {
+    products: 'product-images',
+    categories: 'category-images'
+  }
+  private bucketInitialized: Map<string, Promise<void>> = new Map()
+
+  private resolveBucket(folder: 'products' | 'categories'): string {
+    return this.bucketMap[folder] || this.defaultBucketName
+  }
+
+  private resolveBucketFromPath(path: string): string {
+    if (path.startsWith('categories/')) {
+      return this.bucketMap.categories
+    }
+
+    return this.bucketMap.products
+  }
+
+  private getFormatInfo(contentType: string): {
+    extension: string
+    mimeType: string
+    format: 'jpeg' | 'png' | 'webp' | 'avif'
+  } {
+    switch (contentType) {
+      case 'image/png':
+        return { extension: 'png', mimeType: 'image/png', format: 'png' }
+      case 'image/webp':
+        return { extension: 'webp', mimeType: 'image/webp', format: 'webp' }
+      case 'image/avif':
+        return { extension: 'avif', mimeType: 'image/avif', format: 'avif' }
+      case 'image/jpeg':
+      case 'image/jpg':
+      default:
+        return { extension: 'jpg', mimeType: 'image/jpeg', format: 'jpeg' }
+    }
+  }
+
+  private async ensureBucketExists(bucketName: string): Promise<void> {
+    if (!this.bucketInitialized.has(bucketName)) {
+      const initPromise = (async () => {
+        try {
+          const { data, error } = await this.supabase.storage.getBucket(bucketName)
+          if (error || !data) {
+            const { error: createError } = await this.supabase.storage.createBucket(bucketName, {
+              public: true
+            })
+            if (createError && !createError.message.includes('already exists')) {
+              throw createError
+            }
+          } else if (!data.public) {
+            await this.supabase.storage.updateBucket(bucketName, { public: true })
+          }
+        } catch (error) {
+          console.error('ensureBucketExists error:', error)
+          throw error instanceof Error ? error : new Error('Failed to initialize storage bucket')
+        }
+      })()
+
+      this.bucketInitialized.set(bucketName, initPromise)
+    }
+
+    return this.bucketInitialized.get(bucketName) as Promise<void>
+  }
 
   /**
    * Upload image to Supabase Storage
@@ -46,20 +109,39 @@ export class UploadService {
         imageBuffer = file
       }
 
-      // Optimize image using sharp
-      const optimizedBuffer = await sharp(imageBuffer)
-        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 85 })
-        .toBuffer()
+      const formatInfo = this.getFormatInfo(contentType)
+      const transformer = sharp(imageBuffer).resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+
+      let optimizedBuffer: Buffer
+      switch (formatInfo.format) {
+        case 'png':
+          optimizedBuffer = await transformer.png({ compressionLevel: 8 }).toBuffer()
+          break
+        case 'webp':
+          optimizedBuffer = await transformer.webp({ quality: 85 }).toBuffer()
+          break
+        case 'avif':
+          optimizedBuffer = await transformer.avif({ quality: 70 }).toBuffer()
+          break
+        case 'jpeg':
+        default:
+          optimizedBuffer = await transformer.jpeg({ quality: 85 }).toBuffer()
+          break
+      }
+
+      contentType = formatInfo.mimeType
 
       // Generate unique filename
-      const fileExtension = contentType.split('/')[1] || 'jpg'
+      const fileExtension = formatInfo.extension
       const uniqueFilename = filename || `${uuidv4()}.${fileExtension}`
       const filePath = `${folder}/${uniqueFilename}`
 
+      const bucketName = this.resolveBucket(folder)
+      await this.ensureBucketExists(bucketName)
+
       // Upload to Supabase Storage
       const { data, error } = await this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .upload(filePath, optimizedBuffer, {
           contentType,
           cacheControl: '3600',
@@ -76,7 +158,7 @@ export class UploadService {
 
       // Get public URL
       const { data: urlData } = this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .getPublicUrl(filePath)
 
       return {
@@ -139,8 +221,11 @@ export class UploadService {
     message: string
   }> {
     try {
+      const bucketName = this.resolveBucketFromPath(path)
+      await this.ensureBucketExists(bucketName)
+
       const { error } = await this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .remove([path])
 
       if (error) {
@@ -171,14 +256,23 @@ export class UploadService {
     message: string
   }> {
     try {
-      const { error } = await this.supabase.storage
-        .from(this.bucketName)
-        .remove(paths)
+      const bucketGroups = paths.reduce<Record<string, string[]>>((acc, path) => {
+        const bucket = this.resolveBucketFromPath(path)
+        if (!acc[bucket]) {
+          acc[bucket] = []
+        }
+        acc[bucket].push(path)
+        return acc
+      }, {})
 
-      if (error) {
-        return {
-          success: false,
-          message: `Failed to delete images: ${error.message}`
+      for (const [bucketName, bucketPaths] of Object.entries(bucketGroups)) {
+        await this.ensureBucketExists(bucketName)
+        const { error } = await this.supabase.storage.from(bucketName).remove(bucketPaths)
+        if (error) {
+          return {
+            success: false,
+            message: `Failed to delete images: ${error.message}`
+          }
         }
       }
 

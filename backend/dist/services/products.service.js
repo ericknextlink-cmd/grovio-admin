@@ -89,6 +89,7 @@ class ProductsService {
                 .from('products')
                 .insert({
                 ...productData,
+                category: productData.category_name ?? productData.category,
                 slug,
                 currency: productData.currency || 'GHS'
             })
@@ -122,6 +123,9 @@ class ProductsService {
             // If name is being updated, regenerate slug
             if (updates.name) {
                 updates.slug = this.generateSlug(updates.name);
+            }
+            if (updates.category_name) {
+                updates.category = updates.category_name;
             }
             const { data: product, error } = await this.supabase
                 .from('products')

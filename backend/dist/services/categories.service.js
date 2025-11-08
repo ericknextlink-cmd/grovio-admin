@@ -73,6 +73,7 @@ class CategoriesService {
                 .insert({
                 ...categoryData,
                 slug,
+                images: categoryData.images || [],
                 subcategories: categoryData.subcategories || []
             })
                 .select()

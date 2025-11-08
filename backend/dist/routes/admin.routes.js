@@ -11,12 +11,12 @@ exports.adminRoutes = router;
 const adminController = new admin_controller_1.AdminController();
 // Validation rules
 const loginValidation = [
-    (0, express_validator_1.body)('username')
+    (0, express_validator_1.body)('usernameOrEmail')
         .trim()
         .notEmpty()
-        .withMessage('Username is required')
-        .isLength({ min: 3, max: 50 })
-        .withMessage('Username must be between 3 and 50 characters'),
+        .withMessage('Username or email is required')
+        .isLength({ min: 3, max: 255 })
+        .withMessage('Username or email must be between 3 and 255 characters'),
     (0, express_validator_1.body)('password')
         .notEmpty()
         .withMessage('Password is required')
@@ -50,6 +50,8 @@ const changePasswordValidation = [
 ];
 // Public routes
 router.post('/login', loginValidation, adminController.login);
+// Refresh token route (requires authentication but needs special handling)
+router.post('/refresh', adminAuth_middleware_1.authenticateAdmin, adminController.refreshToken);
 // Protected routes (require admin authentication)
 router.use(adminAuth_middleware_1.authenticateAdmin);
 router.get('/profile', adminController.getProfile);

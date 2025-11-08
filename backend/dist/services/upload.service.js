@@ -1,0 +1,245 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.UploadService = void 0;
+const supabase_1 = require("../config/supabase");
+const sharp_1 = __importDefault(require("sharp"));
+const uuid_1 = require("uuid");
+class UploadService {
+    constructor() {
+        this.supabase = (0, supabase_1.createAdminClient)();
+        this.defaultBucketName = 'product-images';
+        this.bucketMap = {
+            products: 'product-images',
+            categories: 'category-images'
+        };
+        this.bucketInitialized = new Map();
+    }
+    resolveBucket(folder) {
+        return this.bucketMap[folder] || this.defaultBucketName;
+    }
+    resolveBucketFromPath(path) {
+        if (path.startsWith('categories/')) {
+            return this.bucketMap.categories;
+        }
+        return this.bucketMap.products;
+    }
+    getFormatInfo(contentType) {
+        switch (contentType) {
+            case 'image/png':
+                return { extension: 'png', mimeType: 'image/png', format: 'png' };
+            case 'image/webp':
+                return { extension: 'webp', mimeType: 'image/webp', format: 'webp' };
+            case 'image/avif':
+                return { extension: 'avif', mimeType: 'image/avif', format: 'avif' };
+            case 'image/jpeg':
+            case 'image/jpg':
+            default:
+                return { extension: 'jpg', mimeType: 'image/jpeg', format: 'jpeg' };
+        }
+    }
+    async ensureBucketExists(bucketName) {
+        if (!this.bucketInitialized.has(bucketName)) {
+            const initPromise = (async () => {
+                try {
+                    const { data, error } = await this.supabase.storage.getBucket(bucketName);
+                    if (error || !data) {
+                        const { error: createError } = await this.supabase.storage.createBucket(bucketName, {
+                            public: true
+                        });
+                        if (createError && !createError.message.includes('already exists')) {
+                            throw createError;
+                        }
+                    }
+                    else if (!data.public) {
+                        await this.supabase.storage.updateBucket(bucketName, { public: true });
+                    }
+                }
+                catch (error) {
+                    console.error('ensureBucketExists error:', error);
+                    throw error instanceof Error ? error : new Error('Failed to initialize storage bucket');
+                }
+            })();
+            this.bucketInitialized.set(bucketName, initPromise);
+        }
+        return this.bucketInitialized.get(bucketName);
+    }
+    /**
+     * Upload image to Supabase Storage
+     */
+    async uploadImage(file, folder = 'products', filename) {
+        try {
+            let imageBuffer;
+            let contentType = 'image/jpeg';
+            // Handle base64 strings
+            if (typeof file === 'string') {
+                // Extract base64 data and content type
+                const matches = file.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                if (matches && matches.length === 3) {
+                    contentType = matches[1];
+                    imageBuffer = Buffer.from(matches[2], 'base64');
+                }
+                else {
+                    return {
+                        success: false,
+                        message: 'Invalid base64 image format'
+                    };
+                }
+            }
+            else {
+                imageBuffer = file;
+            }
+            const formatInfo = this.getFormatInfo(contentType);
+            const transformer = (0, sharp_1.default)(imageBuffer).resize(1200, 1200, { fit: 'inside', withoutEnlargement: true });
+            let optimizedBuffer;
+            switch (formatInfo.format) {
+                case 'png':
+                    optimizedBuffer = await transformer.png({ compressionLevel: 8 }).toBuffer();
+                    break;
+                case 'webp':
+                    optimizedBuffer = await transformer.webp({ quality: 85 }).toBuffer();
+                    break;
+                case 'avif':
+                    optimizedBuffer = await transformer.avif({ quality: 70 }).toBuffer();
+                    break;
+                case 'jpeg':
+                default:
+                    optimizedBuffer = await transformer.jpeg({ quality: 85 }).toBuffer();
+                    break;
+            }
+            contentType = formatInfo.mimeType;
+            // Generate unique filename
+            const fileExtension = formatInfo.extension;
+            const uniqueFilename = filename || `${(0, uuid_1.v4)()}.${fileExtension}`;
+            const filePath = `${folder}/${uniqueFilename}`;
+            const bucketName = this.resolveBucket(folder);
+            await this.ensureBucketExists(bucketName);
+            // Upload to Supabase Storage
+            const { data, error } = await this.supabase.storage
+                .from(bucketName)
+                .upload(filePath, optimizedBuffer, {
+                contentType,
+                cacheControl: '3600',
+                upsert: false
+            });
+            if (error) {
+                console.error('Supabase storage upload error:', error);
+                return {
+                    success: false,
+                    message: `Failed to upload image: ${error.message}`
+                };
+            }
+            // Get public URL
+            const { data: urlData } = this.supabase.storage
+                .from(bucketName)
+                .getPublicUrl(filePath);
+            return {
+                success: true,
+                message: 'Image uploaded successfully',
+                data: {
+                    url: urlData.publicUrl,
+                    path: filePath,
+                    size: optimizedBuffer.length,
+                    contentType
+                }
+            };
+        }
+        catch (error) {
+            console.error('Upload service error:', error);
+            return {
+                success: false,
+                message: error instanceof Error ? error.message : 'Failed to upload image'
+            };
+        }
+    }
+    /**
+     * Upload multiple images
+     */
+    async uploadMultipleImages(files, folder = 'products') {
+        const results = [];
+        const errors = [];
+        for (let i = 0; i < files.length; i++) {
+            const result = await this.uploadImage(files[i], folder);
+            if (result.success && result.data) {
+                results.push(result.data);
+            }
+            else {
+                errors.push(`Image ${i + 1}: ${result.message}`);
+            }
+        }
+        return {
+            success: results.length > 0,
+            message: `Uploaded ${results.length} of ${files.length} images`,
+            data: results,
+            errors: errors.length > 0 ? errors : undefined
+        };
+    }
+    /**
+     * Delete image from Supabase Storage
+     */
+    async deleteImage(path) {
+        try {
+            const bucketName = this.resolveBucketFromPath(path);
+            await this.ensureBucketExists(bucketName);
+            const { error } = await this.supabase.storage
+                .from(bucketName)
+                .remove([path]);
+            if (error) {
+                return {
+                    success: false,
+                    message: `Failed to delete image: ${error.message}`
+                };
+            }
+            return {
+                success: true,
+                message: 'Image deleted successfully'
+            };
+        }
+        catch (error) {
+            console.error('Delete image error:', error);
+            return {
+                success: false,
+                message: error instanceof Error ? error.message : 'Failed to delete image'
+            };
+        }
+    }
+    /**
+     * Delete multiple images
+     */
+    async deleteMultipleImages(paths) {
+        try {
+            const bucketGroups = paths.reduce((acc, path) => {
+                const bucket = this.resolveBucketFromPath(path);
+                if (!acc[bucket]) {
+                    acc[bucket] = [];
+                }
+                acc[bucket].push(path);
+                return acc;
+            }, {});
+            for (const [bucketName, bucketPaths] of Object.entries(bucketGroups)) {
+                await this.ensureBucketExists(bucketName);
+                const { error } = await this.supabase.storage.from(bucketName).remove(bucketPaths);
+                if (error) {
+                    return {
+                        success: false,
+                        message: `Failed to delete images: ${error.message}`
+                    };
+                }
+            }
+            return {
+                success: true,
+                message: `Deleted ${paths.length} images successfully`
+            };
+        }
+        catch (error) {
+            console.error('Delete multiple images error:', error);
+            return {
+                success: false,
+                message: error instanceof Error ? error.message : 'Failed to delete images'
+            };
+        }
+    }
+}
+exports.UploadService = UploadService;

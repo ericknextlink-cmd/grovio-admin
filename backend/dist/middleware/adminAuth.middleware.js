@@ -7,15 +7,23 @@ const admin_service_1 = require("../services/admin.service");
  */
 const authenticateAdmin = async (req, res, next) => {
     try {
+        // Try to get token from Authorization header first
+        let token;
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        }
+        // If no token in header, try to get from cookie
+        if (!token && req.cookies?.admin_token) {
+            token = req.cookies.admin_token;
+        }
+        if (!token) {
             res.status(401).json({
                 success: false,
                 message: 'Access token required'
             });
             return;
         }
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
         const adminService = new admin_service_1.AdminService();
         const decoded = adminService.verifyToken(token);
         if (!decoded) {

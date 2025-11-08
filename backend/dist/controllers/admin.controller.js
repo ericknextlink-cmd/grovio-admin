@@ -5,19 +5,19 @@ const admin_service_1 = require("../services/admin.service");
 class AdminController {
     constructor() {
         /**
-         * Admin login
+         * Admin login - accepts username or email
          */
         this.login = async (req, res) => {
             try {
-                const { username, password } = req.body;
-                if (!username || !password) {
+                const { usernameOrEmail, password } = req.body;
+                if (!usernameOrEmail || !password) {
                     res.status(400).json({
                         success: false,
-                        message: 'Username and password are required'
+                        message: 'Username/email and password are required'
                     });
                     return;
                 }
-                const result = await this.adminService.login(username, password);
+                const result = await this.adminService.login(usernameOrEmail, password);
                 if (!result.success) {
                     res.status(401).json({
                         success: false,
@@ -25,6 +25,15 @@ class AdminController {
                     });
                     return;
                 }
+                // Set token in cookie
+                const cookieOptions = {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+                    path: '/',
+                };
+                res.cookie('admin_token', result.data.token, cookieOptions);
                 res.json({
                     success: true,
                     message: 'Login successful',
@@ -132,10 +141,54 @@ class AdminController {
             }
         };
         /**
+         * Refresh admin token
+         */
+        this.refreshToken = async (req, res) => {
+            try {
+                const adminId = req.adminId;
+                const result = await this.adminService.refreshToken(adminId);
+                if (!result.success) {
+                    res.status(401).json({
+                        success: false,
+                        message: result.message
+                    });
+                    return;
+                }
+                // Set token in cookie
+                const cookieOptions = {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+                    path: '/',
+                };
+                res.cookie('admin_token', result.data.token, cookieOptions);
+                res.json({
+                    success: true,
+                    message: 'Token refreshed successfully',
+                    data: result.data
+                });
+            }
+            catch (error) {
+                console.error('Refresh token error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error'
+                });
+            }
+        };
+        /**
          * Admin logout
          */
         this.logout = async (req, res) => {
             try {
+                // Clear cookie
+                res.clearCookie('admin_token', {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    path: '/',
+                });
                 // In a more complex system, you might want to blacklist the token
                 res.json({
                     success: true,

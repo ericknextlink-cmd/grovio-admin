@@ -12,21 +12,28 @@ class AdminService {
         this.supabase = (0, supabase_1.createAdminClient)();
     }
     /**
-     * Admin login
+     * Admin login - accepts username or email
      */
-    async login(username, password) {
+    async login(usernameOrEmail, password) {
         try {
-            // Get admin user by username
-            const { data: admin, error } = await this.supabase
+            // Determine if input is email or username
+            const isEmail = usernameOrEmail.includes('@');
+            // Get admin user by username or email
+            const query = this.supabase
                 .from('admin_users')
                 .select('*')
-                .eq('username', username)
-                .eq('is_active', true)
-                .single();
+                .eq('is_active', true);
+            if (isEmail) {
+                query.eq('email', usernameOrEmail.toLowerCase().trim());
+            }
+            else {
+                query.eq('username', usernameOrEmail.trim());
+            }
+            const { data: admin, error } = await query.single();
             if (error || !admin) {
                 return {
                     success: false,
-                    message: 'Invalid credentials'
+                    message: 'Invalid username/email or password'
                 };
             }
             // Verify password
@@ -185,6 +192,41 @@ class AdminService {
         }
         catch (error) {
             return null;
+        }
+    }
+    /**
+     * Refresh admin token - generates a new token for an existing valid token
+     */
+    async refreshToken(adminId) {
+        try {
+            const admin = await this.getAdminById(adminId);
+            if (!admin || !admin.is_active) {
+                return {
+                    success: false,
+                    message: 'Admin account not found or inactive'
+                };
+            }
+            // Generate new JWT token
+            const token = jsonwebtoken_1.default.sign({
+                adminId: admin.id,
+                username: admin.username,
+                role: admin.role
+            }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '24h' });
+            return {
+                success: true,
+                message: 'Token refreshed successfully',
+                data: {
+                    token,
+                    admin
+                }
+            };
+        }
+        catch (error) {
+            console.error('Refresh token error:', error);
+            return {
+                success: false,
+                message: 'Failed to refresh token'
+            };
         }
     }
 }

@@ -42,6 +42,14 @@ const createCategoryValidation = [
         .trim()
         .isLength({ min: 1, max: 100 })
         .withMessage('Each subcategory must be between 1 and 100 characters'),
+    (0, express_validator_1.body)('images')
+        .optional()
+        .isArray()
+        .withMessage('Images must be an array'),
+    (0, express_validator_1.body)('images.*')
+        .optional()
+        .isURL()
+        .withMessage('Each image must be a valid URL'),
     validation_middleware_1.handleValidationErrors
 ];
 const updateCategoryValidation = [
@@ -78,6 +86,14 @@ const updateCategoryValidation = [
         .trim()
         .isLength({ min: 1, max: 100 })
         .withMessage('Each subcategory must be between 1 and 100 characters'),
+    (0, express_validator_1.body)('images')
+        .optional()
+        .isArray()
+        .withMessage('Images must be an array'),
+    (0, express_validator_1.body)('images.*')
+        .optional()
+        .isURL()
+        .withMessage('Each image must be a valid URL'),
     validation_middleware_1.handleValidationErrors
 ];
 const subcategoryValidation = [

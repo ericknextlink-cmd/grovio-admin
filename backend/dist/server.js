@@ -10,6 +10,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const auth_routes_1 = require("./routes/auth.routes");
 const health_routes_1 = require("./routes/health.routes");
 const account_routes_1 = require("./routes/account.routes");
@@ -23,24 +24,71 @@ const ai_routes_1 = require("./routes/ai.routes");
 const order_routes_1 = require("./routes/order.routes");
 const user_preferences_routes_1 = require("./routes/user-preferences.routes");
 const bundles_routes_1 = require("./routes/bundles.routes");
+const ai_products_routes_1 = require("./routes/ai-products.routes");
+const upload_routes_1 = require("./routes/upload.routes");
+const cart_routes_1 = require("./routes/cart.routes");
+const favorites_routes_1 = require("./routes/favorites.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
 const port_1 = require("./utils/port");
 const app = (0, express_1.default)();
+// Trust proxy for rate limiting in production (Railway, Render, etc.)
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
 // Security middleware
 app.use((0, helmet_1.default)());
+// CORS configuration
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.NEXT_PUBLIC_FRONTEND_URL, process.env.DOMAIN_URL,
+    process.env.ADMIN_URL,
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+].filter((origin) => !!origin);
+// In development, allow all localhost origins
+const localhostRegex = /^http:\/\/localhost:\d+$/;
+if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.push(localhostRegex);
+}
 app.use((0, cors_1.default)({
-    origin: [
-        process.env.FRONTEND_URL || 'http://localhost:3001',
-        process.env.ADMIN_URL || 'http://localhost:3000'
-    ],
-    credentials: true
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) {
+            return callback(null, true);
+        }
+        // Check if origin is in allowed list
+        const isAllowed = allowedOrigins.some(allowedOrigin => {
+            if (typeof allowedOrigin === 'string') {
+                return origin === allowedOrigin;
+            }
+            if (allowedOrigin instanceof RegExp) {
+                return allowedOrigin.test(origin);
+            }
+            return false;
+        });
+        if (isAllowed) {
+            callback(null, true);
+        }
+        else {
+            console.warn(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+// Cookie parser (must come before routes)
+app.use((0, cookie_parser_1.default)());
 // Rate limiting
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // limit each IP to 100 requests per windowMs
-    message: 'Too many requests from this IP, please try again later.'
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 app.use('/api/', limiter);
 // Body parsing middleware
@@ -62,6 +110,10 @@ app.use('/api/ai', ai_routes_1.aiRoutes);
 app.use('/api/orders', order_routes_1.orderRoutes);
 app.use('/api/users', user_preferences_routes_1.userPreferencesRoutes);
 app.use('/api/bundles', bundles_routes_1.bundlesRoutes);
+app.use('/api/ai-products', ai_products_routes_1.aiProductsRoutes);
+app.use('/api/upload', upload_routes_1.uploadRoutes);
+app.use('/api/cart', cart_routes_1.cartRoutes);
+app.use('/api/favorites', favorites_routes_1.favoritesRoutes);
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', order_routes_1.orderRoutes);
 // Root endpoint
@@ -84,6 +136,7 @@ app.get('/', (req, res) => {
             orders: '/api/orders',
             users: '/api/users',
             bundles: '/api/bundles',
+            aiProducts: '/api/ai-products',
             webhook: '/api/webhook'
         }
     });

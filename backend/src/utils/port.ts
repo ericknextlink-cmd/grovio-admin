@@ -41,7 +41,7 @@ export const findAvailablePort = async (
       return port
     }
     
-    console.log(`⚠️  Port ${port} is already in use, trying next port...`)
+    console.log(`Port ${port} is already in use, trying next port...`)
   }
   
   throw new Error(`Could not find an available port after trying ${maxAttempts} ports starting from ${startPort}`)

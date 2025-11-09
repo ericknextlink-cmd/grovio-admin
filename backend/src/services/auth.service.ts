@@ -110,7 +110,7 @@ export class AuthService {
       }
 
       if (!authData.user) {
-        console.error('❌ No user returned from signUp')
+        console.error('No user returned from signUp')
         return {
           success: false,
           message: 'Failed to create account',
@@ -118,7 +118,7 @@ export class AuthService {
         }
       }
 
-      console.log('✅ Auth user created:', authData.user.id)
+      console.log('Auth user created:', authData.user.id)
 
       // Insert user data into our custom users table using admin client to bypass RLS
       const adminSupabase = createAdminClient()

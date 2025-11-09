@@ -65,15 +65,15 @@ export class PaystackService {
   private publicKey: string
 
   constructor() {
-    this.secretKey = process.env.PAYSTACK_SECRET_KEY || ''
-    this.publicKey = process.env.PAYSTACK_PUBLIC_KEY || ''
+    this.secretKey = process.env.DEV_PAYSTACK_SECRET_KEY || ''
+    this.publicKey = process.env.DEV_PAYSTACK_PUBLIC_KEY || ''
 
     if (!this.secretKey) {
-      console.warn('⚠️  PAYSTACK_SECRET_KEY not set. Payment features will be disabled.')
+      console.warn('PAYSTACK_SECRET_KEY not set. Payment features will be disabled.')
     }
 
     if (!this.publicKey) {
-      console.warn('⚠️  PAYSTACK_PUBLIC_KEY not set. Payment features will be disabled.')
+      console.warn('PAYSTACK_PUBLIC_KEY not set. Payment features will be disabled.')
     }
 
     this.client = axios.create({
@@ -251,7 +251,7 @@ export class PaystackService {
         })
         .eq('provider_reference', reference)
 
-      console.log(`✅ Payment successful for reference: ${reference}`)
+      console.log(`Payment successful for reference: ${reference}`)
       return { success: true, message: 'Payment processed' }
     } catch (error) {
       console.error('Handle charge success error:', error)
@@ -286,7 +286,7 @@ export class PaystackService {
         })
         .eq('provider_reference', reference)
 
-      console.log(`❌ Payment failed for reference: ${reference}`)
+      console.log(`Payment failed for reference: ${reference}`)
       return { success: true, message: 'Payment failure recorded' }
     } catch (error) {
       console.error('Handle charge failed error:', error)

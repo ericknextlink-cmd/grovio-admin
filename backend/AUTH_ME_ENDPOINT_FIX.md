@@ -15,9 +15,9 @@ The `/api/auth/me` endpoint was returning:
 
 The error occurs in the `authenticateToken` middleware. Here's what's happening:
 
-1. ✅ **JWT Token is Valid** - User exists in Supabase Auth (`auth.users`)
-2. ❌ **User Profile Missing** - User doesn't exist in `public.users` table
-3. ❌ **Middleware Rejects** - Returns "User profile not found" error
+1. **JWT Token is Valid** - User exists in Supabase Auth (`auth.users`)
+2. **User Profile Missing** - User doesn't exist in `public.users` table
+3. **Middleware Rejects** - Returns "User profile not found" error
 
 **This happens when:**
 - User signed up but the profile creation in `public.users` failed
@@ -25,7 +25,7 @@ The error occurs in the `authenticateToken` middleware. Here's what's happening:
 - Foreign key constraint issue prevented profile creation
 - User was created manually in Supabase Auth but not in `public.users`
 
-## ✅ **Proper Request Format**
+## **Proper Request Format**
 
 The request format is **correct**:
 
@@ -56,10 +56,10 @@ if (token) {
 ### 1. **Improved Middleware Error Handling**
 
 Updated `backend/src/middleware/auth.middleware.ts`:
-- ✅ Now uses `createAdminClient()` to bypass RLS when checking for user
-- ✅ Better error logging for debugging
-- ✅ Clearer error messages (404 vs 500)
-- ✅ Distinguishes between "not found" vs other database errors
+- Now uses `createAdminClient()` to bypass RLS when checking for user
+- Better error logging for debugging
+- Clearer error messages (404 vs 500)
+- Distinguishes between "not found" vs other database errors
 
 ### 2. **Better Error Messages**
 
@@ -206,11 +206,11 @@ fetch('https://grovio-admin-production.up.railway.app/api/auth/me', {
    - Check the `sub` field (should match user ID)
    - Verify token hasn't expired
 
-## ✅ **Summary**
+## **Summary**
 
-- ✅ **Request format is correct** - The frontend is sending the request properly
-- ✅ **Middleware improved** - Better error handling and logging
-- ✅ **Issue identified** - User exists in `auth.users` but not in `public.users`
+- **Request format is correct** - The frontend is sending the request properly
+- **Middleware improved** - Better error handling and logging
+- **Issue identified** - User exists in `auth.users` but not in `public.users`
 - 🔧 **Action needed** - Create the missing profile in `public.users` table
 
 The endpoint will work once the user profile is created in the `public.users` table!

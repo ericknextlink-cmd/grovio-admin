@@ -22,5 +22,5 @@ for (const envPath of possibleEnvPaths) {
     }
 }
 if (!envLoaded) {
-    console.warn('⚠️  No .env file found. Using system environment variables only.');
+    console.warn('No .env file found. Using system environment variables only.');
 }

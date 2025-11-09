@@ -89,7 +89,7 @@ export class AIEnhancedService {
     const apiKey = process.env.OPENAI_API_KEY
     
     if (!apiKey) {
-      console.warn('⚠️  OPENAI_API_KEY not set. AI features will be disabled.')
+      console.warn('OPENAI_API_KEY not set. AI features will be disabled.')
     }
 
     this.model = new ChatOpenAI({
@@ -817,7 +817,7 @@ Format as JSON array:
         .delete()
         .lt('updated_at', cutoffDate.toISOString())
 
-      console.log(`✅ Cleaned up conversation threads older than ${olderThanDays} days`)
+      console.log(`Cleaned up conversation threads older than ${olderThanDays} days`)
     } catch (error) {
       console.error('Error cleaning up threads:', error)
     }

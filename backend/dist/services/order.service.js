@@ -677,7 +677,7 @@ class OrderService {
     async cleanupExpiredPendingOrders() {
         try {
             await this.supabase.rpc('cleanup_expired_pending_orders');
-            console.log('✅ Cleaned up expired pending orders');
+            console.log('Cleaned up expired pending orders');
         }
         catch (error) {
             console.error('Cleanup expired orders error:', error);

@@ -71,7 +71,7 @@ export class PDFInvoiceService {
         if (error && !error.message.includes('already exists')) {
           console.error('Failed to create bucket:', error)
         } else {
-          console.log(`✅ Created Supabase storage bucket: ${this.bucketName}`)
+          console.log(`Created Supabase storage bucket: ${this.bucketName}`)
         }
       }
     } catch (error) {
@@ -583,7 +583,7 @@ export class PDFInvoiceService {
       return imageUrl
     } catch (error) {
       console.error('PDF to image conversion error:', error)
-      console.warn('⚠️  PDF generated but image conversion failed. Continuing without image.')
+      console.warn('PDF generated but image conversion failed. Continuing without image.')
       return null
     }
   }

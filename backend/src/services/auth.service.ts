@@ -370,13 +370,20 @@ export class AuthService {
       
       // Generate the OAuth URL
       const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
+      const statePayload = Buffer.from(JSON.stringify({
+        redirectTo,
+        ts: Date.now()
+      })).toString('base64url')
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${backendUrl}/api/auth/google/callback`,
+          flowType: 'pkce',
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
+            state: statePayload
           },
         },
       })

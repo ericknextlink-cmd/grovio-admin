@@ -1,5 +1,12 @@
 import { createAdminClient } from '../config/supabase'
 
+interface ServiceResult<T> {
+  success: boolean
+  message: string
+  data?: T
+  statusCode?: number
+}
+
 export interface Product {
   id: string
   name: string
@@ -146,11 +153,7 @@ export class ProductsService {
   /**
    * Create new product
    */
-  async createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<{
-    success: boolean
-    message: string
-    data?: Product
-  }> {
+  async createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<ServiceResult<Product>> {
     try {
       // Generate slug from name
       const slug = this.generateSlug(productData.name)
@@ -167,9 +170,11 @@ export class ProductsService {
         .single()
 
       if (error) {
+        const mapped = this.mapSupabaseError(error, 'Unable to create product. Please try again.')
         return {
           success: false,
-          message: error.message
+          message: mapped.message,
+          statusCode: mapped.statusCode
         }
       }
 
@@ -182,7 +187,7 @@ export class ProductsService {
       console.error('Create product error:', error)
       return {
         success: false,
-        message: 'Failed to create product'
+        message: 'Unable to create product. Please try again.'
       }
     }
   }
@@ -190,11 +195,7 @@ export class ProductsService {
   /**
    * Update product
    */
-  async updateProduct(id: string, updates: Partial<Product>): Promise<{
-    success: boolean
-    message: string
-    data?: Product
-  }> {
+  async updateProduct(id: string, updates: Partial<Product>): Promise<ServiceResult<Product>> {
     try {
       // If name is being updated, regenerate slug
       if (updates.name) {
@@ -213,9 +214,11 @@ export class ProductsService {
         .single()
 
       if (error) {
+        const mapped = this.mapSupabaseError(error, 'Unable to update product. Please try again.')
         return {
           success: false,
-          message: error.message
+          message: mapped.message,
+          statusCode: mapped.statusCode
         }
       }
 
@@ -228,7 +231,7 @@ export class ProductsService {
       console.error('Update product error:', error)
       return {
         success: false,
-        message: 'Failed to update product'
+        message: 'Unable to update product. Please try again.'
       }
     }
   }
@@ -236,10 +239,7 @@ export class ProductsService {
   /**
    * Delete product
    */
-  async deleteProduct(id: string): Promise<{
-    success: boolean
-    message: string
-  }> {
+  async deleteProduct(id: string): Promise<ServiceResult<null>> {
     try {
       const { error } = await this.supabase
         .from('products')
@@ -247,9 +247,11 @@ export class ProductsService {
         .eq('id', id)
 
       if (error) {
+        const mapped = this.mapSupabaseError(error, 'Unable to delete product. Please try again.')
         return {
           success: false,
-          message: error.message
+          message: mapped.message,
+          statusCode: mapped.statusCode
         }
       }
 
@@ -261,7 +263,7 @@ export class ProductsService {
       console.error('Delete product error:', error)
       return {
         success: false,
-        message: 'Failed to delete product'
+        message: 'Unable to delete product. Please try again.'
       }
     }
   }
@@ -269,11 +271,7 @@ export class ProductsService {
   /**
    * Update product stock
    */
-  async updateStock(id: string, quantity: number, inStock: boolean): Promise<{
-    success: boolean
-    message: string
-    data?: Product
-  }> {
+  async updateStock(id: string, quantity: number, inStock: boolean): Promise<ServiceResult<Product>> {
     try {
       const { data: product, error } = await this.supabase
         .from('products')
@@ -286,9 +284,11 @@ export class ProductsService {
         .single()
 
       if (error) {
+        const mapped = this.mapSupabaseError(error, 'Unable to update stock. Please try again.')
         return {
           success: false,
-          message: error.message
+          message: mapped.message,
+          statusCode: mapped.statusCode
         }
       }
 
@@ -301,7 +301,7 @@ export class ProductsService {
       console.error('Update stock error:', error)
       return {
         success: false,
-        message: 'Failed to update stock'
+        message: 'Unable to update stock. Please try again.'
       }
     }
   }
@@ -388,5 +388,32 @@ export class ProductsService {
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
+  }
+
+  private mapSupabaseError(error: any, defaultMessage: string): { message: string; statusCode?: number } {
+    if (!error) {
+      return { message: defaultMessage }
+    }
+
+    const code = error.code || error?.details?.code
+    const rawMessage = typeof error.message === 'string' ? error.message : ''
+
+    if (code === '23505' || rawMessage.includes('duplicate key value')) {
+      if (rawMessage.includes('products_slug_unique')) {
+        return {
+          message: "Can't create the same product twice. Please update the existing product instead.",
+          statusCode: 409
+        }
+      }
+
+      return {
+        message: 'A record with these details already exists.',
+        statusCode: 409
+      }
+    }
+
+    return {
+      message: defaultMessage
+    }
   }
 }

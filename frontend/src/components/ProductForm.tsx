@@ -43,10 +43,16 @@ export default function ProductForm({
   onCancel,
   isOpen
 }: ProductFormProps) {
-  const [formData, setFormData] = useState(initialFormData)
+  const [formData, setFormData] = useState(() => ({ ...initialFormData }))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const hasRestoredDraftRef = useRef(false)
+
+  const resetFormState = useCallback(() => {
+    setFormData({ ...initialFormData })
+    setErrors({})
+    hasRestoredDraftRef.current = false
+  }, [])
 
   const clearFormDraft = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -95,12 +101,12 @@ export default function ProductForm({
         reviews: product.reviews,
         images: product.images,
       })
+      setErrors({})
+      hasRestoredDraftRef.current = false
     } else {
-      setFormData(initialFormData)
+      resetFormState()
     }
-    setErrors({})
-    hasRestoredDraftRef.current = false
-  }, [product])
+  }, [product, resetFormState])
 
   useEffect(() => {
     if (!isOpen || product) return
@@ -160,6 +166,7 @@ export default function ProductForm({
     if (!product) {
       clearFormDraft()
     }
+    resetFormState()
     onCancel()
   }
 

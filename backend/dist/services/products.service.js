@@ -96,9 +96,11 @@ class ProductsService {
                 .select()
                 .single();
             if (error) {
+                const mapped = this.mapSupabaseError(error, 'Unable to create product. Please try again.');
                 return {
                     success: false,
-                    message: error.message
+                    message: mapped.message,
+                    statusCode: mapped.statusCode
                 };
             }
             return {
@@ -111,7 +113,7 @@ class ProductsService {
             console.error('Create product error:', error);
             return {
                 success: false,
-                message: 'Failed to create product'
+                message: 'Unable to create product. Please try again.'
             };
         }
     }
@@ -134,9 +136,11 @@ class ProductsService {
                 .select()
                 .single();
             if (error) {
+                const mapped = this.mapSupabaseError(error, 'Unable to update product. Please try again.');
                 return {
                     success: false,
-                    message: error.message
+                    message: mapped.message,
+                    statusCode: mapped.statusCode
                 };
             }
             return {
@@ -149,7 +153,7 @@ class ProductsService {
             console.error('Update product error:', error);
             return {
                 success: false,
-                message: 'Failed to update product'
+                message: 'Unable to update product. Please try again.'
             };
         }
     }
@@ -163,9 +167,11 @@ class ProductsService {
                 .delete()
                 .eq('id', id);
             if (error) {
+                const mapped = this.mapSupabaseError(error, 'Unable to delete product. Please try again.');
                 return {
                     success: false,
-                    message: error.message
+                    message: mapped.message,
+                    statusCode: mapped.statusCode
                 };
             }
             return {
@@ -177,7 +183,7 @@ class ProductsService {
             console.error('Delete product error:', error);
             return {
                 success: false,
-                message: 'Failed to delete product'
+                message: 'Unable to delete product. Please try again.'
             };
         }
     }
@@ -196,9 +202,11 @@ class ProductsService {
                 .select()
                 .single();
             if (error) {
+                const mapped = this.mapSupabaseError(error, 'Unable to update stock. Please try again.');
                 return {
                     success: false,
-                    message: error.message
+                    message: mapped.message,
+                    statusCode: mapped.statusCode
                 };
             }
             return {
@@ -211,7 +219,7 @@ class ProductsService {
             console.error('Update stock error:', error);
             return {
                 success: false,
-                message: 'Failed to update stock'
+                message: 'Unable to update stock. Please try again.'
             };
         }
     }
@@ -288,6 +296,28 @@ class ProductsService {
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
+    }
+    mapSupabaseError(error, defaultMessage) {
+        if (!error) {
+            return { message: defaultMessage };
+        }
+        const code = error.code || error?.details?.code;
+        const rawMessage = typeof error.message === 'string' ? error.message : '';
+        if (code === '23505' || rawMessage.includes('duplicate key value')) {
+            if (rawMessage.includes('products_slug_unique')) {
+                return {
+                    message: "Can't create the same product twice. Please update the existing product instead.",
+                    statusCode: 409
+                };
+            }
+            return {
+                message: 'A record with these details already exists.',
+                statusCode: 409
+            };
+        }
+        return {
+            message: defaultMessage
+        };
     }
 }
 exports.ProductsService = ProductsService;

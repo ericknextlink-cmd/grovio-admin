@@ -94,7 +94,7 @@ export class ProductsController {
       const result = await this.productsService.createProduct(productData)
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.statusCode ?? 400).json({
           success: false,
           message: result.message
         } as ApiResponse<null>)
@@ -126,7 +126,7 @@ export class ProductsController {
       const result = await this.productsService.updateProduct(id, updates)
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.statusCode ?? 400).json({
           success: false,
           message: result.message
         } as ApiResponse<null>)
@@ -157,7 +157,7 @@ export class ProductsController {
       const result = await this.productsService.deleteProduct(id)
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.statusCode ?? 400).json({
           success: false,
           message: result.message
         } as ApiResponse<null>)
@@ -188,7 +188,7 @@ export class ProductsController {
       const result = await this.productsService.updateStock(id, quantity, inStock)
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.statusCode ?? 400).json({
           success: false,
           message: result.message
         } as ApiResponse<null>)

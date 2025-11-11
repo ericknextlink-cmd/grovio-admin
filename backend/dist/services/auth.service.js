@@ -337,6 +337,10 @@ class AuthService {
             const supabase = (0, supabase_1.createClient)();
             // Generate the OAuth URL
             const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
+            const statePayload = Buffer.from(JSON.stringify({
+                redirectTo,
+                ts: Date.now()
+            })).toString('base64url');
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -344,6 +348,7 @@ class AuthService {
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'consent',
+                        state: statePayload
                     },
                 },
             });

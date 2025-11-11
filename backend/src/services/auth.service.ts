@@ -379,7 +379,6 @@ export class AuthService {
         provider: 'google',
         options: {
           redirectTo: `${backendUrl}/api/auth/google/callback`,
-          flowType: 'pkce',
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

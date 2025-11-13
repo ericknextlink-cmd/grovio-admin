@@ -67,8 +67,22 @@ export class AuthController {
       const redirectTo = req.query.redirectTo as string || '/dashboard'
       const result = await this.authService.initiateGoogleAuth(redirectTo)
 
-      if (result.success) {
-        res.status(200).json(result)
+      if (result.success && result.cookieName && result.cookieValue) {
+        // Set cookie to store redirectTo path (works across OAuth redirect)
+        // Use SameSite=None with Secure in production for cross-domain support
+        // SameSite=Lax in development for localhost
+        const isProduction = process.env.NODE_ENV === 'production'
+        res.cookie(result.cookieName, result.cookieValue, {
+          httpOnly: true,
+          secure: isProduction, // Secure cookies required for SameSite=None
+          sameSite: isProduction ? 'none' : 'lax', // None for cross-domain, Lax for same-domain
+          maxAge: 10 * 60 * 1000, // 10 minutes
+          path: '/',
+        })
+        
+        // Return response without cookie data (cookie is set in header)
+        const { cookieName, cookieValue, ...responseData } = result
+        res.status(200).json(responseData)
       } else {
         res.status(500).json(result)
       }
@@ -88,21 +102,158 @@ export class AuthController {
   googleCallback = async (req: Request, res: Response): Promise<void> => {
     try {
       const code = req.query.code as string
-      const state = req.query.state as string
       const error = req.query.error as string
+      const errorDescription = req.query.error_description as string
+      
+      // Get redirectTo from cookie (set during OAuth initiation)
+      // Fallback to /dashboard if cookie is not found
+      let redirectTo = '/dashboard'
+      const cookieName = 'grovio_oauth_redirect'
+      const redirectCookie = req.cookies?.[cookieName]
+      
+      if (redirectCookie) {
+        try {
+          const decoded = Buffer.from(redirectCookie, 'base64url').toString('utf8')
+          const parsed = JSON.parse(decoded)
+          if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
+            redirectTo = parsed.redirectTo
+          }
+          // Clear the cookie after reading it
+          res.clearCookie(cookieName, { path: '/' })
+        } catch (err) {
+          console.warn('Failed to decode redirect cookie:', err)
+          // Clear invalid cookie
+          res.clearCookie(cookieName, { path: '/' })
+        }
+      }
 
       if (error) {
+        console.error('Google OAuth error:', error, errorDescription)
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
-        res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error)}`)
+        const frontendOrigin = new URL(frontendUrl).origin
+
+        // Send error response via postMessage for popup flow
+        const buildErrorResponse = (errorData: { error: string; errorDescription?: string }) => `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Authentication Error</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Authentication failed. Closing window...</p>
+    <script>
+      (function () {
+        const payload = {
+          success: false,
+          error: ${JSON.stringify(error)},
+          errorDescription: ${JSON.stringify(errorDescription || 'OAuth callback with invalid state')}
+        };
+        const targetOrigin = ${JSON.stringify(frontendOrigin)};
+
+        function notifyParent() {
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage(
+                {
+                  type: 'grovio:google-auth',
+                  success: false,
+                  data: payload
+                },
+                targetOrigin
+              );
+            }
+          } catch (err) {
+            console.warn('Failed to notify opener:', err);
+          }
+        }
+
+        notifyParent();
+
+        // Attempt to close popup
+        try {
+          window.close();
+        } catch (err) {
+          console.warn('Unable to close window:', err);
+        }
+
+        // Fallback redirect
+        setTimeout(() => {
+          window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=${encodeURIComponent(error)}`)});
+        }, 500);
+      })();
+    </script>
+  </body>
+</html>`
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-store')
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+        res.status(400).send(buildErrorResponse({ error, errorDescription }))
         return
       }
 
       if (!code) {
-        res.status(400).json({
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
+        const frontendOrigin = new URL(frontendUrl).origin
+        
+        const buildErrorResponse = (message: string) => `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Authentication Error</title>
+  </head>
+  <body>
+    <p>${message}</p>
+    <script>
+      (function () {
+        const payload = {
           success: false,
-          message: 'Missing authorization code',
-          errors: ['No code provided in callback']
-        } as ApiResponse)
+          error: 'invalid_request',
+          errorDescription: ${JSON.stringify(message)}
+        };
+        const targetOrigin = ${JSON.stringify(frontendOrigin)};
+
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            {
+              type: 'grovio:google-auth',
+              success: false,
+              data: payload
+            },
+            targetOrigin
+          );
+        }
+
+        try {
+          window.close();
+        } catch (err) {
+          setTimeout(() => {
+            window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=missing_code`)});
+          }, 500);
+        }
+      })();
+    </script>
+  </body>
+</html>`
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.status(400).send(buildErrorResponse('Missing authorization code'))
         return
       }
 
@@ -111,21 +262,8 @@ export class AuthController {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
       const frontendOrigin = new URL(frontendUrl).origin
 
-      const resolveRedirectPath = (): string => {
-        if (!state) return '/'
-        try {
-          const decoded = Buffer.from(state, 'base64url').toString('utf8')
-          const parsed = JSON.parse(decoded)
-          if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
-            return parsed.redirectTo
-          }
-        } catch (err) {
-          console.warn('Failed to decode Google OAuth state payload:', err)
-        }
-        return '/'
-      }
-
-      const redirectPath = resolveRedirectPath()
+      // Use redirectTo from query params (passed in redirectTo URL)
+      const redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`
 
       const buildHtmlResponse = (payload: Record<string, unknown>) => `
 <!DOCTYPE html>

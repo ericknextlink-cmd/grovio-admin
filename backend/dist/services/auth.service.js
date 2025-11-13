@@ -336,19 +336,20 @@ class AuthService {
         try {
             const supabase = (0, supabase_1.createClient)();
             // Generate the OAuth URL
+            // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
+            // Also, do NOT pass query parameters in redirectTo URL - it can interfere with state validation
+            // Instead, we'll use a cookie to store the redirectTo path
             const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
-            const statePayload = Buffer.from(JSON.stringify({
-                redirectTo,
-                ts: Date.now()
-            })).toString('base64url');
+            const callbackUrl = `${backendUrl}/api/auth/google/callback`;
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: `${backendUrl}/api/auth/google/callback`,
+                    redirectTo: callbackUrl,
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'consent',
-                        state: statePayload
+                        // DO NOT add 'state' here - Supabase manages its own state internally
+                        // DO NOT add query parameters to redirectTo - it can break state validation
                     },
                 },
             });
@@ -360,10 +361,16 @@ class AuthService {
                     errors: [(0, error_sanitizer_1.sanitizeError)(error)],
                 };
             }
+            // Return cookie name and value so the controller can set it
+            // This allows us to store redirectTo without interfering with OAuth state
+            const cookieName = 'grovio_oauth_redirect';
+            const cookieValue = Buffer.from(JSON.stringify({ redirectTo, ts: Date.now() })).toString('base64url');
             return {
                 success: true,
                 message: 'Google OAuth URL generated successfully',
                 url: data.url,
+                cookieName: cookieName,
+                cookieValue: cookieValue,
             };
         }
         catch (error) {
@@ -382,6 +389,9 @@ class AuthService {
         try {
             const supabase = (0, supabase_1.createClient)();
             // Exchange code for session
+            // NOTE: Supabase manages state internally for CSRF protection
+            // We pass only the code - Supabase validates the state automatically from the callback URL
+            // The callback URL must match exactly what was passed to signInWithOAuth (no query params)
             const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code);
             if (authError) {
                 console.error('Error exchanging code for session:', authError);
@@ -414,6 +424,8 @@ class AuthService {
                 const phoneNumber = userMetadata.phone || '';
                 const countryCode = '+233';
                 const adminSupabase = (0, supabase_1.createAdminClient)();
+                // Use a transaction-like approach: insert user and preferences together
+                // If user insert fails, we don't want to proceed
                 const { data: newUser, error: insertError } = await adminSupabase
                     .from('users')
                     .insert({
@@ -423,7 +435,7 @@ class AuthService {
                     last_name: lastName,
                     phone_number: phoneNumber,
                     country_code: countryCode,
-                    profile_picture: userMetadata.avatar_url || userMetadata.picture,
+                    profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
                     is_email_verified: googleUser.email_confirmed_at ? true : false,
                     is_phone_verified: false,
                     role: 'customer',
@@ -436,36 +448,97 @@ class AuthService {
                     .select()
                     .single();
                 if (insertError) {
-                    console.error('Database insert error:', insertError);
-                    return {
-                        success: false,
-                        message: 'Failed to create user profile',
-                        errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)],
-                    };
+                    console.error('❌ Database insert error during Google OAuth:', {
+                        error: insertError,
+                        userId: googleUser.id,
+                        email: googleUser.email,
+                        code: insertError.code,
+                        message: insertError.message,
+                        details: insertError.details,
+                        hint: insertError.hint,
+                    });
+                    // Check if it's a duplicate key error (user might have been created concurrently)
+                    if (insertError.code === '23505') {
+                        console.log('⚠️ User profile was created concurrently, fetching existing profile');
+                        // User was created by another process (possibly auto-repair middleware)
+                        // Try to fetch the existing user
+                        const { data: existingUserData, error: fetchError } = await adminSupabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', googleUser.id)
+                            .maybeSingle();
+                        if (existingUserData && !fetchError) {
+                            console.log('✅ Found existing user profile after concurrent creation');
+                            userData = existingUserData;
+                        }
+                        else {
+                            console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError);
+                            return {
+                                success: false,
+                                message: 'Failed to create user profile',
+                                errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)],
+                            };
+                        }
+                    }
+                    else {
+                        return {
+                            success: false,
+                            message: 'Failed to create user profile',
+                            errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)],
+                        };
+                    }
                 }
-                // Create initial user preferences
-                await adminSupabase.from('user_preferences').insert({
-                    user_id: googleUser.id,
-                    language: 'en',
-                    currency: 'GHS',
-                });
-                userData = newUser;
+                else {
+                    console.log('✅ Successfully created user profile:', {
+                        userId: newUser.id,
+                        email: newUser.email,
+                    });
+                    userData = newUser;
+                    // Create initial user preferences (with error handling)
+                    const { error: preferencesError } = await adminSupabase
+                        .from('user_preferences')
+                        .insert({
+                        user_id: googleUser.id,
+                        language: 'en',
+                        currency: 'GHS',
+                    });
+                    if (preferencesError) {
+                        if (preferencesError.code === '23505') {
+                            console.log('ℹ️ User preferences already exist (duplicate key)');
+                        }
+                        else {
+                            // Log but don't fail - preferences might already exist or can be created later
+                            console.warn('⚠️ Failed to create user preferences (non-fatal):', preferencesError.message);
+                        }
+                    }
+                    else {
+                        console.log('✅ Successfully created user preferences');
+                    }
+                }
             }
             else {
                 // Existing user - update profile picture if needed
+                // Use admin client to ensure update works even if RLS blocks it
                 const updateData = {
                     updated_at: new Date().toISOString(),
                 };
                 if (userMetadata.avatar_url || userMetadata.picture) {
                     updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture;
                 }
-                const { data: updatedUser, error: updateError } = await supabase
+                const { data: updatedUser, error: updateError } = await adminSupabase
                     .from('users')
                     .update(updateData)
                     .eq('id', googleUser.id)
                     .select()
                     .single();
-                userData = updatedUser || existingUser;
+                if (updateError) {
+                    console.warn('Failed to update user profile (non-fatal):', updateError.message);
+                    // Use existing user data if update fails
+                    userData = existingUser;
+                }
+                else {
+                    userData = updatedUser || existingUser;
+                }
             }
             // Get user preferences
             const { data: preferences } = await supabase

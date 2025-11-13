@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { AIEnhancedService } from '../services/ai-enhanced.service'
 import { ApiResponse } from '../types/api.types'
+import { createAdminClient } from '../config/supabase'
 
 export interface AuthRequest extends Request {
   user?: {
@@ -331,8 +332,9 @@ export class AIController {
         return
       }
 
-      const supabase = this.aiService['supabase']
-      const { data: thread, error } = await supabase
+      // Use admin client to access threads (respects user_id filter for security)
+      const adminSupabase = createAdminClient()
+      const { data: thread, error } = await adminSupabase
         .from('ai_conversation_threads')
         .select('*')
         .eq('thread_id', threadId)
@@ -384,8 +386,9 @@ export class AIController {
         return
       }
 
-      const supabase = this.aiService['supabase']
-      const { data: threads, error } = await supabase
+      // Use admin client to access threads (respects user_id filter for security)
+      const adminSupabase = createAdminClient()
+      const { data: threads, error } = await adminSupabase
         .from('ai_conversation_threads')
         .select('thread_id, context, created_at, updated_at')
         .eq('user_id', userId)
@@ -433,8 +436,9 @@ export class AIController {
         return
       }
 
-      const supabase = this.aiService['supabase']
-      const { error } = await supabase
+      // Use admin client to delete thread (respects user_id filter for security)
+      const adminSupabase = createAdminClient()
+      const { error } = await adminSupabase
         .from('ai_conversation_threads')
         .delete()
         .eq('thread_id', threadId)

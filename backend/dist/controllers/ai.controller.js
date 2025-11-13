@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIController = void 0;
 const ai_enhanced_service_1 = require("../services/ai-enhanced.service");
+const supabase_1 = require("../config/supabase");
 class AIController {
     constructor() {
         /**
@@ -21,11 +22,17 @@ class AIController {
                 }
                 // User ID is optional - anonymous users can also use AI
                 const effectiveUserId = userId || 'anonymous';
+                // Extract user token from Authorization header for RLS compliance
+                const authHeader = req.headers.authorization;
+                const userToken = authHeader && authHeader.startsWith('Bearer ')
+                    ? authHeader.substring(7)
+                    : undefined;
                 const result = await this.aiService.chat(message, effectiveUserId, {
                     role,
                     familySize,
                     budget,
                     threadId,
+                    userToken, // Pass token to respect RLS policies
                 });
                 if (result.success) {
                     res.json({
@@ -69,6 +76,11 @@ class AIController {
                     });
                     return;
                 }
+                // Extract user token from Authorization header for RLS compliance
+                const authHeader = req.headers.authorization;
+                const userToken = authHeader && authHeader.startsWith('Bearer ')
+                    ? authHeader.substring(7)
+                    : undefined;
                 const result = await this.aiService.getRecommendations({
                     userId,
                     budget,
@@ -76,7 +88,7 @@ class AIController {
                     role,
                     preferences,
                     preferred_categories: categories,
-                });
+                }, userToken); // Pass token to respect RLS policies
                 if (result.success) {
                     res.json({
                         success: true,
@@ -116,7 +128,13 @@ class AIController {
                     });
                     return;
                 }
-                const result = await this.aiService.searchProducts(query, userId, parseInt(limit, 10));
+                // Extract user token from Authorization header for RLS compliance
+                const authHeader = req.headers.authorization;
+                const userToken = authHeader && authHeader.startsWith('Bearer ')
+                    ? authHeader.substring(7)
+                    : undefined;
+                const result = await this.aiService.searchProducts(query, userId, parseInt(limit, 10), userToken // Pass token to respect RLS policies
+                );
                 if (result.success) {
                     res.json({
                         success: true,
@@ -164,7 +182,13 @@ class AIController {
                     });
                     return;
                 }
-                const result = await this.aiService.analyzeBudget(budget, familySize, duration, userId);
+                // Extract user token from Authorization header for RLS compliance
+                const authHeader = req.headers.authorization;
+                const userToken = authHeader && authHeader.startsWith('Bearer ')
+                    ? authHeader.substring(7)
+                    : undefined;
+                const result = await this.aiService.analyzeBudget(budget, familySize, duration, userId, userToken // Pass token to respect RLS policies
+                );
                 if (result.success) {
                     res.json({
                         success: true,
@@ -196,7 +220,13 @@ class AIController {
             try {
                 const { ingredients = [], mealType = 'any', dietaryRestrictions = [], familySize = 1 } = req.body;
                 const userId = req.user?.id || 'anonymous';
-                const result = await this.aiService.getMealSuggestions(ingredients, mealType, dietaryRestrictions, familySize, userId);
+                // Extract user token from Authorization header for RLS compliance
+                const authHeader = req.headers.authorization;
+                const userToken = authHeader && authHeader.startsWith('Bearer ')
+                    ? authHeader.substring(7)
+                    : undefined;
+                const result = await this.aiService.getMealSuggestions(ingredients, mealType, dietaryRestrictions, familySize, userId, userToken // Pass token to respect RLS policies
+                );
                 if (result.success) {
                     res.json({
                         success: true,
@@ -244,8 +274,9 @@ class AIController {
                     });
                     return;
                 }
-                const supabase = this.aiService['supabase'];
-                const { data: thread, error } = await supabase
+                // Use admin client to access threads (respects user_id filter for security)
+                const adminSupabase = (0, supabase_1.createAdminClient)();
+                const { data: thread, error } = await adminSupabase
                     .from('ai_conversation_threads')
                     .select('*')
                     .eq('thread_id', threadId)
@@ -293,8 +324,9 @@ class AIController {
                     });
                     return;
                 }
-                const supabase = this.aiService['supabase'];
-                const { data: threads, error } = await supabase
+                // Use admin client to access threads (respects user_id filter for security)
+                const adminSupabase = (0, supabase_1.createAdminClient)();
+                const { data: threads, error } = await adminSupabase
                     .from('ai_conversation_threads')
                     .select('thread_id, context, created_at, updated_at')
                     .eq('user_id', userId)
@@ -338,8 +370,9 @@ class AIController {
                     });
                     return;
                 }
-                const supabase = this.aiService['supabase'];
-                const { error } = await supabase
+                // Use admin client to delete thread (respects user_id filter for security)
+                const adminSupabase = (0, supabase_1.createAdminClient)();
+                const { error } = await adminSupabase
                     .from('ai_conversation_threads')
                     .delete()
                     .eq('thread_id', threadId)

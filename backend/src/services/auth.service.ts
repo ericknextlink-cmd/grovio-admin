@@ -364,25 +364,26 @@ export class AuthService {
   /**
    * Initiate Google OAuth flow - returns redirect URL
    */
-  async initiateGoogleAuth(redirectTo: string = '/dashboard'): Promise<AuthResponse & { url?: string }> {
+  async initiateGoogleAuth(redirectTo: string = '/dashboard'): Promise<AuthResponse & { url?: string; cookieName?: string; cookieValue?: string }> {
     try {
       const supabase = createClient()
       
       // Generate the OAuth URL
+      // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
+      // Also, do NOT pass query parameters in redirectTo URL - it can interfere with state validation
+      // Instead, we'll use a cookie to store the redirectTo path
       const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
-      const statePayload = Buffer.from(JSON.stringify({
-        redirectTo,
-        ts: Date.now()
-      })).toString('base64url')
+      const callbackUrl = `${backendUrl}/api/auth/google/callback`
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${backendUrl}/api/auth/google/callback`,
+          redirectTo: callbackUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            state: statePayload
+            // DO NOT add 'state' here - Supabase manages its own state internally
+            // DO NOT add query parameters to redirectTo - it can break state validation
           },
         },
       })
@@ -396,10 +397,17 @@ export class AuthService {
         }
       }
 
+      // Return cookie name and value so the controller can set it
+      // This allows us to store redirectTo without interfering with OAuth state
+      const cookieName = 'grovio_oauth_redirect'
+      const cookieValue = Buffer.from(JSON.stringify({ redirectTo, ts: Date.now() })).toString('base64url')
+
       return {
         success: true,
         message: 'Google OAuth URL generated successfully',
         url: data.url,
+        cookieName: cookieName,
+        cookieValue: cookieValue,
       }
     } catch (error) {
       console.error('Initiate Google auth service error:', error)
@@ -419,6 +427,9 @@ export class AuthService {
       const supabase = createClient()
 
       // Exchange code for session
+      // NOTE: Supabase manages state internally for CSRF protection
+      // We pass only the code - Supabase validates the state automatically from the callback URL
+      // The callback URL must match exactly what was passed to signInWithOAuth (no query params)
       const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code)
 
       if (authError) {
@@ -439,24 +450,42 @@ export class AuthService {
       }
 
       const googleUser = authData.user
-      const userMetadata = googleUser.user_metadata
-
-      // Check if user exists in our database
-      const { data: existingUser, error: userError } = await supabase
+      const userMetadata = googleUser.user_metadata || {}
+      
+      // Check if user exists in our database using admin client to bypass RLS
+      // Using regular client might be blocked by RLS, causing false negatives
+      const adminSupabase = createAdminClient()
+      const { data: existingUser, error: userError } = await adminSupabase
         .from('users')
         .select('*')
         .eq('id', googleUser.id)
-        .single()
+        .maybeSingle() // Use maybeSingle() to avoid errors when no rows found
 
       let userData
 
-      if (userError || !existingUser) {
+      // Check if user profile is missing (PGRST116 means no rows found)
+      if (userError?.code === 'PGRST116' || !existingUser) {
         // New user - create profile using admin client to bypass RLS
-        const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
-        const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
-        const phoneNumber = userMetadata.phone || ''
-        const countryCode = '+233'
-        const adminSupabase = createAdminClient()
+        console.log('🆕 Creating new user profile for Google OAuth user:', {
+          userId: googleUser.id,
+          email: googleUser.email,
+          hasMetadata: !!userMetadata,
+          metadataKeys: Object.keys(userMetadata),
+        })
+        
+        const firstName = userMetadata.given_name || 
+                         userMetadata.first_name ||
+                         userMetadata.full_name?.split(' ')[0] || 
+                         userMetadata.name?.split(' ')[0] ||
+                         googleUser.email?.split('@')[0] || 
+                         'User'
+        const lastName = userMetadata.family_name || 
+                        userMetadata.last_name ||
+                        userMetadata.full_name?.split(' ').slice(1).join(' ') ||
+                        userMetadata.name?.split(' ').slice(1).join(' ') ||
+                        ''
+        const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || ''
+        const countryCode = userMetadata.country_code || '+233'
 
         // Use a transaction-like approach: insert user and preferences together
         // If user insert fails, we don't want to proceed
@@ -471,9 +500,9 @@ export class AuthService {
             country_code: countryCode,
             profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
             is_email_verified: googleUser.email_confirmed_at ? true : false,
-            is_phone_verified: false,
+            is_phone_verified: googleUser.phone_confirmed_at ? true : false,
             role: 'customer',
-            google_id: userMetadata.sub || googleUser.id,
+            google_id: userMetadata.sub || userMetadata.provider_id || googleUser.id,
             preferences: {
               language: 'en',
               currency: 'GHS',
@@ -483,28 +512,32 @@ export class AuthService {
           .single()
 
         if (insertError) {
-          console.error('Database insert error during Google OAuth:', {
+          console.error('❌ Database insert error during Google OAuth:', {
             error: insertError,
             userId: googleUser.id,
             email: googleUser.email,
             code: insertError.code,
             message: insertError.message,
+            details: insertError.details,
+            hint: insertError.hint,
           })
           
           // Check if it's a duplicate key error (user might have been created concurrently)
           if (insertError.code === '23505') {
+            console.log('⚠️ User profile was created concurrently, fetching existing profile')
             // User was created by another process (possibly auto-repair middleware)
             // Try to fetch the existing user
-            const { data: existingUserData } = await adminSupabase
+            const { data: existingUserData, error: fetchError } = await adminSupabase
               .from('users')
               .select('*')
               .eq('id', googleUser.id)
-              .single()
+              .maybeSingle()
             
-            if (existingUserData) {
-              console.log('User profile was created concurrently, using existing profile')
+            if (existingUserData && !fetchError) {
+              console.log('✅ Found existing user profile after concurrent creation')
               userData = existingUserData
             } else {
+              console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError)
               return {
                 success: false,
                 message: 'Failed to create user profile',
@@ -519,6 +552,10 @@ export class AuthService {
             }
           }
         } else {
+          console.log('✅ Successfully created user profile:', {
+            userId: newUser.id,
+            email: newUser.email,
+          })
           userData = newUser
           
           // Create initial user preferences (with error handling)
@@ -531,12 +568,24 @@ export class AuthService {
             })
           
           if (preferencesError) {
-            // Log but don't fail - preferences might already exist or can be created later
-            console.warn('Failed to create user preferences (non-fatal):', preferencesError.message)
+            if (preferencesError.code === '23505') {
+              console.log('ℹ️ User preferences already exist (duplicate key)')
+            } else {
+              // Log but don't fail - preferences might already exist or can be created later
+              console.warn('⚠️ Failed to create user preferences (non-fatal):', preferencesError.message)
+            }
+          } else {
+            console.log('✅ Successfully created user preferences')
           }
         }
       } else {
         // Existing user - update profile picture if needed
+        // Use admin client to ensure update works even if RLS blocks it
+        console.log('✅ User profile already exists, updating if needed:', {
+          userId: googleUser.id,
+          email: googleUser.email,
+        })
+        
         const updateData: any = {
           updated_at: new Date().toISOString(),
         }
@@ -545,22 +594,49 @@ export class AuthService {
           updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture
         }
 
-        const { data: updatedUser, error: updateError } = await supabase
+        // Update email verification status if it changed
+        if (googleUser.email_confirmed_at) {
+          updateData.is_email_verified = true
+        }
+
+        const { data: updatedUser, error: updateError } = await adminSupabase
           .from('users')
           .update(updateData)
           .eq('id', googleUser.id)
           .select()
           .single()
 
-        userData = updatedUser || existingUser
+        if (updateError) {
+          console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message)
+          // Use existing user data if update fails
+          userData = existingUser
+        } else {
+          userData = updatedUser || existingUser
+        }
       }
 
-      // Get user preferences
-      const { data: preferences } = await supabase
+      // Get user preferences using admin client to bypass RLS
+      const { data: preferences, error: preferencesError } = await adminSupabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userData.id)
-        .single()
+        .maybeSingle()
+
+      // If preferences don't exist, create them (non-fatal if it fails)
+      if (!preferences && !preferencesError) {
+        console.log('📝 Creating user preferences for user')
+        const { error: createPrefError } = await adminSupabase
+          .from('user_preferences')
+          .insert({
+            user_id: userData.id,
+            language: 'en',
+            currency: 'GHS',
+          })
+        
+        if (createPrefError && createPrefError.code !== '23505') {
+          console.warn('⚠️ Failed to create user preferences (non-fatal):', createPrefError.message)
+        }
+      }
 
       return {
         success: true,

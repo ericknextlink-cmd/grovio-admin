@@ -37,11 +37,18 @@ export class AIController {
       // User ID is optional - anonymous users can also use AI
       const effectiveUserId = userId || 'anonymous'
 
+      // Extract user token from Authorization header for RLS compliance
+      const authHeader = req.headers.authorization
+      const userToken = authHeader && authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+
       const result = await this.aiService.chat(message, effectiveUserId, {
         role,
         familySize,
         budget,
         threadId,
+        userToken, // Pass token to respect RLS policies
       })
 
       if (result.success) {
@@ -93,6 +100,12 @@ export class AIController {
         return
       }
 
+      // Extract user token from Authorization header for RLS compliance
+      const authHeader = req.headers.authorization
+      const userToken = authHeader && authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+
       const result = await this.aiService.getRecommendations({
         userId,
         budget,
@@ -100,7 +113,7 @@ export class AIController {
         role,
         preferences,
         preferred_categories: categories,
-      })
+      }, userToken) // Pass token to respect RLS policies
 
       if (result.success) {
         res.json({
@@ -142,10 +155,17 @@ export class AIController {
         return
       }
 
+      // Extract user token from Authorization header for RLS compliance
+      const authHeader = req.headers.authorization
+      const userToken = authHeader && authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+
       const result = await this.aiService.searchProducts(
         query as string,
         userId,
-        parseInt(limit as string, 10)
+        parseInt(limit as string, 10),
+        userToken // Pass token to respect RLS policies
       )
 
       if (result.success) {
@@ -197,11 +217,18 @@ export class AIController {
         return
       }
 
+      // Extract user token from Authorization header for RLS compliance
+      const authHeader = req.headers.authorization
+      const userToken = authHeader && authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+
       const result = await this.aiService.analyzeBudget(
         budget,
         familySize,
         duration as 'day' | 'week' | 'month',
-        userId
+        userId,
+        userToken // Pass token to respect RLS policies
       )
 
       if (result.success) {
@@ -240,12 +267,19 @@ export class AIController {
       } = req.body
       const userId = req.user?.id || 'anonymous'
 
+      // Extract user token from Authorization header for RLS compliance
+      const authHeader = req.headers.authorization
+      const userToken = authHeader && authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+
       const result = await this.aiService.getMealSuggestions(
         ingredients,
         mealType,
         dietaryRestrictions,
         familySize,
-        userId
+        userId,
+        userToken // Pass token to respect RLS policies
       )
 
       if (result.success) {

@@ -458,6 +458,8 @@ export class AuthService {
         const countryCode = '+233'
         const adminSupabase = createAdminClient()
 
+        // Use a transaction-like approach: insert user and preferences together
+        // If user insert fails, we don't want to proceed
         const { data: newUser, error: insertError } = await adminSupabase
           .from('users')
           .insert({
@@ -467,7 +469,7 @@ export class AuthService {
             last_name: lastName,
             phone_number: phoneNumber,
             country_code: countryCode,
-            profile_picture: userMetadata.avatar_url || userMetadata.picture,
+            profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
             is_email_verified: googleUser.email_confirmed_at ? true : false,
             is_phone_verified: false,
             role: 'customer',
@@ -481,22 +483,58 @@ export class AuthService {
           .single()
 
         if (insertError) {
-          console.error('Database insert error:', insertError)
-          return {
-            success: false,
-            message: 'Failed to create user profile',
-            errors: [sanitizeDatabaseError(insertError)],
+          console.error('Database insert error during Google OAuth:', {
+            error: insertError,
+            userId: googleUser.id,
+            email: googleUser.email,
+            code: insertError.code,
+            message: insertError.message,
+          })
+          
+          // Check if it's a duplicate key error (user might have been created concurrently)
+          if (insertError.code === '23505') {
+            // User was created by another process (possibly auto-repair middleware)
+            // Try to fetch the existing user
+            const { data: existingUserData } = await adminSupabase
+              .from('users')
+              .select('*')
+              .eq('id', googleUser.id)
+              .single()
+            
+            if (existingUserData) {
+              console.log('User profile was created concurrently, using existing profile')
+              userData = existingUserData
+            } else {
+              return {
+                success: false,
+                message: 'Failed to create user profile',
+                errors: [sanitizeDatabaseError(insertError)],
+              }
+            }
+          } else {
+            return {
+              success: false,
+              message: 'Failed to create user profile',
+              errors: [sanitizeDatabaseError(insertError)],
+            }
+          }
+        } else {
+          userData = newUser
+          
+          // Create initial user preferences (with error handling)
+          const { error: preferencesError } = await adminSupabase
+            .from('user_preferences')
+            .insert({
+              user_id: googleUser.id,
+              language: 'en',
+              currency: 'GHS',
+            })
+          
+          if (preferencesError) {
+            // Log but don't fail - preferences might already exist or can be created later
+            console.warn('Failed to create user preferences (non-fatal):', preferencesError.message)
           }
         }
-
-        // Create initial user preferences
-        await adminSupabase.from('user_preferences').insert({
-          user_id: googleUser.id,
-          language: 'en',
-          currency: 'GHS',
-        })
-
-        userData = newUser
       } else {
         // Existing user - update profile picture if needed
         const updateData: any = {

@@ -409,21 +409,38 @@ class AuthService {
                 };
             }
             const googleUser = authData.user;
-            const userMetadata = googleUser.user_metadata;
-            // Check if user exists in our database
-            const { data: existingUser, error: userError } = await supabase
+            const userMetadata = googleUser.user_metadata || {};
+            // Check if user exists in our database using admin client to bypass RLS
+            // Using regular client might be blocked by RLS, causing false negatives
+            const adminSupabase = (0, supabase_1.createAdminClient)();
+            const { data: existingUser, error: userError } = await adminSupabase
                 .from('users')
                 .select('*')
                 .eq('id', googleUser.id)
-                .single();
+                .maybeSingle(); // Use maybeSingle() to avoid errors when no rows found
             let userData;
-            if (userError || !existingUser) {
+            // Check if user profile is missing (PGRST116 means no rows found)
+            if (userError?.code === 'PGRST116' || !existingUser) {
                 // New user - create profile using admin client to bypass RLS
-                const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User';
-                const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || '';
-                const phoneNumber = userMetadata.phone || '';
-                const countryCode = '+233';
-                const adminSupabase = (0, supabase_1.createAdminClient)();
+                console.log('🆕 Creating new user profile for Google OAuth user:', {
+                    userId: googleUser.id,
+                    email: googleUser.email,
+                    hasMetadata: !!userMetadata,
+                    metadataKeys: Object.keys(userMetadata),
+                });
+                const firstName = userMetadata.given_name ||
+                    userMetadata.first_name ||
+                    userMetadata.full_name?.split(' ')[0] ||
+                    userMetadata.name?.split(' ')[0] ||
+                    googleUser.email?.split('@')[0] ||
+                    'User';
+                const lastName = userMetadata.family_name ||
+                    userMetadata.last_name ||
+                    userMetadata.full_name?.split(' ').slice(1).join(' ') ||
+                    userMetadata.name?.split(' ').slice(1).join(' ') ||
+                    '';
+                const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || '';
+                const countryCode = userMetadata.country_code || '+233';
                 // Use a transaction-like approach: insert user and preferences together
                 // If user insert fails, we don't want to proceed
                 const { data: newUser, error: insertError } = await adminSupabase
@@ -437,9 +454,9 @@ class AuthService {
                     country_code: countryCode,
                     profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
                     is_email_verified: googleUser.email_confirmed_at ? true : false,
-                    is_phone_verified: false,
+                    is_phone_verified: googleUser.phone_confirmed_at ? true : false,
                     role: 'customer',
-                    google_id: userMetadata.sub || googleUser.id,
+                    google_id: userMetadata.sub || userMetadata.provider_id || googleUser.id,
                     preferences: {
                         language: 'en',
                         currency: 'GHS',
@@ -519,11 +536,19 @@ class AuthService {
             else {
                 // Existing user - update profile picture if needed
                 // Use admin client to ensure update works even if RLS blocks it
+                console.log('✅ User profile already exists, updating if needed:', {
+                    userId: googleUser.id,
+                    email: googleUser.email,
+                });
                 const updateData = {
                     updated_at: new Date().toISOString(),
                 };
                 if (userMetadata.avatar_url || userMetadata.picture) {
                     updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture;
+                }
+                // Update email verification status if it changed
+                if (googleUser.email_confirmed_at) {
+                    updateData.is_email_verified = true;
                 }
                 const { data: updatedUser, error: updateError } = await adminSupabase
                     .from('users')
@@ -532,7 +557,7 @@ class AuthService {
                     .select()
                     .single();
                 if (updateError) {
-                    console.warn('Failed to update user profile (non-fatal):', updateError.message);
+                    console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message);
                     // Use existing user data if update fails
                     userData = existingUser;
                 }
@@ -540,12 +565,26 @@ class AuthService {
                     userData = updatedUser || existingUser;
                 }
             }
-            // Get user preferences
-            const { data: preferences } = await supabase
+            // Get user preferences using admin client to bypass RLS
+            const { data: preferences, error: preferencesError } = await adminSupabase
                 .from('user_preferences')
                 .select('*')
                 .eq('user_id', userData.id)
-                .single();
+                .maybeSingle();
+            // If preferences don't exist, create them (non-fatal if it fails)
+            if (!preferences && !preferencesError) {
+                console.log('📝 Creating user preferences for user');
+                const { error: createPrefError } = await adminSupabase
+                    .from('user_preferences')
+                    .insert({
+                    user_id: userData.id,
+                    language: 'en',
+                    currency: 'GHS',
+                });
+                if (createPrefError && createPrefError.code !== '23505') {
+                    console.warn('⚠️ Failed to create user preferences (non-fatal):', createPrefError.message);
+                }
+            }
             return {
                 success: true,
                 message: 'Signed in with Google successfully',

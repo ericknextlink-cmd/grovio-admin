@@ -33,9 +33,26 @@ const authenticateToken = async (req, res, next) => {
             .select('id, email, role')
             .eq('id', user.id)
             .single();
+        // Check for database errors first (before checking if profile is missing)
+        // If there's an error that's NOT PGRST116, it's a real database error
+        if (dbError && dbError.code !== 'PGRST116') {
+            // Database error that's not a missing profile (e.g., connection error, permission error)
+            console.error('Database error (not a missing profile):', {
+                error: dbError,
+                code: dbError.code,
+                message: dbError.message,
+                userId: user.id,
+            });
+            return res.status(500).json({
+                success: false,
+                message: 'Database error',
+                errors: ['Failed to retrieve user profile']
+            });
+        }
         // Check if user profile exists in database
         // PGRST116 = "Cannot coerce the result to a single JSON object" (no rows found)
         // This means user exists in auth.users but not in public.users
+        // Also check if userData is null/undefined (shouldn't happen if no error, but safety check)
         const isProfileMissing = dbError?.code === 'PGRST116' || !userData;
         if (isProfileMissing) {
             // Log the error for debugging
@@ -144,11 +161,12 @@ const authenticateToken = async (req, res, next) => {
                     if (insertError.code === '23505') {
                         console.log('⚠️ User profile was created concurrently, fetching existing profile');
                         // User was created by another process - try to fetch it
+                        // Use maybeSingle() to avoid errors if user doesn't exist (shouldn't happen, but safe)
                         const { data: existingUserData, error: fetchError } = await adminSupabase
                             .from('users')
                             .select('id, email, role')
                             .eq('id', fullUser.id)
-                            .single();
+                            .maybeSingle();
                         if (existingUserData && !fetchError) {
                             console.log('✅ Found existing user profile after concurrent creation');
                             req.user = {
@@ -158,6 +176,10 @@ const authenticateToken = async (req, res, next) => {
                             };
                             next();
                             return;
+                        }
+                        else {
+                            console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError);
+                            // Continue to return error response below
                         }
                     }
                     // If auto-repair fails, return the original error
@@ -217,42 +239,33 @@ const authenticateToken = async (req, res, next) => {
                 });
             }
         }
-        else {
-            // Database error that's not a missing profile (e.g., connection error, permission error)
-            console.error('Database error (not a missing profile):', {
-                error: dbError,
-                code: dbError?.code,
-                message: dbError?.message,
-                userId: user.id,
-            });
-            return res.status(500).json({
+        // User profile exists (no error or error was PGRST116 which we handled above)
+        // Add user info to request object
+        if (!userData) {
+            // This shouldn't happen, but TypeScript needs this check
+            return res.status(404).json({
                 success: false,
-                message: 'Database error',
-                errors: ['Failed to retrieve user profile']
+                message: 'User profile not found',
+                errors: ['User profile data is missing']
             });
         }
+        req.user = {
+            id: userData.id,
+            email: userData.email,
+            role: userData.role
+        };
+        next();
     }
-    // Add user info to request object
-    finally {
+    catch (error) {
+        console.error('Auth middleware error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            errors: ['Authentication service error']
+        });
     }
-    // Add user info to request object
-    req.user = {
-        id: userData.id,
-        email: userData.email,
-        role: userData.role
-    };
-    next();
 };
 exports.authenticateToken = authenticateToken;
-try { }
-catch (error) {
-    console.error('Auth middleware error:', error);
-    return res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        errors: ['Authentication service error']
-    });
-}
 /**
  * Middleware to check if user is admin
  */

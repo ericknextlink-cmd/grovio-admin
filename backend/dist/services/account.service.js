@@ -3,9 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AccountService = void 0;
 const supabase_1 = require("../config/supabase");
 const token_service_1 = require("./token.service");
+const email_service_1 = require("./email.service");
 class AccountService {
     constructor() {
         this.tokenService = new token_service_1.TokenService();
+        this.emailService = new email_service_1.EmailService();
     }
     /**
      * Check email status (exists, deleted, available)
@@ -154,8 +156,23 @@ class AccountService {
                     errors: tokenResult.errors
                 };
             }
-            // TODO: Send recovery email with token
-            // This would typically send an email with a recovery link
+            // Send recovery email with token
+            // Uses Resend API if configured (see EmailService.sendAccountRecoveryEmail)
+            const emailResult = await this.emailService.sendAccountRecoveryEmail(email, tokenResult.token, {
+                frontendUrl: process.env.FRONTEND_URL,
+                fromEmail: process.env.EMAIL_FROM,
+            });
+            // If email sending fails, log but don't fail the entire operation
+            // The token is still generated and stored, user can request recovery again
+            if (!emailResult.success) {
+                console.error('Failed to send account recovery email:', emailResult.errors);
+                // Return success but with a warning message
+                return {
+                    success: true,
+                    message: 'Account recovery initiated. However, we were unable to send the recovery email. Please contact support or try again later.',
+                    errors: emailResult.errors ? [`Email delivery failed: ${emailResult.errors.join(', ')}`] : undefined
+                };
+            }
             return {
                 success: true,
                 message: 'Account recovery initiated. Please check your email for recovery instructions.'

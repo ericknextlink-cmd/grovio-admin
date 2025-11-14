@@ -402,45 +402,43 @@ class AuthService {
     /**
      * Handle Google OAuth callback
      */
-    async handleGoogleCallback(code, req, res) {
+    /**
+     * Handle OAuth callback - expects session data from frontend (not code)
+     * When OAuth is initiated client-side, the frontend exchanges the code for a session
+     * and sends the session to this endpoint to create/update user profile
+     *
+     * Architecture:
+     * 1. Frontend initiates OAuth client-side → stores PKCE code verifier in browser
+     * 2. User authenticates with Google → Google redirects to frontend callback
+     * 3. Frontend exchanges code: supabase.auth.exchangeCodeForSession(code) → gets session
+     * 4. Frontend sends session to this endpoint → backend creates/updates user profile
+     * 5. Frontend stores session in browser → uses it for subsequent API calls
+     * 6. Backend verifies sessions using authenticateToken middleware (no changes needed)
+     */
+    async handleGoogleCallbackSession(session) {
         try {
-            // Use cookie-based client for PKCE flow to access code verifier
-            const supabase = (0, supabase_1.createClient)(req, res);
-            // Debug: Log cookies to see if code verifier is present
-            if (req) {
-                const cookieHeader = req.headers.cookie || '';
-                console.log('🔍 Callback - Cookie header present:', !!cookieHeader);
-                console.log('🔍 Callback - Cookie header length:', cookieHeader.length);
-                // Look for Supabase PKCE cookies (they typically start with 'sb-')
-                const supabaseCookies = cookieHeader.split('; ').filter((c) => c.includes('sb-'));
-                console.log('🔍 Callback - Supabase cookies found:', supabaseCookies.length);
-            }
-            // Exchange code for session
-            // NOTE: Supabase manages state internally for CSRF protection
-            // We pass only the code - Supabase validates the state automatically from the callback URL
-            // The callback URL must match exactly what was passed to signInWithOAuth (no query params)
-            console.log('🔍 Attempting to exchange code for session, code length:', code?.length || 0);
-            const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code);
-            if (authError) {
-                console.error('Error exchanging code for session:', authError);
+            if (!session?.access_token || !session?.user) {
                 return {
                     success: false,
-                    message: 'Failed to complete Google authentication',
-                    errors: [(0, error_sanitizer_1.sanitizeAuthError)(authError)],
+                    message: 'Invalid session data',
+                    errors: ['Session must include access_token and user'],
                 };
             }
-            if (!authData.user || !authData.session) {
-                return {
-                    success: false,
-                    message: 'No user data received from Google',
-                    errors: ['Authentication failed'],
-                };
-            }
-            const googleUser = authData.user;
-            const userMetadata = googleUser.user_metadata || {};
-            // Check if user exists in our database using admin client to bypass RLS
-            // Using regular client might be blocked by RLS, causing false negatives
+            // Verify the session token with Supabase
             const adminSupabase = (0, supabase_1.createAdminClient)();
+            const { data: { user: verifiedUser }, error: verifyError } = await adminSupabase.auth.getUser(session.access_token);
+            if (verifyError || !verifiedUser) {
+                console.error('❌ Error verifying session token:', verifyError);
+                return {
+                    success: false,
+                    message: 'Invalid session token',
+                    errors: ['Failed to verify session with Supabase'],
+                };
+            }
+            // Use verified user data
+            const googleUser = verifiedUser;
+            const userMetadata = googleUser.user_metadata || session.user?.user_metadata || {};
+            // Check if user exists in our database using admin client to bypass RLS
             const { data: existingUser, error: userError } = await adminSupabase
                 .from('users')
                 .select('*')
@@ -634,8 +632,8 @@ class AuthService {
                     createdAt: userData.created_at,
                     updatedAt: userData.updated_at,
                 },
-                accessToken: authData.session?.access_token,
-                refreshToken: authData.session?.refresh_token,
+                accessToken: session.access_token,
+                refreshToken: session.refresh_token,
             };
         }
         catch (error) {

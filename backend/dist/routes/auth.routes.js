@@ -29,10 +29,17 @@ router.post('/signin', validation_middleware_1.validateSignin, (0, error_middlew
 router.get('/google', (0, error_middleware_1.asyncHandler)(authController.initiateGoogleAuth));
 /**
  * @route   GET /api/auth/google/callback
- * @desc    Handle Google OAuth callback
+ * @desc    Handle Google OAuth callback (server-side flow - deprecated)
  * @access  Public
  */
 router.get('/google/callback', (0, error_middleware_1.asyncHandler)(authController.googleCallback));
+/**
+ * @route   POST /api/auth/google/session
+ * @desc    Handle OAuth session from frontend (client-side OAuth flow)
+ *          Frontend exchanges code for session, then sends session here
+ * @access  Public
+ */
+router.post('/google/session', (0, error_middleware_1.asyncHandler)(authController.handleOAuthSession));
 /**
  * @route   POST /api/auth/google
  * @desc    Authenticate user with Google OAuth (ID token method)

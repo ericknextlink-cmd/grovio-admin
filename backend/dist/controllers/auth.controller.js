@@ -53,24 +53,23 @@ class AuthController {
         };
         /**
          * Initiate Google OAuth flow (returns redirect URL)
+         * NOTE: This is for server-side OAuth initiation.
+         * For client-side OAuth (recommended), the frontend should call supabase.auth.signInWithOAuth() directly.
+         * This endpoint is kept for backward compatibility but may have issues with PKCE cookies.
          */
         this.initiateGoogleAuth = async (req, res) => {
             try {
                 const redirectTo = req.query.redirectTo || '/dashboard';
                 const result = await this.authService.initiateGoogleAuth(redirectTo, req, res);
                 if (result.success && result.cookieName && result.cookieValue) {
-                    // Set cookie to store redirectTo path (works across OAuth redirect)
-                    // Use SameSite=None with Secure=true for cross-domain redirects (Google -> Railway)
-                    // This is required because the callback comes from Google's domain
                     const isProduction = process.env.NODE_ENV === 'production';
                     res.cookie(result.cookieName, result.cookieValue, {
                         httpOnly: true,
-                        secure: true, // Always secure for SameSite=None (required by browsers)
-                        sameSite: 'none', // Must be 'none' for cross-domain redirects from Google
+                        secure: true,
+                        sameSite: 'none',
                         maxAge: 10 * 60 * 1000, // 10 minutes
                         path: '/',
                     });
-                    // Return response without cookie data (cookie is set in header)
                     const { cookieName, cookieValue, ...responseData } = result;
                     res.status(200).json(responseData);
                 }
@@ -88,7 +87,41 @@ class AuthController {
             }
         };
         /**
-         * Handle Google OAuth callback
+         * Handle OAuth session from frontend (client-side OAuth flow)
+         * Frontend exchanges code for session client-side, then sends session here
+         */
+        this.handleOAuthSession = async (req, res) => {
+            try {
+                const { session } = req.body;
+                if (!session) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Session data is required',
+                        errors: ['Please provide session data from Supabase']
+                    });
+                    return;
+                }
+                const result = await this.authService.handleGoogleCallbackSession(session);
+                if (result.success) {
+                    res.status(200).json(result);
+                }
+                else {
+                    res.status(400).json(result);
+                }
+            }
+            catch (error) {
+                console.error('Handle OAuth session error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Something went wrong while processing OAuth session']
+                });
+            }
+        };
+        /**
+         * Handle Google OAuth callback (server-side flow - deprecated)
+         * NOTE: This won't work with PKCE because code verifier is stored client-side
+         * Use client-side OAuth instead (frontend calls supabase.auth.signInWithOAuth directly)
          */
         this.googleCallback = async (req, res) => {
             try {
@@ -295,111 +328,17 @@ class AuthController {
                     res.status(200).send(buildFallbackHandler());
                     return;
                 }
-                const result = await this.authService.handleGoogleCallback(code, req, res);
-                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-                const frontendOrigin = new URL(frontendUrl).origin;
-                // Use redirectTo from query params (passed in redirectTo URL)
-                const redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
-                const buildHtmlResponse = (payload) => `
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Signing you in…</title>
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0;
-        padding: 32px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 16px;
-        color: #0f172a;
-        background: #f8fafc;
-      }
-      .spinner {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        border: 4px solid rgba(15, 23, 42, 0.15);
-        border-top-color: #2563eb;
-        animation: spin 1s ease-in-out infinite;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="spinner" role="presentation"></div>
-    <p>Completing sign-in…</p>
-    <script>
-      (function () {
-        const payload = ${JSON.stringify(payload)};
-        const targetOrigin = ${JSON.stringify(frontendOrigin)};
-        const fallbackUrl = ${JSON.stringify(new URL(redirectPath || '/', frontendUrl).toString())};
-
-        function notifyParent(success) {
-          try {
-            if (window.opener && !window.opener.closed) {
-              window.opener.postMessage(
-                {
-                  type: 'grovio:google-auth',
-                  success,
-                  data: payload
-                },
-                targetOrigin
-              );
-            }
-          } catch (err) {
-            console.warn('Failed to notify opener:', err);
-          }
-        }
-
-        notifyParent(payload.success === true);
-
-        // Attempt to close popup if allowed
-        try {
-          window.close();
-        } catch (err) {
-          console.warn('Unable to close window programmatically:', err);
-        }
-
-        // As fallback, replace location so the user is not stuck on this page
-        setTimeout(() => {
-          window.location.replace(fallbackUrl);
-        }, 500);
-      })();
-    </script>
-  </body>
-</html>`;
-                res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-                res.setHeader('Pragma', 'no-cache');
-                res.setHeader('Expires', '0');
-                // COOP and COEP are handled globally by helmet middleware
-                if (result.success) {
-                    const payload = {
-                        success: true,
-                        redirectTo: redirectPath,
-                        accessToken: result.accessToken || null,
-                        refreshToken: result.refreshToken || null,
-                        user: result.user || null,
-                        message: 'Google authentication successful'
-                    };
-                    res.status(200).send(buildHtmlResponse(payload));
-                }
-                else {
-                    const payload = {
-                        success: false,
-                        redirectTo: '/',
-                        error: result.message || 'Failed to complete Google authentication',
-                        details: result.errors || []
-                    };
-                    res.status(200).send(buildHtmlResponse(payload));
-                }
+                // Server-side callback handler - this won't work with PKCE
+                // because the code verifier is stored client-side
+                // This endpoint is kept for backward compatibility but should not be used
+                console.warn('⚠️ Server-side OAuth callback used - PKCE will fail');
+                console.warn('⚠️ Recommend using client-side OAuth instead');
+                // Return error response
+                res.status(400).json({
+                    success: false,
+                    message: 'Server-side OAuth callback is not supported with PKCE',
+                    errors: ['Please use client-side OAuth. Frontend should call supabase.auth.signInWithOAuth() directly.']
+                });
             }
             catch (error) {
                 console.error('Google callback error:', error);

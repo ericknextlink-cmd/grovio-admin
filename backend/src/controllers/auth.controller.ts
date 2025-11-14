@@ -65,7 +65,7 @@ export class AuthController {
   initiateGoogleAuth = async (req: Request, res: Response): Promise<void> => {
     try {
       const redirectTo = req.query.redirectTo as string || '/dashboard'
-      const result = await this.authService.initiateGoogleAuth(redirectTo)
+      const result = await this.authService.initiateGoogleAuth(redirectTo, req, res)
 
       if (result.success && result.cookieName && result.cookieValue) {
         // Set cookie to store redirectTo path (works across OAuth redirect)
@@ -312,7 +312,7 @@ export class AuthController {
         return
       }
 
-      const result = await this.authService.handleGoogleCallback(code)
+      const result = await this.authService.handleGoogleCallback(code, req, res)
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
       const frontendOrigin = new URL(frontendUrl).origin

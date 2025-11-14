@@ -364,9 +364,10 @@ export class AuthService {
   /**
    * Initiate Google OAuth flow - returns redirect URL
    */
-  async initiateGoogleAuth(redirectTo: string = '/dashboard'): Promise<AuthResponse & { url?: string; cookieName?: string; cookieValue?: string }> {
+  async initiateGoogleAuth(redirectTo: string = '/dashboard', req?: any, res?: any): Promise<AuthResponse & { url?: string; cookieName?: string; cookieValue?: string }> {
     try {
-      const supabase = createClient()
+      // Use cookie-based client for PKCE flow
+      const supabase = createClient(req, res)
       
       // Generate the OAuth URL
       // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
@@ -422,9 +423,10 @@ export class AuthService {
   /**
    * Handle Google OAuth callback
    */
-  async handleGoogleCallback(code: string): Promise<AuthResponse> {
+  async handleGoogleCallback(code: string, req?: any, res?: any): Promise<AuthResponse> {
     try {
-      const supabase = createClient()
+      // Use cookie-based client for PKCE flow to access code verifier
+      const supabase = createClient(req, res)
 
       // Exchange code for session
       // NOTE: Supabase manages state internally for CSRF protection

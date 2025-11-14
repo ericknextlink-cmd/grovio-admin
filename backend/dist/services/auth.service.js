@@ -332,9 +332,10 @@ class AuthService {
     /**
      * Initiate Google OAuth flow - returns redirect URL
      */
-    async initiateGoogleAuth(redirectTo = '/dashboard') {
+    async initiateGoogleAuth(redirectTo = '/dashboard', req, res) {
         try {
-            const supabase = (0, supabase_1.createClient)();
+            // Use cookie-based client for PKCE flow
+            const supabase = (0, supabase_1.createClient)(req, res);
             // Generate the OAuth URL
             // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
             // Also, do NOT pass query parameters in redirectTo URL - it can interfere with state validation
@@ -385,9 +386,10 @@ class AuthService {
     /**
      * Handle Google OAuth callback
      */
-    async handleGoogleCallback(code) {
+    async handleGoogleCallback(code, req, res) {
         try {
-            const supabase = (0, supabase_1.createClient)();
+            // Use cookie-based client for PKCE flow to access code verifier
+            const supabase = (0, supabase_1.createClient)(req, res);
             // Exchange code for session
             // NOTE: Supabase manages state internally for CSRF protection
             // We pass only the code - Supabase validates the state automatically from the callback URL

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createClient = createClient;
 exports.createAdminClient = createAdminClient;
 const supabase_js_1 = require("@supabase/supabase-js");
+const ssr_1 = require("@supabase/ssr");
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -15,12 +16,40 @@ if (!supabaseKey) {
 }
 /**
  * Create Supabase client with anon key (for regular operations)
- * Configured with PKCE flow for secure OAuth authentication
+ * Use cookie-based storage for PKCE flow in server-side scenarios
  */
-function createClient() {
+function createClient(req, res) {
+    // If request/response are provided, use cookie-based storage for PKCE
+    if (req && res) {
+        return (0, ssr_1.createServerClient)(supabaseUrl, supabaseKey, {
+            cookies: {
+                getAll() {
+                    // Extract all cookies from request
+                    return Object.entries(req.cookies || {}).map(([name, value]) => ({
+                        name,
+                        value: value || '',
+                    }));
+                },
+                setAll(cookiesToSet) {
+                    // Set cookies in response
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                        res.cookie(name, value, {
+                            httpOnly: options?.httpOnly ?? true,
+                            secure: options?.secure ?? process.env.NODE_ENV === 'production',
+                            sameSite: options?.sameSite ?? 'lax',
+                            maxAge: options?.maxAge,
+                            domain: options?.domain,
+                            path: options?.path ?? '/',
+                        });
+                    });
+                },
+            },
+        });
+    }
+    // Fallback to default client (for client-side or when cookies aren't available)
     return (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey, {
         auth: {
-            flowType: 'pkce', // Use PKCE flow instead of implicit flow for OAuth
+            flowType: 'pkce',
             autoRefreshToken: true,
             persistSession: true,
             detectSessionInUrl: true,

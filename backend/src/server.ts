@@ -70,8 +70,10 @@ app.use(helmet({
 // CORS configuration
 const allowedOrigins: (string | RegExp)[] = [
   process.env.FRONTEND_URL,
-  process.env.NEXT_PUBLIC_FRONTEND_URL, process.env.DOMAIN_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  process.env.DOMAIN_URL,
   process.env.ADMIN_URL,
+  'https://grovio-gamma.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
@@ -82,6 +84,10 @@ const localhostRegex = /^http:\/\/localhost:\d+$/
 if (process.env.NODE_ENV !== 'production') {
   allowedOrigins.push(localhostRegex)
 }
+
+// Also allow Vercel preview URLs (always, not just in non-production)
+// This covers production, staging, and preview deployments
+allowedOrigins.push(/^https:\/\/.*\.vercel\.app$/)
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -104,13 +110,14 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true)
     } else {
-      console.warn(`CORS blocked origin: ${origin}`)
-      callback(new Error('Not allowed by CORS'))
+      console.warn(`CORS blocked origin: ${origin}. Allowed origins:`, allowedOrigins)
+      callback(new Error(`Not allowed by CORS. Origin: ${origin}`))
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type'],
 }))
 
 // Cookie parser (must come before routes)

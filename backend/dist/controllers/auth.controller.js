@@ -57,7 +57,7 @@ class AuthController {
         this.initiateGoogleAuth = async (req, res) => {
             try {
                 const redirectTo = req.query.redirectTo || '/dashboard';
-                const result = await this.authService.initiateGoogleAuth(redirectTo);
+                const result = await this.authService.initiateGoogleAuth(redirectTo, req, res);
                 if (result.success && result.cookieName && result.cookieValue) {
                     // Set cookie to store redirectTo path (works across OAuth redirect)
                     // Use SameSite=None with Secure in production for cross-domain support
@@ -295,7 +295,7 @@ class AuthController {
                     res.status(200).send(buildFallbackHandler());
                     return;
                 }
-                const result = await this.authService.handleGoogleCallback(code);
+                const result = await this.authService.handleGoogleCallback(code, req, res);
                 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
                 const frontendOrigin = new URL(frontendUrl).origin;
                 // Use redirectTo from query params (passed in redirectTo URL)

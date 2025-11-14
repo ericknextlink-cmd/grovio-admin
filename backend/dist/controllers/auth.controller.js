@@ -194,50 +194,107 @@ class AuthController {
                     return;
                 }
                 if (!code) {
+                    // No authorization code in query params - this could mean:
+                    // 1. Implicit flow is being used (tokens in hash fragment - not accessible server-side)
+                    // 2. PKCE flow hasn't completed properly
+                    // Extract tokens from hash fragment if present (for implicit flow fallback)
                     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
                     const frontendOrigin = new URL(frontendUrl).origin;
-                    const buildErrorResponse = (message) => `
+                    const buildFallbackHandler = () => `
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Authentication Error</title>
+    <title>Processing Authentication...</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+    </style>
   </head>
   <body>
-    <p>${message}</p>
+    <p>Processing authentication...</p>
     <script>
       (function () {
-        const payload = {
-          success: false,
-          error: 'invalid_request',
-          errorDescription: ${JSON.stringify(message)}
-        };
+        // Extract tokens from hash fragment (implicit flow)
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        const expiresAt = params.get('expires_at');
+        
         const targetOrigin = ${JSON.stringify(frontendOrigin)};
-
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage(
-            {
-              type: 'grovio:google-auth',
-              success: false,
-              data: payload
-            },
-            targetOrigin
-          );
-        }
-
-        try {
-          window.close();
-        } catch (err) {
-          setTimeout(() => {
-            window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=missing_code`)});
-          }, 500);
+        
+        if (accessToken && refreshToken) {
+          // Send tokens to frontend (implicit flow)
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              {
+                type: 'grovio:google-auth',
+                success: true,
+                data: {
+                  accessToken: accessToken,
+                  refreshToken: refreshToken,
+                  expiresAt: expiresAt,
+                  providerToken: params.get('provider_token'),
+                  providerRefreshToken: params.get('provider_refresh_token'),
+                }
+              },
+              targetOrigin
+            );
+          }
+          
+          try {
+            window.close();
+          } catch (err) {
+            setTimeout(() => {
+              window.location.replace(${JSON.stringify(`${frontendUrl}/login?success=true`)});
+            }, 500);
+          }
+        } else {
+          // No tokens found - missing authorization code
+          const payload = {
+            success: false,
+            error: 'invalid_request',
+            errorDescription: 'Missing authorization code. Please ensure PKCE flow is enabled and configured correctly.'
+          };
+          
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              {
+                type: 'grovio:google-auth',
+                success: false,
+                data: payload
+              },
+              targetOrigin
+            );
+          }
+          
+          try {
+            window.close();
+          } catch (err) {
+            setTimeout(() => {
+              window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=missing_code`)});
+            }, 500);
+          }
         }
       })();
     </script>
   </body>
 </html>`;
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.status(400).send(buildErrorResponse('Missing authorization code'));
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+                    res.status(200).send(buildFallbackHandler());
                     return;
                 }
                 const result = await this.authService.handleGoogleCallback(code);

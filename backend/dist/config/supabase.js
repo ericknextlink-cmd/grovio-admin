@@ -15,9 +15,17 @@ if (!supabaseKey) {
 }
 /**
  * Create Supabase client with anon key (for regular operations)
+ * Configured with PKCE flow for secure OAuth authentication
  */
 function createClient() {
-    return (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey);
+    return (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey, {
+        auth: {
+            flowType: 'pkce', // Use PKCE flow instead of implicit flow for OAuth
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true,
+        },
+    });
 }
 /**
  * Create Supabase admin client with service role key (for admin operations)

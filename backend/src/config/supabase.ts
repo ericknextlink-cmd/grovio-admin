@@ -17,9 +17,17 @@ if (!supabaseKey) {
 
 /**
  * Create Supabase client with anon key (for regular operations)
+ * Configured with PKCE flow for secure OAuth authentication
  */
 export function createClient() {
-  return createSupabaseClient(supabaseUrl!, supabaseKey!)
+  return createSupabaseClient(supabaseUrl!, supabaseKey!, {
+    auth: {
+      flowType: 'pkce', // Use PKCE flow instead of implicit flow for OAuth
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  })
 }
 
 /**

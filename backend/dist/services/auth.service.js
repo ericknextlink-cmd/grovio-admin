@@ -336,12 +336,19 @@ class AuthService {
         try {
             // Use cookie-based client for PKCE flow
             const supabase = (0, supabase_1.createClient)(req, res);
+            // Debug: Log that we're initiating OAuth
+            console.log('🚀 Initiating Google OAuth with cookie-based client');
+            if (req) {
+                console.log('🚀 Request origin:', req.headers.origin);
+                console.log('🚀 Request cookie header present:', !!req.headers.cookie);
+            }
             // Generate the OAuth URL
             // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
             // Also, do NOT pass query parameters in redirectTo URL - it can interfere with state validation
             // Instead, we'll use a cookie to store the redirectTo path
             const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
             const callbackUrl = `${backendUrl}/api/auth/google/callback`;
+            console.log('🚀 Callback URL:', callbackUrl);
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -355,12 +362,21 @@ class AuthService {
                 },
             });
             if (error) {
-                console.error('Error initiating Google OAuth:', error);
+                console.error('❌ Error initiating Google OAuth:', error);
                 return {
                     success: false,
                     message: 'Failed to initiate Google authentication',
                     errors: [(0, error_sanitizer_1.sanitizeError)(error)],
                 };
+            }
+            // Debug: Check if cookies were set by Supabase
+            if (res) {
+                // Check if Set-Cookie headers were set (Supabase stores PKCE code verifier in cookies)
+                const setCookieHeaders = res.getHeader('Set-Cookie');
+                console.log('✅ OAuth URL generated, Set-Cookie headers:', setCookieHeaders ? 'present' : 'missing');
+                if (setCookieHeaders) {
+                    console.log('✅ Number of cookies set:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : 1);
+                }
             }
             // Return cookie name and value so the controller can set it
             // This allows us to store redirectTo without interfering with OAuth state
@@ -390,10 +406,20 @@ class AuthService {
         try {
             // Use cookie-based client for PKCE flow to access code verifier
             const supabase = (0, supabase_1.createClient)(req, res);
+            // Debug: Log cookies to see if code verifier is present
+            if (req) {
+                const cookieHeader = req.headers.cookie || '';
+                console.log('🔍 Callback - Cookie header present:', !!cookieHeader);
+                console.log('🔍 Callback - Cookie header length:', cookieHeader.length);
+                // Look for Supabase PKCE cookies (they typically start with 'sb-')
+                const supabaseCookies = cookieHeader.split('; ').filter((c) => c.includes('sb-'));
+                console.log('🔍 Callback - Supabase cookies found:', supabaseCookies.length);
+            }
             // Exchange code for session
             // NOTE: Supabase manages state internally for CSRF protection
             // We pass only the code - Supabase validates the state automatically from the callback URL
             // The callback URL must match exactly what was passed to signInWithOAuth (no query params)
+            console.log('🔍 Attempting to exchange code for session, code length:', code?.length || 0);
             const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code);
             if (authError) {
                 console.error('Error exchanging code for session:', authError);

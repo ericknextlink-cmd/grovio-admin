@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
 import type { Request, Response } from 'express'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -18,6 +18,7 @@ if (!supabaseKey) {
 /**
  * Create Supabase client with anon key (for regular operations)
  * Use cookie-based storage for PKCE flow in server-side scenarios
+ * Uses Supabase's cookie parsing utilities for proper format
  */
 export function createClient(req?: Request, res?: Response) {
   // If request/response are provided, use cookie-based storage for PKCE
@@ -25,22 +26,30 @@ export function createClient(req?: Request, res?: Response) {
     return createServerClient(supabaseUrl!, supabaseKey!, {
       cookies: {
         getAll() {
-          // Extract all cookies from request
-          return Object.entries(req.cookies || {}).map(([name, value]) => ({
-            name,
-            value: value || '',
+          // Use Supabase's cookie parser to handle cookie format correctly
+          const cookieHeader = req.headers.cookie || ''
+          const cookies = parseCookieHeader(cookieHeader)
+          // Filter out cookies with undefined values and ensure all have values
+          return cookies.filter((cookie): cookie is { name: string; value: string } => 
+            cookie.value !== undefined && cookie.value !== null
+          ).map(cookie => ({
+            name: cookie.name,
+            value: cookie.value || ''
           }))
         },
         setAll(cookiesToSet) {
-          // Set cookies in response
+          // Set cookies using Express's cookie method with options from Supabase
           cookiesToSet.forEach(({ name, value, options }) => {
+            // Use Express's cookie method directly with Supabase's options
+            const isProduction = process.env.NODE_ENV === 'production'
             res.cookie(name, value, {
               httpOnly: options?.httpOnly ?? true,
-              secure: options?.secure ?? process.env.NODE_ENV === 'production',
-              sameSite: (options?.sameSite as 'lax' | 'strict' | 'none') ?? 'lax',
+              secure: options?.secure ?? isProduction,
+              sameSite: (options?.sameSite as 'lax' | 'strict' | 'none') ?? (isProduction ? 'none' : 'lax'),
+              path: options?.path ?? '/',
               maxAge: options?.maxAge,
               domain: options?.domain,
-              path: options?.path ?? '/',
+              expires: options?.expires,
             })
           })
         },

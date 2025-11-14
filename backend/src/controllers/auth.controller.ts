@@ -201,8 +201,9 @@ export class AuthController {
 </html>`
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        res.setHeader('Cache-Control', 'no-store')
-        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
         res.status(400).send(buildErrorResponse({ error, errorDescription }))
         return
       }
@@ -304,8 +305,9 @@ export class AuthController {
 </html>`
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        res.setHeader('Cache-Control', 'no-store')
-        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
         res.status(200).send(buildFallbackHandler())
         return
       }
@@ -395,9 +397,10 @@ export class AuthController {
 </html>`
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'no-store')
-      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-      res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
+      // COOP and COEP are handled globally by helmet middleware
 
       if (result.success) {
         const payload = {

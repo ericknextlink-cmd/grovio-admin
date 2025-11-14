@@ -188,16 +188,13 @@ class AuthController {
   </body>
 </html>`;
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
                     res.status(400).send(buildErrorResponse({ error, errorDescription }));
                     return;
                 }
                 if (!code) {
-                    // No authorization code in query params - this could mean:
-                    // 1. Implicit flow is being used (tokens in hash fragment - not accessible server-side)
-                    // 2. PKCE flow hasn't completed properly
-                    // Extract tokens from hash fragment if present (for implicit flow fallback)
                     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
                     const frontendOrigin = new URL(frontendUrl).origin;
                     const buildFallbackHandler = () => `
@@ -292,8 +289,9 @@ class AuthController {
   </body>
 </html>`;
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
                     res.status(200).send(buildFallbackHandler());
                     return;
                 }
@@ -378,9 +376,10 @@ class AuthController {
   </body>
 </html>`;
                 res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                res.setHeader('Cache-Control', 'no-store');
-                res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-                res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+                res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+                res.setHeader('Pragma', 'no-cache');
+                res.setHeader('Expires', '0');
+                // COOP and COEP are handled globally by helmet middleware
                 if (result.success) {
                     const payload = {
                         success: true,

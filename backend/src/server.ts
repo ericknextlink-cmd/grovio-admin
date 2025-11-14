@@ -35,8 +35,37 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
 
-// Security middleware
-app.use(helmet())
+// Security middleware with custom CSP for OAuth callbacks
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'", // Required for OAuth callback inline scripts
+        "'unsafe-eval'", // May be needed for some OAuth flows
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for OAuth pages
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: [
+        "'self'",
+        process.env.SUPABASE_URL || "https://*.supabase.co", // Allow Supabase connections
+      ].filter(Boolean),
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'self'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+    },
+  },
+  crossOriginOpenerPolicy: {
+    policy: 'same-origin-allow-popups', // Required for OAuth popup flows
+  },
+  crossOriginEmbedderPolicy: false, // Disable to allow OAuth popups
+}))
 
 // CORS configuration
 const allowedOrigins: (string | RegExp)[] = [

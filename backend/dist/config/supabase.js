@@ -39,12 +39,19 @@ function createClient(req, res) {
                     cookiesToSet.forEach(({ name, value, options }) => {
                         // Use Express's cookie method directly with Supabase's options
                         const isProduction = process.env.NODE_ENV === 'production';
+                        // For OAuth/PKCE flows, we need SameSite=None with Secure for cross-domain redirects
+                        // This is especially important when Google redirects back to our callback
+                        const sameSite = options?.sameSite ?? (isProduction ? 'none' : 'lax');
+                        const secure = options?.secure ?? (isProduction ? true : false);
+                        // Ensure Secure is true when SameSite=None (required by browsers)
+                        const finalSecure = sameSite === 'none' ? true : secure;
+                        console.log(`🍪 Setting cookie: ${name}, SameSite=${sameSite}, Secure=${finalSecure}`);
                         res.cookie(name, value, {
                             httpOnly: options?.httpOnly ?? true,
-                            secure: options?.secure ?? isProduction,
-                            sameSite: options?.sameSite ?? (isProduction ? 'none' : 'lax'),
+                            secure: finalSecure,
+                            sameSite: sameSite,
                             path: options?.path ?? '/',
-                            maxAge: options?.maxAge,
+                            maxAge: options?.maxAge ?? (10 * 60), // Default 10 minutes for PKCE code verifier
                             domain: options?.domain,
                             expires: options?.expires,
                         });

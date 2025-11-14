@@ -69,13 +69,13 @@ export class AuthController {
 
       if (result.success && result.cookieName && result.cookieValue) {
         // Set cookie to store redirectTo path (works across OAuth redirect)
-        // Use SameSite=None with Secure in production for cross-domain support
-        // SameSite=Lax in development for localhost
+        // Use SameSite=None with Secure=true for cross-domain redirects (Google -> Railway)
+        // This is required because the callback comes from Google's domain
         const isProduction = process.env.NODE_ENV === 'production'
         res.cookie(result.cookieName, result.cookieValue, {
           httpOnly: true,
-          secure: isProduction, // Secure cookies required for SameSite=None
-          sameSite: isProduction ? 'none' : 'lax', // None for cross-domain, Lax for same-domain
+          secure: true, // Always secure for SameSite=None (required by browsers)
+          sameSite: 'none', // Must be 'none' for cross-domain redirects from Google
           maxAge: 10 * 60 * 1000, // 10 minutes
           path: '/',
         })

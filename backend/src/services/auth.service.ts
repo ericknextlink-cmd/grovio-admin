@@ -929,7 +929,7 @@ export class AuthService {
 
       // If preferences don't exist, create them (non-fatal if it fails)
       if (!preferences && !preferencesError) {
-        console.log('📝 Creating user preferences for user')
+        console.log('Creating user preferences for user')
         const { error: createPrefError } = await adminSupabase
           .from('user_preferences')
           .insert({

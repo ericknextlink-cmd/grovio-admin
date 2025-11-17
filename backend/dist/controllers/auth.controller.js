@@ -52,29 +52,57 @@ class AuthController {
             }
         };
         /**
-         * Initiate Google OAuth flow (returns redirect URL)
-         * NOTE: This is for server-side OAuth initiation.
-         * For client-side OAuth (recommended), the frontend should call supabase.auth.signInWithOAuth() directly.
-         * This endpoint is kept for backward compatibility but may have issues with PKCE cookies.
+         * Initiate Google OAuth flow
+         * Option 1: Returns redirect URL (for AJAX requests)
+         * Option 2: Redirects directly to Google (for navigation/popup requests)
+         *
+         * If the request has Accept: text/html or is from a popup/navigation, redirect directly.
+         * Otherwise, return JSON with the OAuth URL.
          */
         this.initiateGoogleAuth = async (req, res) => {
             try {
                 const redirectTo = req.query.redirectTo || '/dashboard';
                 const result = await this.authService.initiateGoogleAuth(redirectTo, req, res);
-                if (result.success && result.cookieName && result.cookieValue) {
-                    const isProduction = process.env.NODE_ENV === 'production';
-                    res.cookie(result.cookieName, result.cookieValue, {
-                        httpOnly: true,
-                        secure: true,
-                        sameSite: 'none',
-                        maxAge: 10 * 60 * 1000, // 10 minutes
-                        path: '/',
-                    });
-                    const { cookieName, cookieValue, ...responseData } = result;
-                    res.status(200).json(responseData);
+                if (!result.success || !result.url) {
+                    res.status(500).json(result);
+                    return;
+                }
+                // Check if this is a navigation request (from popup/window.open) or AJAX request
+                const acceptsHtml = req.headers.accept?.includes('text/html');
+                const isNavigation = acceptsHtml || !req.headers['x-requested-with'];
+                if (isNavigation) {
+                    // For navigation requests: redirect directly to Google OAuth
+                    // This ensures cookies are set during navigation, making them available on callback
+                    console.log('Redirecting directly to Google OAuth (navigation request)');
+                    // Set redirect cookie
+                    if (result.cookieName && result.cookieValue) {
+                        const isProduction = process.env.NODE_ENV === 'production';
+                        res.cookie(result.cookieName, result.cookieValue, {
+                            httpOnly: true,
+                            secure: isProduction,
+                            sameSite: isProduction ? 'none' : 'lax',
+                            maxAge: 10 * 60 * 1000, // 10 minutes
+                            path: '/',
+                        });
+                    }
+                    // Redirect directly to Google OAuth URL
+                    res.redirect(result.url);
                 }
                 else {
-                    res.status(500).json(result);
+                    // For AJAX requests: return JSON with URL
+                    console.log('Returning OAuth URL (AJAX request)');
+                    if (result.cookieName && result.cookieValue) {
+                        const isProduction = process.env.NODE_ENV === 'production';
+                        res.cookie(result.cookieName, result.cookieValue, {
+                            httpOnly: true,
+                            secure: isProduction,
+                            sameSite: isProduction ? 'none' : 'lax',
+                            maxAge: 10 * 60 * 1000, // 10 minutes
+                            path: '/',
+                        });
+                    }
+                    const { cookieName, cookieValue, ...responseData } = result;
+                    res.status(200).json(responseData);
                 }
             }
             catch (error) {

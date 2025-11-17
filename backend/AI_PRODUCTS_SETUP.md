@@ -70,7 +70,7 @@ The routes are already registered in `backend/src/server.ts`:
 
 Navigate to: `/admin/ai-products` in your admin panel
 
-## 📡 API Endpoints
+##  API Endpoints
 
 All endpoints require **Admin Authentication**:
 
@@ -163,7 +163,7 @@ The AI Products admin page includes:
 - Only published products should be exposed to frontend
 - Draft and archived products are admin-only
 
-## 📝 Next Steps
+## Next Steps
 
 1. **Run the database schema** in Supabase
 2. **Test the generate endpoint** to create AI products

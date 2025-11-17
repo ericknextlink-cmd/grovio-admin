@@ -172,7 +172,7 @@ PKCE cookie names: ['sb-xxx-auth-token-code-verifier']
 
 ---
 
-## 📝 Summary
+## Summary
 
 ### Problem
 - Cookie set with `SameSite=lax` → Not sent on Google redirect

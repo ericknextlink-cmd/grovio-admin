@@ -89,8 +89,11 @@ function createClient(req, res) {
                         console.log(`   - Path: ${options?.path ?? '/'}`);
                         console.log(`   - Is PKCE: ${isPKCECookie}`);
                         console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+                        // For PKCE cookies, ALWAYS use HttpOnly for security
+                        // Even if Supabase requests non-HttpOnly, we enforce it for security
+                        const httpOnly = isPKCECookie ? true : (options?.httpOnly ?? true);
                         res.cookie(name, value, {
-                            httpOnly: options?.httpOnly ?? true,
+                            httpOnly: httpOnly,
                             secure: secure,
                             sameSite: sameSite,
                             path: options?.path ?? '/',

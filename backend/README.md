@@ -114,7 +114,7 @@ npm run dev
 
 The server will start on `http://localhost:5000`
 
-## 📡 API Endpoints
+##  API Endpoints
 
 ### Health Check
 - **GET** `/api/health` - Basic health check
@@ -306,7 +306,7 @@ router.get('/products', asyncHandler(productController.getProducts))
 app.use('/api/products', productRoutes)
 ```
 
-## 📝 API Response Format
+## API Response Format
 
 All endpoints return consistent JSON responses:
 

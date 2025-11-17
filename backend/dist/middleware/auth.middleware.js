@@ -119,7 +119,7 @@ const authenticateToken = async (req, res, next) => {
                     fullUser.phone ||
                     '';
                 const countryCode = userMetadata.country_code || '+233';
-                console.log('📝 Creating user profile with data:', {
+                console.log('Creating user profile with data:', {
                     id: fullUser.id,
                     email: fullUser.email,
                     firstName,

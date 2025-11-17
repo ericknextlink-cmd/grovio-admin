@@ -143,7 +143,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                           ''
         const countryCode = userMetadata.country_code || '+233'
         
-        console.log('📝 Creating user profile with data:', {
+        console.log('Creating user profile with data:', {
           id: fullUser.id,
           email: fullUser.email,
           firstName,

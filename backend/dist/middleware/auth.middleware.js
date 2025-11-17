@@ -68,7 +68,7 @@ const authenticateToken = async (req, res, next) => {
             // Always attempt auto-repair if user profile is missing
             // This handles cases where user exists in auth.users but not in public.users
             // PGRST116 means "Cannot coerce the result to a single JSON object" (no rows returned)
-            console.log('🔄 Auto-repairing missing user profile:', {
+            console.log('Auto-repairing missing user profile:', {
                 userId: user.id,
                 userEmail: user.email,
                 errorCode: dbError?.code,
@@ -150,7 +150,7 @@ const authenticateToken = async (req, res, next) => {
                     .select('id, email, role')
                     .single();
                 if (insertError) {
-                    console.error('❌ Failed to auto-repair user profile:', {
+                    console.error('Failed to auto-repair user profile:', {
                         error: insertError,
                         code: insertError.code,
                         message: insertError.message,
@@ -159,7 +159,7 @@ const authenticateToken = async (req, res, next) => {
                     });
                     // Check if it's a duplicate key error (user might have been created concurrently)
                     if (insertError.code === '23505') {
-                        console.log('⚠️ User profile was created concurrently, fetching existing profile');
+                        console.log(' User profile was created concurrently, fetching existing profile');
                         // User was created by another process - try to fetch it
                         // Use maybeSingle() to avoid errors if user doesn't exist (shouldn't happen, but safe)
                         const { data: existingUserData, error: fetchError } = await adminSupabase
@@ -168,7 +168,7 @@ const authenticateToken = async (req, res, next) => {
                             .eq('id', fullUser.id)
                             .maybeSingle();
                         if (existingUserData && !fetchError) {
-                            console.log('✅ Found existing user profile after concurrent creation');
+                            console.log('Found existing user profile after concurrent creation');
                             req.user = {
                                 id: existingUserData.id,
                                 email: existingUserData.email,
@@ -178,7 +178,7 @@ const authenticateToken = async (req, res, next) => {
                             return;
                         }
                         else {
-                            console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError);
+                            console.error('Failed to fetch existing user after duplicate key error:', fetchError);
                             // Continue to return error response below
                         }
                     }
@@ -189,7 +189,7 @@ const authenticateToken = async (req, res, next) => {
                         errors: ['Your account exists but profile data is missing. Please contact support or try signing up again.']
                     });
                 }
-                console.log('✅ Successfully created user profile:', {
+                console.log('Successfully created user profile:', {
                     userId: newUserData.id,
                     email: newUserData.email,
                     role: newUserData.role,
@@ -204,14 +204,14 @@ const authenticateToken = async (req, res, next) => {
                 });
                 if (prefError) {
                     if (prefError.code === '23505') {
-                        console.log('ℹ️ User preferences already exist (duplicate key)');
+                        console.log('User preferences already exist (duplicate key)');
                     }
                     else {
-                        console.warn('⚠️ Failed to create user preferences (non-fatal):', prefError.message);
+                        console.warn(' Failed to create user preferences (non-fatal):', prefError.message);
                     }
                 }
                 else {
-                    console.log('✅ Successfully created user preferences');
+                    console.log('Successfully created user preferences');
                 }
                 console.log('🎉 Successfully auto-repaired user profile:', fullUser.id);
                 // Use the newly created user data
@@ -224,7 +224,7 @@ const authenticateToken = async (req, res, next) => {
                 return;
             }
             catch (repairError) {
-                console.error('❌ Error during user profile auto-repair:', {
+                console.error('Error during user profile auto-repair:', {
                     error: repairError,
                     message: repairError instanceof Error ? repairError.message : String(repairError),
                     stack: repairError instanceof Error ? repairError.stack : undefined,

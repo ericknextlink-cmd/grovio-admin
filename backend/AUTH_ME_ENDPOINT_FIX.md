@@ -1,6 +1,6 @@
 # Auth /me Endpoint - Issue and Fix
 
-## 🔍 **The Problem**
+## **The Problem**
 
 The `/api/auth/me` endpoint was returning:
 ```json
@@ -185,7 +185,7 @@ fetch('https://grovio-admin-production.up.railway.app/api/auth/me', {
 }
 ```
 
-## 🔍 **Debugging Steps**
+## **Debugging Steps**
 
 1. **Check if user exists in auth.users:**
    ```sql

@@ -337,10 +337,10 @@ class AuthService {
             // Use cookie-based client for PKCE flow
             const supabase = (0, supabase_1.createClient)(req, res);
             // Debug: Log that we're initiating OAuth
-            console.log('🚀 Initiating Google OAuth with cookie-based client');
+            console.log(' Initiating Google OAuth with cookie-based client');
             if (req) {
-                console.log('🚀 Request origin:', req.headers.origin);
-                console.log('🚀 Request cookie header present:', !!req.headers.cookie);
+                console.log(' Request origin:', req.headers.origin);
+                console.log(' Request cookie header present:', !!req.headers.cookie);
             }
             // Generate the OAuth URL
             // IMPORTANT: Do NOT pass 'state' in queryParams - Supabase manages its own state for CSRF protection
@@ -348,7 +348,7 @@ class AuthService {
             // Instead, we'll use a cookie to store the redirectTo path
             const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
             const callbackUrl = `${backendUrl}/api/auth/google/callback`;
-            console.log('🚀 Callback URL:', callbackUrl);
+            console.log(' Callback URL:', callbackUrl);
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -362,7 +362,7 @@ class AuthService {
                 },
             });
             if (error) {
-                console.error('❌ Error initiating Google OAuth:', error);
+                console.error('Error initiating Google OAuth:', error);
                 return {
                     success: false,
                     message: 'Failed to initiate Google authentication',
@@ -373,9 +373,9 @@ class AuthService {
             if (res) {
                 // Check if Set-Cookie headers were set (Supabase stores PKCE code verifier in cookies)
                 const setCookieHeaders = res.getHeader('Set-Cookie');
-                console.log('✅ OAuth URL generated, Set-Cookie headers:', setCookieHeaders ? 'present' : 'missing');
+                console.log('OAuth URL generated, Set-Cookie headers:', setCookieHeaders ? 'present' : 'missing');
                 if (setCookieHeaders) {
-                    console.log('✅ Number of cookies set:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : 1);
+                    console.log('Number of cookies set:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : 1);
                 }
             }
             // Return cookie name and value so the controller can set it
@@ -400,20 +400,281 @@ class AuthService {
         }
     }
     /**
-     * Handle Google OAuth callback
+     * Handle Google OAuth callback (server-side SSR flow)
+     * Exchanges authorization code for session using PKCE code verifier from cookies
      */
+    async handleGoogleCallback(code, req, res) {
+        try {
+            if (!code) {
+                return {
+                    success: false,
+                    message: 'Authorization code is required',
+                    errors: ['Missing authorization code'],
+                };
+            }
+            // Use cookie-based client to exchange code (PKCE code verifier is in cookies)
+            const supabase = (0, supabase_1.createClient)(req, res);
+            console.log('Exchanging OAuth code for session with PKCE...');
+            console.log('Request has cookies:', !!req?.headers?.cookie);
+            console.log('Request origin:', req?.headers?.origin);
+            console.log('Request referer:', req?.headers?.referer);
+            console.log('Request host:', req?.headers?.host);
+            if (req?.headers?.cookie) {
+                const cookies = req.headers.cookie.split(';');
+                console.log('Total cookies received:', cookies.length);
+                // Check for PKCE code verifier cookie
+                const pkceCookies = cookies.filter((c) => c.includes('code-verifier') || c.includes('auth-token'));
+                console.log('PKCE-related cookies found:', pkceCookies.length);
+                if (pkceCookies.length > 0) {
+                    console.log('PKCE cookie names:', pkceCookies.map((c) => c.split('=')[0].trim()));
+                }
+                else {
+                    console.warn(' WARNING: No PKCE code verifier cookie found!');
+                    console.warn(' This will cause the code exchange to fail.');
+                    console.warn(' Possible causes:');
+                    console.warn('   - Cookie was not set correctly (check SameSite/Secure settings)');
+                    console.warn('   - Cookie expired (10 min default)');
+                    console.warn('   - Browser blocked third-party cookies');
+                    console.warn('   - Cookie domain mismatch');
+                }
+            }
+            else {
+                console.error('ERROR: No cookies in request header!');
+                console.error('This means the PKCE code verifier was not sent.');
+            }
+            // Exchange the code for a session
+            // The PKCE code verifier is automatically retrieved from cookies by createServerClient
+            const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code);
+            if (authError) {
+                console.error('Error exchanging code for session:', authError);
+                return {
+                    success: false,
+                    message: 'Failed to exchange authorization code',
+                    errors: [(0, error_sanitizer_1.sanitizeAuthError)(authError)],
+                };
+            }
+            if (!authData.session || !authData.user) {
+                console.error('No session or user returned from code exchange');
+                return {
+                    success: false,
+                    message: 'Failed to create session',
+                    errors: ['No session data returned'],
+                };
+            }
+            console.log('Successfully exchanged code for session:', {
+                userId: authData.user.id,
+                email: authData.user.email,
+                hasAccessToken: !!authData.session.access_token,
+            });
+            // Process user profile creation/update
+            const userResult = await this.processGoogleUser(authData.user, authData.session);
+            // Get redirectTo from cookie if it exists
+            let redirectTo = '/dashboard';
+            const cookieName = 'grovio_oauth_redirect';
+            if (req?.cookies?.[cookieName]) {
+                try {
+                    const decoded = Buffer.from(req.cookies[cookieName], 'base64url').toString('utf8');
+                    const parsed = JSON.parse(decoded);
+                    if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
+                        redirectTo = parsed.redirectTo;
+                    }
+                }
+                catch (err) {
+                    console.warn('Failed to decode redirect cookie:', err);
+                }
+            }
+            return {
+                ...userResult,
+                session: authData.session,
+                redirectTo,
+            };
+        }
+        catch (error) {
+            console.error('Google callback service error:', error);
+            return {
+                success: false,
+                message: 'Internal server error',
+                errors: ['Something went wrong during Google authentication'],
+            };
+        }
+    }
     /**
-     * Handle OAuth callback - expects session data from frontend (not code)
+     * Process Google user profile (helper method)
+     * Creates or updates user profile and preferences
+     */
+    async processGoogleUser(googleUser, session) {
+        try {
+            const userMetadata = googleUser.user_metadata || {};
+            const adminSupabase = (0, supabase_1.createAdminClient)();
+            // Check if user exists in our database
+            const { data: existingUser, error: userError } = await adminSupabase
+                .from('users')
+                .select('*')
+                .eq('id', googleUser.id)
+                .maybeSingle();
+            let userData;
+            if (userError?.code === 'PGRST116' || !existingUser) {
+                // New user - create profile
+                console.log('🆕 Creating new user profile for Google OAuth user:', {
+                    userId: googleUser.id,
+                    email: googleUser.email,
+                });
+                const firstName = userMetadata.given_name ||
+                    userMetadata.first_name ||
+                    userMetadata.full_name?.split(' ')[0] ||
+                    userMetadata.name?.split(' ')[0] ||
+                    googleUser.email?.split('@')[0] ||
+                    'User';
+                const lastName = userMetadata.family_name ||
+                    userMetadata.last_name ||
+                    userMetadata.full_name?.split(' ').slice(1).join(' ') ||
+                    userMetadata.name?.split(' ').slice(1).join(' ') ||
+                    '';
+                const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || '';
+                const countryCode = userMetadata.country_code || '+233';
+                const { data: newUser, error: insertError } = await adminSupabase
+                    .from('users')
+                    .insert({
+                    id: googleUser.id,
+                    email: googleUser.email,
+                    first_name: firstName,
+                    last_name: lastName,
+                    phone_number: phoneNumber,
+                    country_code: countryCode,
+                    profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
+                    is_email_verified: googleUser.email_confirmed_at ? true : false,
+                    is_phone_verified: googleUser.phone_confirmed_at ? true : false,
+                    role: 'customer',
+                    google_id: userMetadata.sub || userMetadata.provider_id || googleUser.id,
+                    preferences: {
+                        language: 'en',
+                        currency: 'GHS',
+                    },
+                })
+                    .select()
+                    .single();
+                if (insertError) {
+                    // Check if user was created concurrently
+                    if (insertError.code === '23505') {
+                        const { data: existingUserData } = await adminSupabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', googleUser.id)
+                            .maybeSingle();
+                        if (existingUserData) {
+                            userData = existingUserData;
+                        }
+                        else {
+                            return {
+                                success: false,
+                                message: 'Failed to create user profile',
+                                errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)],
+                            };
+                        }
+                    }
+                    else {
+                        return {
+                            success: false,
+                            message: 'Failed to create user profile',
+                            errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)],
+                        };
+                    }
+                }
+                else {
+                    userData = newUser;
+                    // Create initial user preferences
+                    await adminSupabase
+                        .from('user_preferences')
+                        .insert({
+                        user_id: googleUser.id,
+                        language: 'en',
+                        currency: 'GHS',
+                    }).then(({ error: prefError }) => {
+                        if (prefError && prefError.code !== '23505') {
+                            console.warn(' Failed to create user preferences (non-fatal):', prefError.message);
+                        }
+                    });
+                }
+            }
+            else {
+                // Existing user - update profile if needed
+                const updateData = {
+                    updated_at: new Date().toISOString(),
+                };
+                if (userMetadata.avatar_url || userMetadata.picture) {
+                    updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture;
+                }
+                if (googleUser.email_confirmed_at) {
+                    updateData.is_email_verified = true;
+                }
+                const { data: updatedUser, error: updateError } = await adminSupabase
+                    .from('users')
+                    .update(updateData)
+                    .eq('id', googleUser.id)
+                    .select()
+                    .single();
+                if (updateError) {
+                    console.warn(' Failed to update user profile (non-fatal):', updateError.message);
+                    userData = existingUser;
+                }
+                else {
+                    userData = updatedUser || existingUser;
+                }
+            }
+            // Get user preferences
+            const { data: preferences } = await adminSupabase
+                .from('user_preferences')
+                .select('*')
+                .eq('user_id', userData.id)
+                .maybeSingle();
+            // Create preferences if they don't exist
+            if (!preferences) {
+                await adminSupabase
+                    .from('user_preferences')
+                    .insert({
+                    user_id: userData.id,
+                    language: 'en',
+                    currency: 'GHS',
+                });
+            }
+            return {
+                success: true,
+                message: 'Signed in with Google successfully',
+                user: {
+                    id: userData.id,
+                    email: userData.email,
+                    firstName: userData.first_name,
+                    lastName: userData.last_name,
+                    phoneNumber: userData.phone_number,
+                    countryCode: userData.country_code,
+                    profilePicture: userData.profile_picture,
+                    isEmailVerified: userData.is_email_verified,
+                    isPhoneVerified: userData.is_phone_verified,
+                    role: userData.role,
+                    preferences: preferences || {
+                        language: 'en',
+                        currency: 'GHS',
+                    },
+                    createdAt: userData.created_at,
+                    updatedAt: userData.updated_at,
+                },
+                accessToken: session.access_token,
+                refreshToken: session.refresh_token,
+            };
+        }
+        catch (error) {
+            console.error('Process Google user error:', error);
+            return {
+                success: false,
+                message: 'Failed to process user profile',
+                errors: ['Something went wrong while creating/updating user profile'],
+            };
+        }
+    }
+    /**
+     * Handle OAuth session from frontend (for client-side OAuth flow)
      * When OAuth is initiated client-side, the frontend exchanges the code for a session
      * and sends the session to this endpoint to create/update user profile
-     *
-     * Architecture:
-     * 1. Frontend initiates OAuth client-side → stores PKCE code verifier in browser
-     * 2. User authenticates with Google → Google redirects to frontend callback
-     * 3. Frontend exchanges code: supabase.auth.exchangeCodeForSession(code) → gets session
-     * 4. Frontend sends session to this endpoint → backend creates/updates user profile
-     * 5. Frontend stores session in browser → uses it for subsequent API calls
-     * 6. Backend verifies sessions using authenticateToken middleware (no changes needed)
      */
     async handleGoogleCallbackSession(session) {
         try {
@@ -428,7 +689,7 @@ class AuthService {
             const adminSupabase = (0, supabase_1.createAdminClient)();
             const { data: { user: verifiedUser }, error: verifyError } = await adminSupabase.auth.getUser(session.access_token);
             if (verifyError || !verifiedUser) {
-                console.error('❌ Error verifying session token:', verifyError);
+                console.error('Error verifying session token:', verifyError);
                 return {
                     success: false,
                     message: 'Invalid session token',
@@ -491,7 +752,7 @@ class AuthService {
                     .select()
                     .single();
                 if (insertError) {
-                    console.error('❌ Database insert error during Google OAuth:', {
+                    console.error('Database insert error during Google OAuth:', {
                         error: insertError,
                         userId: googleUser.id,
                         email: googleUser.email,
@@ -502,7 +763,7 @@ class AuthService {
                     });
                     // Check if it's a duplicate key error (user might have been created concurrently)
                     if (insertError.code === '23505') {
-                        console.log('⚠️ User profile was created concurrently, fetching existing profile');
+                        console.log(' User profile was created concurrently, fetching existing profile');
                         // User was created by another process (possibly auto-repair middleware)
                         // Try to fetch the existing user
                         const { data: existingUserData, error: fetchError } = await adminSupabase
@@ -511,11 +772,11 @@ class AuthService {
                             .eq('id', googleUser.id)
                             .maybeSingle();
                         if (existingUserData && !fetchError) {
-                            console.log('✅ Found existing user profile after concurrent creation');
+                            console.log('Found existing user profile after concurrent creation');
                             userData = existingUserData;
                         }
                         else {
-                            console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError);
+                            console.error('Failed to fetch existing user after duplicate key error:', fetchError);
                             return {
                                 success: false,
                                 message: 'Failed to create user profile',
@@ -532,7 +793,7 @@ class AuthService {
                     }
                 }
                 else {
-                    console.log('✅ Successfully created user profile:', {
+                    console.log('Successfully created user profile:', {
                         userId: newUser.id,
                         email: newUser.email,
                     });
@@ -547,22 +808,22 @@ class AuthService {
                     });
                     if (preferencesError) {
                         if (preferencesError.code === '23505') {
-                            console.log('ℹ️ User preferences already exist (duplicate key)');
+                            console.log('User preferences already exist (duplicate key)');
                         }
                         else {
                             // Log but don't fail - preferences might already exist or can be created later
-                            console.warn('⚠️ Failed to create user preferences (non-fatal):', preferencesError.message);
+                            console.warn(' Failed to create user preferences (non-fatal):', preferencesError.message);
                         }
                     }
                     else {
-                        console.log('✅ Successfully created user preferences');
+                        console.log('Successfully created user preferences');
                     }
                 }
             }
             else {
                 // Existing user - update profile picture if needed
                 // Use admin client to ensure update works even if RLS blocks it
-                console.log('✅ User profile already exists, updating if needed:', {
+                console.log('User profile already exists, updating if needed:', {
                     userId: googleUser.id,
                     email: googleUser.email,
                 });
@@ -583,7 +844,7 @@ class AuthService {
                     .select()
                     .single();
                 if (updateError) {
-                    console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message);
+                    console.warn(' Failed to update user profile (non-fatal):', updateError.message);
                     // Use existing user data if update fails
                     userData = existingUser;
                 }
@@ -608,7 +869,7 @@ class AuthService {
                     currency: 'GHS',
                 });
                 if (createPrefError && createPrefError.code !== '23505') {
-                    console.warn('⚠️ Failed to create user preferences (non-fatal):', createPrefError.message);
+                    console.warn(' Failed to create user preferences (non-fatal):', createPrefError.message);
                 }
             }
             return {

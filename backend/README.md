@@ -49,7 +49,7 @@ backend/
 └── README.md
 ```
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### 1. Environment Setup
 
@@ -85,7 +85,7 @@ FRONTEND_URL=http://localhost:3001
 ADMIN_URL=http://localhost:3000
 ```
 
-⚠️ **Important**: You must add your actual `SUPABASE_SERVICE_ROLE_KEY` from your Supabase dashboard (Settings > API).
+ **Important**: You must add your actual `SUPABASE_SERVICE_ROLE_KEY` from your Supabase dashboard (Settings > API).
 
 ### 2. Install Dependencies
 
@@ -327,7 +327,7 @@ All endpoints return consistent JSON responses:
 }
 ```
 
-## 🔍 Monitoring & Logging
+## Monitoring & Logging
 
 - **Morgan** for HTTP request logging
 - **Console logging** for errors and debugging

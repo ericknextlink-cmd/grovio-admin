@@ -370,10 +370,10 @@ export class AuthService {
       const supabase = createClient(req, res)
       
       // Debug: Log that we're initiating OAuth
-      console.log('🚀 Initiating Google OAuth with cookie-based client')
+      console.log(' Initiating Google OAuth with cookie-based client')
       if (req) {
-        console.log('🚀 Request origin:', req.headers.origin)
-        console.log('🚀 Request cookie header present:', !!req.headers.cookie)
+        console.log(' Request origin:', req.headers.origin)
+        console.log(' Request cookie header present:', !!req.headers.cookie)
       }
       
       // Generate the OAuth URL
@@ -382,7 +382,7 @@ export class AuthService {
       // Instead, we'll use a cookie to store the redirectTo path
       const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
       const callbackUrl = `${backendUrl}/api/auth/google/callback`
-      console.log('🚀 Callback URL:', callbackUrl)
+      console.log(' Callback URL:', callbackUrl)
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -398,7 +398,7 @@ export class AuthService {
       })
 
       if (error) {
-        console.error('❌ Error initiating Google OAuth:', error)
+        console.error('Error initiating Google OAuth:', error)
         return {
           success: false,
           message: 'Failed to initiate Google authentication',
@@ -410,9 +410,9 @@ export class AuthService {
       if (res) {
         // Check if Set-Cookie headers were set (Supabase stores PKCE code verifier in cookies)
         const setCookieHeaders = res.getHeader('Set-Cookie')
-        console.log('✅ OAuth URL generated, Set-Cookie headers:', setCookieHeaders ? 'present' : 'missing')
+        console.log('OAuth URL generated, Set-Cookie headers:', setCookieHeaders ? 'present' : 'missing')
         if (setCookieHeaders) {
-          console.log('✅ Number of cookies set:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : 1)
+          console.log('Number of cookies set:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : 1)
         }
       }
 
@@ -455,15 +455,40 @@ export class AuthService {
       // Use cookie-based client to exchange code (PKCE code verifier is in cookies)
       const supabase = createClient(req, res)
       
-      console.log('🔄 Exchanging OAuth code for session with PKCE...')
-      console.log('🔄 Request has cookies:', !!req?.headers?.cookie)
+      console.log('Exchanging OAuth code for session with PKCE...')
+      console.log('Request has cookies:', !!req?.headers?.cookie)
+      console.log('Request origin:', req?.headers?.origin)
+      console.log('Request referer:', req?.headers?.referer)
+      console.log('Request host:', req?.headers?.host)
+      
+      if (req?.headers?.cookie) {
+        const cookies = req.headers.cookie.split(';')
+        console.log('Total cookies received:', cookies.length)
+        // Check for PKCE code verifier cookie
+        const pkceCookies = cookies.filter((c: string) => c.includes('code-verifier') || c.includes('auth-token'))
+        console.log('PKCE-related cookies found:', pkceCookies.length)
+        if (pkceCookies.length > 0) {
+          console.log('PKCE cookie names:', pkceCookies.map((c: string) => c.split('=')[0].trim()))
+        } else {
+          console.warn(' WARNING: No PKCE code verifier cookie found!')
+          console.warn(' This will cause the code exchange to fail.')
+          console.warn(' Possible causes:')
+          console.warn('   - Cookie was not set correctly (check SameSite/Secure settings)')
+          console.warn('   - Cookie expired (10 min default)')
+          console.warn('   - Browser blocked third-party cookies')
+          console.warn('   - Cookie domain mismatch')
+        }
+      } else {
+        console.error('ERROR: No cookies in request header!')
+        console.error('This means the PKCE code verifier was not sent.')
+      }
       
       // Exchange the code for a session
       // The PKCE code verifier is automatically retrieved from cookies by createServerClient
       const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code)
 
       if (authError) {
-        console.error('❌ Error exchanging code for session:', authError)
+        console.error('Error exchanging code for session:', authError)
         return {
           success: false,
           message: 'Failed to exchange authorization code',
@@ -472,7 +497,7 @@ export class AuthService {
       }
 
       if (!authData.session || !authData.user) {
-        console.error('❌ No session or user returned from code exchange')
+        console.error('No session or user returned from code exchange')
         return {
           success: false,
           message: 'Failed to create session',
@@ -480,7 +505,7 @@ export class AuthService {
         }
       }
 
-      console.log('✅ Successfully exchanged code for session:', {
+      console.log('Successfully exchanged code for session:', {
         userId: authData.user.id,
         email: authData.user.email,
         hasAccessToken: !!authData.session.access_token,
@@ -617,7 +642,7 @@ export class AuthService {
               currency: 'GHS',
             }).then(({ error: prefError }) => {
               if (prefError && prefError.code !== '23505') {
-                console.warn('⚠️ Failed to create user preferences (non-fatal):', prefError.message)
+                console.warn(' Failed to create user preferences (non-fatal):', prefError.message)
               }
             })
         }
@@ -643,7 +668,7 @@ export class AuthService {
           .single()
 
         if (updateError) {
-          console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message)
+          console.warn(' Failed to update user profile (non-fatal):', updateError.message)
           userData = existingUser
         } else {
           userData = updatedUser || existingUser
@@ -722,7 +747,7 @@ export class AuthService {
       const { data: { user: verifiedUser }, error: verifyError } = await adminSupabase.auth.getUser(session.access_token)
       
       if (verifyError || !verifiedUser) {
-        console.error('❌ Error verifying session token:', verifyError)
+        console.error('Error verifying session token:', verifyError)
         return {
           success: false,
           message: 'Invalid session token',
@@ -792,7 +817,7 @@ export class AuthService {
           .single()
 
         if (insertError) {
-          console.error('❌ Database insert error during Google OAuth:', {
+          console.error('Database insert error during Google OAuth:', {
             error: insertError,
             userId: googleUser.id,
             email: googleUser.email,
@@ -804,7 +829,7 @@ export class AuthService {
           
           // Check if it's a duplicate key error (user might have been created concurrently)
           if (insertError.code === '23505') {
-            console.log('⚠️ User profile was created concurrently, fetching existing profile')
+            console.log(' User profile was created concurrently, fetching existing profile')
             // User was created by another process (possibly auto-repair middleware)
             // Try to fetch the existing user
             const { data: existingUserData, error: fetchError } = await adminSupabase
@@ -814,10 +839,10 @@ export class AuthService {
               .maybeSingle()
             
             if (existingUserData && !fetchError) {
-              console.log('✅ Found existing user profile after concurrent creation')
+              console.log('Found existing user profile after concurrent creation')
               userData = existingUserData
             } else {
-              console.error('❌ Failed to fetch existing user after duplicate key error:', fetchError)
+              console.error('Failed to fetch existing user after duplicate key error:', fetchError)
               return {
                 success: false,
                 message: 'Failed to create user profile',
@@ -832,7 +857,7 @@ export class AuthService {
             }
           }
         } else {
-          console.log('✅ Successfully created user profile:', {
+          console.log('Successfully created user profile:', {
             userId: newUser.id,
             email: newUser.email,
           })
@@ -849,19 +874,19 @@ export class AuthService {
           
           if (preferencesError) {
             if (preferencesError.code === '23505') {
-              console.log('ℹ️ User preferences already exist (duplicate key)')
+              console.log('User preferences already exist (duplicate key)')
             } else {
               // Log but don't fail - preferences might already exist or can be created later
-              console.warn('⚠️ Failed to create user preferences (non-fatal):', preferencesError.message)
+              console.warn(' Failed to create user preferences (non-fatal):', preferencesError.message)
             }
           } else {
-            console.log('✅ Successfully created user preferences')
+            console.log('Successfully created user preferences')
           }
         }
       } else {
         // Existing user - update profile picture if needed
         // Use admin client to ensure update works even if RLS blocks it
-        console.log('✅ User profile already exists, updating if needed:', {
+        console.log('User profile already exists, updating if needed:', {
           userId: googleUser.id,
           email: googleUser.email,
         })
@@ -887,7 +912,7 @@ export class AuthService {
           .single()
 
         if (updateError) {
-          console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message)
+          console.warn(' Failed to update user profile (non-fatal):', updateError.message)
           // Use existing user data if update fails
           userData = existingUser
         } else {
@@ -914,7 +939,7 @@ export class AuthService {
           })
         
         if (createPrefError && createPrefError.code !== '23505') {
-          console.warn('⚠️ Failed to create user preferences (non-fatal):', createPrefError.message)
+          console.warn(' Failed to create user preferences (non-fatal):', createPrefError.message)
         }
       }
 

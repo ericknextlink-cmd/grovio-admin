@@ -37,22 +37,66 @@ function createClient(req, res) {
                 setAll(cookiesToSet) {
                     // Set cookies using Express's cookie method with options from Supabase
                     cookiesToSet.forEach(({ name, value, options }) => {
-                        // Use Express's cookie method directly with Supabase's options
                         const isProduction = process.env.NODE_ENV === 'production';
-                        // For OAuth/PKCE flows, we need SameSite=None with Secure for cross-domain redirects
-                        // This is especially important when Google redirects back to our callback
-                        const sameSite = options?.sameSite ?? (isProduction ? 'none' : 'lax');
-                        const secure = options?.secure ?? (isProduction ? true : false);
-                        // Ensure Secure is true when SameSite=None (required by browsers)
-                        const finalSecure = sameSite === 'none' ? true : secure;
-                        console.log(`🍪 Setting cookie: ${name}, SameSite=${sameSite}, Secure=${finalSecure}`);
+                        const isDevelopment = process.env.NODE_ENV === 'development';
+                        // Check if this is a PKCE code verifier cookie (critical for OAuth flow)
+                        const isPKCECookie = name.includes('code-verifier') || name.includes('auth-token');
+                        // For OAuth/PKCE flows, we ALWAYS need SameSite=None with Secure for cross-domain redirects
+                        // This is critical when Google redirects back to our callback URL
+                        // We override Supabase's default because we need cross-site cookie support
+                        let sameSite = 'lax';
+                        let secure = true;
+                        if (isProduction) {
+                            // Production: Always use SameSite=None for OAuth cookies (required for cross-domain redirects)
+                            sameSite = 'none';
+                            secure = true; // Required when SameSite=None
+                        }
+                        else if (isPKCECookie) {
+                            // Even in development, use SameSite=None for PKCE cookies if using cross-domain setup
+                            // Check if frontend and backend are on different origins
+                            const backendUrl = process.env.BACKEND_URL || '';
+                            const frontendUrl = process.env.FRONTEND_URL || '';
+                            try {
+                                const backendOrigin = backendUrl ? new URL(backendUrl).origin : '';
+                                const frontendOrigin = frontendUrl ? new URL(frontendUrl).origin : '';
+                                if (backendOrigin && frontendOrigin && backendOrigin !== frontendOrigin) {
+                                    // Different origins - need SameSite=None
+                                    sameSite = 'none';
+                                    secure = true;
+                                }
+                                else {
+                                    // Same origin - can use lax
+                                    sameSite = 'lax';
+                                    secure = false; // Development can use HTTP
+                                }
+                            }
+                            catch (e) {
+                                // Fallback to lax if URL parsing fails
+                                sameSite = 'lax';
+                                secure = false;
+                            }
+                        }
+                        else {
+                            // Non-PKCE cookies use lax in development
+                            sameSite = 'lax';
+                            secure = false;
+                        }
+                        // Log cookie settings for debugging
+                        console.log(`Setting cookie: ${name}`);
+                        console.log(`   - SameSite: ${sameSite}`);
+                        console.log(`   - Secure: ${secure}`);
+                        console.log(`   - HttpOnly: ${options?.httpOnly ?? true}`);
+                        console.log(`   - Path: ${options?.path ?? '/'}`);
+                        console.log(`   - Is PKCE: ${isPKCECookie}`);
+                        console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
                         res.cookie(name, value, {
                             httpOnly: options?.httpOnly ?? true,
-                            secure: finalSecure,
+                            secure: secure,
                             sameSite: sameSite,
                             path: options?.path ?? '/',
                             maxAge: options?.maxAge ?? (10 * 60), // Default 10 minutes for PKCE code verifier
-                            domain: options?.domain,
+                            // Don't set domain - let it default to the current domain (better for cross-subdomain)
+                            // domain: options?.domain, // Commented out - let Express handle domain automatically
                             expires: options?.expires,
                         });
                     });

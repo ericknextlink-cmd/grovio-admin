@@ -187,7 +187,7 @@ const startServer = async () => {
         // Find an available port starting from the desired port
         const PORT = await (0, port_1.findAvailablePort)(desiredPort);
         app.listen(PORT, () => {
-            console.log(`🚀 Grovio Backend Server running on port ${PORT}`);
+            console.log(` Grovio Backend Server running on port ${PORT}`);
             console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
             console.log(`⚡ Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`);

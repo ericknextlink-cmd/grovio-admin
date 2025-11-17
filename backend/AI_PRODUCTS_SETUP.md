@@ -38,7 +38,7 @@ A complete system for AI-generated products that require admin review and publis
 3. **Sidebar:** Updated `frontend/src/components/AdminSidebar.tsx`
    - Added "AI Products" navigation link
 
-## 🚀 Setup Instructions
+##  Setup Instructions
 
 ### 1. Database Setup
 
@@ -125,7 +125,7 @@ POST /api/ai-products/:id/archive
 Changes status to 'archived'
 ```
 
-## 🔄 Product Workflow
+## Product Workflow
 
 1. **Generate** → AI creates products with `status: 'draft'`
 2. **Review** → Admin reviews products in the admin panel

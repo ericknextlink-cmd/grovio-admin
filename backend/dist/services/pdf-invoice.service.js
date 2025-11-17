@@ -541,7 +541,7 @@ class PDFInvoiceService {
                 `images/${invoiceNumber}.png`,
                 `qr/${invoiceNumber}.png`,
             ]);
-            console.log(`🗑️  Deleted invoice files for: ${invoiceNumber}`);
+            console.log(`Deleted invoice files for: ${invoiceNumber}`);
         }
         catch (error) {
             console.error('Delete invoice error:', error);

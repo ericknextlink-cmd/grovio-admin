@@ -211,7 +211,7 @@ export class AuthController {
 
       // Handle OAuth errors
       if (error) {
-        console.error('❌ Google OAuth error:', error, errorDescription)
+        console.error('Google OAuth error:', error, errorDescription)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
@@ -225,7 +225,7 @@ export class AuthController {
 
       // Handle missing authorization code
       if (!code) {
-        console.error('❌ Missing authorization code')
+        console.error('Missing authorization code')
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
@@ -238,7 +238,7 @@ export class AuthController {
       }
 
       // Exchange code for session (server-side SSR flow with PKCE)
-      console.log('🔄 Processing Google OAuth callback with code exchange...')
+      console.log('Processing Google OAuth callback with code exchange...')
       const result = await this.authService.handleGoogleCallback(code, req, res)
 
       // Clear redirect cookie if it exists
@@ -248,7 +248,7 @@ export class AuthController {
       }
 
       if (result.success && result.session) {
-        console.log('✅ OAuth callback successful, returning session to frontend')
+        console.log('OAuth callback successful, returning session to frontend')
         
         // Return success response with session data for popup flow
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -261,7 +261,7 @@ export class AuthController {
           redirectTo: result.redirectTo || '/dashboard'
         }, true))
       } else {
-        console.error('❌ OAuth callback failed:', result.errors)
+        console.error('OAuth callback failed:', result.errors)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
@@ -273,7 +273,7 @@ export class AuthController {
         }, false))
       }
     } catch (error) {
-      console.error('❌ Google callback error:', error)
+      console.error('Google callback error:', error)
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
       res.redirect(`${frontendUrl}/login?error=server_error`)
     }

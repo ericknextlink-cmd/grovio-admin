@@ -439,20 +439,273 @@ export class AuthService {
   }
 
   /**
-   * Handle Google OAuth callback
+   * Handle Google OAuth callback (server-side SSR flow)
+   * Exchanges authorization code for session using PKCE code verifier from cookies
    */
+  async handleGoogleCallback(code: string, req?: any, res?: any): Promise<AuthResponse & { session?: any; redirectTo?: string }> {
+    try {
+      if (!code) {
+        return {
+          success: false,
+          message: 'Authorization code is required',
+          errors: ['Missing authorization code'],
+        }
+      }
+
+      // Use cookie-based client to exchange code (PKCE code verifier is in cookies)
+      const supabase = createClient(req, res)
+      
+      console.log('🔄 Exchanging OAuth code for session with PKCE...')
+      console.log('🔄 Request has cookies:', !!req?.headers?.cookie)
+      
+      // Exchange the code for a session
+      // The PKCE code verifier is automatically retrieved from cookies by createServerClient
+      const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (authError) {
+        console.error('❌ Error exchanging code for session:', authError)
+        return {
+          success: false,
+          message: 'Failed to exchange authorization code',
+          errors: [sanitizeAuthError(authError)],
+        }
+      }
+
+      if (!authData.session || !authData.user) {
+        console.error('❌ No session or user returned from code exchange')
+        return {
+          success: false,
+          message: 'Failed to create session',
+          errors: ['No session data returned'],
+        }
+      }
+
+      console.log('✅ Successfully exchanged code for session:', {
+        userId: authData.user.id,
+        email: authData.user.email,
+        hasAccessToken: !!authData.session.access_token,
+      })
+
+      // Process user profile creation/update
+      const userResult = await this.processGoogleUser(authData.user, authData.session)
+
+      // Get redirectTo from cookie if it exists
+      let redirectTo = '/dashboard'
+      const cookieName = 'grovio_oauth_redirect'
+      if (req?.cookies?.[cookieName]) {
+        try {
+          const decoded = Buffer.from(req.cookies[cookieName], 'base64url').toString('utf8')
+          const parsed = JSON.parse(decoded)
+          if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
+            redirectTo = parsed.redirectTo
+          }
+        } catch (err) {
+          console.warn('Failed to decode redirect cookie:', err)
+        }
+      }
+
+      return {
+        ...userResult,
+        session: authData.session,
+        redirectTo,
+      }
+    } catch (error) {
+      console.error('Google callback service error:', error)
+      return {
+        success: false,
+        message: 'Internal server error',
+        errors: ['Something went wrong during Google authentication'],
+      }
+    }
+  }
+
   /**
-   * Handle OAuth callback - expects session data from frontend (not code)
+   * Process Google user profile (helper method)
+   * Creates or updates user profile and preferences
+   */
+  private async processGoogleUser(googleUser: any, session: any): Promise<AuthResponse> {
+    try {
+      const userMetadata = googleUser.user_metadata || {}
+      const adminSupabase = createAdminClient()
+
+      // Check if user exists in our database
+      const { data: existingUser, error: userError } = await adminSupabase
+        .from('users')
+        .select('*')
+        .eq('id', googleUser.id)
+        .maybeSingle()
+
+      let userData
+
+      if (userError?.code === 'PGRST116' || !existingUser) {
+        // New user - create profile
+        console.log('🆕 Creating new user profile for Google OAuth user:', {
+          userId: googleUser.id,
+          email: googleUser.email,
+        })
+
+        const firstName = userMetadata.given_name ||
+                         userMetadata.first_name ||
+                         userMetadata.full_name?.split(' ')[0] ||
+                         userMetadata.name?.split(' ')[0] ||
+                         googleUser.email?.split('@')[0] ||
+                         'User'
+        const lastName = userMetadata.family_name ||
+                        userMetadata.last_name ||
+                        userMetadata.full_name?.split(' ').slice(1).join(' ') ||
+                        userMetadata.name?.split(' ').slice(1).join(' ') ||
+                        ''
+        const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || ''
+        const countryCode = userMetadata.country_code || '+233'
+
+        const { data: newUser, error: insertError } = await adminSupabase
+          .from('users')
+          .insert({
+            id: googleUser.id,
+            email: googleUser.email!,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: phoneNumber,
+            country_code: countryCode,
+            profile_picture: userMetadata.avatar_url || userMetadata.picture || null,
+            is_email_verified: googleUser.email_confirmed_at ? true : false,
+            is_phone_verified: googleUser.phone_confirmed_at ? true : false,
+            role: 'customer',
+            google_id: userMetadata.sub || userMetadata.provider_id || googleUser.id,
+            preferences: {
+              language: 'en',
+              currency: 'GHS',
+            },
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          // Check if user was created concurrently
+          if (insertError.code === '23505') {
+            const { data: existingUserData } = await adminSupabase
+              .from('users')
+              .select('*')
+              .eq('id', googleUser.id)
+              .maybeSingle()
+
+            if (existingUserData) {
+              userData = existingUserData
+            } else {
+              return {
+                success: false,
+                message: 'Failed to create user profile',
+                errors: [sanitizeDatabaseError(insertError)],
+              }
+            }
+          } else {
+            return {
+              success: false,
+              message: 'Failed to create user profile',
+              errors: [sanitizeDatabaseError(insertError)],
+            }
+          }
+        } else {
+          userData = newUser
+
+          // Create initial user preferences
+          await adminSupabase
+            .from('user_preferences')
+            .insert({
+              user_id: googleUser.id,
+              language: 'en',
+              currency: 'GHS',
+            }).then(({ error: prefError }) => {
+              if (prefError && prefError.code !== '23505') {
+                console.warn('⚠️ Failed to create user preferences (non-fatal):', prefError.message)
+              }
+            })
+        }
+      } else {
+        // Existing user - update profile if needed
+        const updateData: any = {
+          updated_at: new Date().toISOString(),
+        }
+
+        if (userMetadata.avatar_url || userMetadata.picture) {
+          updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture
+        }
+
+        if (googleUser.email_confirmed_at) {
+          updateData.is_email_verified = true
+        }
+
+        const { data: updatedUser, error: updateError } = await adminSupabase
+          .from('users')
+          .update(updateData)
+          .eq('id', googleUser.id)
+          .select()
+          .single()
+
+        if (updateError) {
+          console.warn('⚠️ Failed to update user profile (non-fatal):', updateError.message)
+          userData = existingUser
+        } else {
+          userData = updatedUser || existingUser
+        }
+      }
+
+      // Get user preferences
+      const { data: preferences } = await adminSupabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', userData.id)
+        .maybeSingle()
+
+      // Create preferences if they don't exist
+      if (!preferences) {
+        await adminSupabase
+          .from('user_preferences')
+          .insert({
+            user_id: userData.id,
+            language: 'en',
+            currency: 'GHS',
+          })
+      }
+
+      return {
+        success: true,
+        message: 'Signed in with Google successfully',
+        user: {
+          id: userData.id,
+          email: userData.email,
+          firstName: userData.first_name,
+          lastName: userData.last_name,
+          phoneNumber: userData.phone_number,
+          countryCode: userData.country_code,
+          profilePicture: userData.profile_picture,
+          isEmailVerified: userData.is_email_verified,
+          isPhoneVerified: userData.is_phone_verified,
+          role: userData.role,
+          preferences: preferences || {
+            language: 'en',
+            currency: 'GHS',
+          },
+          createdAt: userData.created_at,
+          updatedAt: userData.updated_at,
+        },
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+      }
+    } catch (error) {
+      console.error('Process Google user error:', error)
+      return {
+        success: false,
+        message: 'Failed to process user profile',
+        errors: ['Something went wrong while creating/updating user profile'],
+      }
+    }
+  }
+
+  /**
+   * Handle OAuth session from frontend (for client-side OAuth flow)
    * When OAuth is initiated client-side, the frontend exchanges the code for a session
    * and sends the session to this endpoint to create/update user profile
-   * 
-   * Architecture:
-   * 1. Frontend initiates OAuth client-side → stores PKCE code verifier in browser
-   * 2. User authenticates with Google → Google redirects to frontend callback
-   * 3. Frontend exchanges code: supabase.auth.exchangeCodeForSession(code) → gets session
-   * 4. Frontend sends session to this endpoint → backend creates/updates user profile
-   * 5. Frontend stores session in browser → uses it for subsequent API calls
-   * 6. Backend verifies sessions using authenticateToken middleware (no changes needed)
    */
   async handleGoogleCallbackSession(session: any): Promise<AuthResponse> {
     try {

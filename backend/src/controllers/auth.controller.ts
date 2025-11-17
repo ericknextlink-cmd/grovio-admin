@@ -130,50 +130,24 @@ export class AuthController {
   }
 
   /**
-   * Handle Google OAuth callback (server-side flow - deprecated)
-   * NOTE: This won't work with PKCE because code verifier is stored client-side
-   * Use client-side OAuth instead (frontend calls supabase.auth.signInWithOAuth directly)
+   * Handle Google OAuth callback (server-side SSR flow with PKCE)
+   * Exchanges authorization code for session using PKCE code verifier from cookies
    */
   googleCallback = async (req: Request, res: Response): Promise<void> => {
     try {
       const code = req.query.code as string
       const error = req.query.error as string
       const errorDescription = req.query.error_description as string
-      
-      // Get redirectTo from cookie (set during OAuth initiation)
-      // Fallback to /dashboard if cookie is not found
-      let redirectTo = '/dashboard'
-      const cookieName = 'grovio_oauth_redirect'
-      const redirectCookie = req.cookies?.[cookieName]
-      
-      if (redirectCookie) {
-        try {
-          const decoded = Buffer.from(redirectCookie, 'base64url').toString('utf8')
-          const parsed = JSON.parse(decoded)
-          if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
-            redirectTo = parsed.redirectTo
-          }
-          // Clear the cookie after reading it
-          res.clearCookie(cookieName, { path: '/' })
-        } catch (err) {
-          console.warn('Failed to decode redirect cookie:', err)
-          // Clear invalid cookie
-          res.clearCookie(cookieName, { path: '/' })
-        }
-      }
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
+      const frontendOrigin = new URL(frontendUrl).origin
 
-      if (error) {
-        console.error('Google OAuth error:', error, errorDescription)
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
-        const frontendOrigin = new URL(frontendUrl).origin
-
-        // Send error response via postMessage for popup flow
-        const buildErrorResponse = (errorData: { error: string; errorDescription?: string }) => `
+      // Helper to build HTML response for popup flow
+      const buildResponseHTML = (payload: any, success: boolean) => `
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Authentication Error</title>
+    <title>${success ? 'Authentication Success' : 'Authentication Error'}</title>
     <style>
       body {
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -190,14 +164,10 @@ export class AuthController {
     </style>
   </head>
   <body>
-    <p>Authentication failed. Closing window...</p>
+    <p>${success ? 'Authentication successful. Closing window...' : 'Authentication failed. Closing window...'}</p>
     <script>
       (function () {
-        const payload = {
-          success: false,
-          error: ${JSON.stringify(error)},
-          errorDescription: ${JSON.stringify(errorDescription || 'OAuth callback with invalid state')}
-        };
+        const payload = ${JSON.stringify(payload)};
         const targetOrigin = ${JSON.stringify(frontendOrigin)};
 
         function notifyParent() {
@@ -206,7 +176,7 @@ export class AuthController {
               window.opener.postMessage(
                 {
                   type: 'grovio:google-auth',
-                  success: false,
+                  success: ${success},
                   data: payload
                 },
                 targetOrigin
@@ -228,139 +198,82 @@ export class AuthController {
 
         // Fallback redirect
         setTimeout(() => {
-          window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=${encodeURIComponent(error)}`)});
+          window.location.replace(${JSON.stringify(
+            success 
+              ? `${frontendUrl}${payload.redirectTo || '/dashboard'}`
+              : `${frontendUrl}/login?error=${encodeURIComponent(payload.error || 'unknown_error')}`
+          )});
         }, 500);
       })();
     </script>
   </body>
 </html>`
 
+      // Handle OAuth errors
+      if (error) {
+        console.error('❌ Google OAuth error:', error, errorDescription)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
-        res.status(400).send(buildErrorResponse({ error, errorDescription }))
+        res.status(400).send(buildResponseHTML({
+          error,
+          errorDescription: errorDescription || 'OAuth callback with invalid state'
+        }, false))
         return
       }
 
+      // Handle missing authorization code
       if (!code) {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
-        const frontendOrigin = new URL(frontendUrl).origin
-        
-        const buildFallbackHandler = () => `
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Processing Authentication...</title>
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0;
-        padding: 32px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 16px;
-        color: #0f172a;
-        background: #f8fafc;
-      }
-    </style>
-  </head>
-  <body>
-    <p>Processing authentication...</p>
-    <script>
-      (function () {
-        // Extract tokens from hash fragment (implicit flow)
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        const expiresAt = params.get('expires_at');
-        
-        const targetOrigin = ${JSON.stringify(frontendOrigin)};
-        
-        if (accessToken && refreshToken) {
-          // Send tokens to frontend (implicit flow)
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(
-              {
-                type: 'grovio:google-auth',
-                success: true,
-                data: {
-                  accessToken: accessToken,
-                  refreshToken: refreshToken,
-                  expiresAt: expiresAt,
-                  providerToken: params.get('provider_token'),
-                  providerRefreshToken: params.get('provider_refresh_token'),
-                }
-              },
-              targetOrigin
-            );
-          }
-          
-          try {
-            window.close();
-          } catch (err) {
-            setTimeout(() => {
-              window.location.replace(${JSON.stringify(`${frontendUrl}/login?success=true`)});
-            }, 500);
-          }
-        } else {
-          // No tokens found - missing authorization code
-          const payload = {
-            success: false,
-            error: 'invalid_request',
-            errorDescription: 'Missing authorization code. Please ensure PKCE flow is enabled and configured correctly.'
-          };
-          
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(
-              {
-                type: 'grovio:google-auth',
-                success: false,
-                data: payload
-              },
-              targetOrigin
-            );
-          }
-          
-          try {
-            window.close();
-          } catch (err) {
-            setTimeout(() => {
-              window.location.replace(${JSON.stringify(`${frontendUrl}/login?error=missing_code`)});
-            }, 500);
-          }
-        }
-      })();
-    </script>
-  </body>
-</html>`
-
+        console.error('❌ Missing authorization code')
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
-        res.status(200).send(buildFallbackHandler())
+        res.status(400).send(buildResponseHTML({
+          error: 'invalid_request',
+          errorDescription: 'Missing authorization code'
+        }, false))
         return
       }
 
-      // Server-side callback handler - this won't work with PKCE
-      // because the code verifier is stored client-side
-      // This endpoint is kept for backward compatibility but should not be used
-      console.warn('⚠️ Server-side OAuth callback used - PKCE will fail')
-      console.warn('⚠️ Recommend using client-side OAuth instead')
-      
-      // Return error response
-      res.status(400).json({
-        success: false,
-        message: 'Server-side OAuth callback is not supported with PKCE',
-        errors: ['Please use client-side OAuth. Frontend should call supabase.auth.signInWithOAuth() directly.']
-      } as ApiResponse)
+      // Exchange code for session (server-side SSR flow with PKCE)
+      console.log('🔄 Processing Google OAuth callback with code exchange...')
+      const result = await this.authService.handleGoogleCallback(code, req, res)
+
+      // Clear redirect cookie if it exists
+      const cookieName = 'grovio_oauth_redirect'
+      if (req.cookies?.[cookieName]) {
+        res.clearCookie(cookieName, { path: '/' })
+      }
+
+      if (result.success && result.session) {
+        console.log('✅ OAuth callback successful, returning session to frontend')
+        
+        // Return success response with session data for popup flow
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
+        res.status(200).send(buildResponseHTML({
+          session: result.session,
+          user: result.user,
+          redirectTo: result.redirectTo || '/dashboard'
+        }, true))
+      } else {
+        console.error('❌ OAuth callback failed:', result.errors)
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
+        res.status(400).send(buildResponseHTML({
+          error: 'authentication_failed',
+          errorDescription: result.message || 'Failed to process OAuth callback',
+          errors: result.errors
+        }, false))
+      }
     } catch (error) {
-      console.error('Google callback error:', error)
+      console.error('❌ Google callback error:', error)
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
       res.redirect(`${frontendUrl}/login?error=server_error`)
     }

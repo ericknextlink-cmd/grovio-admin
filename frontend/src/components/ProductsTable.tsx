@@ -207,7 +207,7 @@ export default function ProductsTable({
                 <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center space-x-3">
-                      <div className="flex-shrink-0 w-12 h-12">
+                      <div className="shrink-0 w-12 h-12">
                         <Image
                           className="w-12 h-12 rounded-lg object-cover"
                           src={product.images[0] || '/placeholder-image.png'}

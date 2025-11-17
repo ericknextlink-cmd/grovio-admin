@@ -123,11 +123,16 @@ The server will start on `http://localhost:5000`
 ### Authentication
 - **POST** `/api/auth/signup` - User registration
 - **POST** `/api/auth/signin` - User login
-- **POST** `/api/auth/google` - Google OAuth
+- **GET** `/api/auth/google` - Initiate Google OAuth (SSR with PKCE)
+- **GET** `/api/auth/google/callback` - Google OAuth callback (automatic)
+- **POST** `/api/auth/google/session` - Process session (client-side flow)
+- **POST** `/api/auth/google` - Legacy ID token method
 - **POST** `/api/auth/signout` - User logout
 - **GET** `/api/auth/me` - Get current user
 - **PUT** `/api/auth/me` - Update user profile
 - **POST** `/api/auth/refresh` - Refresh access token
+
+**See [`GOOGLE_OAUTH_INTEGRATION.md`](./GOOGLE_OAUTH_INTEGRATION.md) for complete Google OAuth documentation.**
 
 ## 🔐 Authentication Flow
 
@@ -152,14 +157,45 @@ POST /api/auth/signin
 }
 ```
 
-### Google OAuth
+### Google OAuth (SSR with PKCE)
+
+**Quick Start:** See [`GOOGLE_OAUTH_QUICKSTART.md`](./GOOGLE_OAUTH_QUICKSTART.md) for integration guide.
+
+**Full Documentation:** See [`GOOGLE_OAUTH_INTEGRATION.md`](./GOOGLE_OAUTH_INTEGRATION.md) for complete architecture and API reference.
+
+The backend uses **Server-Side Rendering (SSR) OAuth flow with PKCE** for Google authentication:
+
+1. **Initiate OAuth:** `GET /api/auth/google?redirectTo=/dashboard`
+   - Returns OAuth URL for frontend to open in popup
+   - Stores PKCE code verifier in HttpOnly cookie
+
+2. **OAuth Callback:** `GET /api/auth/google/callback?code=...`
+   - Handled automatically by backend
+   - Exchanges code for session using PKCE
+   - Creates/updates user profile
+   - Returns session to frontend via postMessage
+
+**Frontend Flow:**
 ```javascript
-POST /api/auth/google
-{
-  "idToken": "google_id_token",
-  "nonce": "optional_nonce"
-}
+// 1. Get OAuth URL
+const response = await fetch('/api/auth/google?redirectTo=/dashboard', {
+  credentials: 'include' // Important for cookies
+})
+const { url } = await response.json()
+
+// 2. Open popup
+const popup = window.open(url, 'Google Auth', 'width=500,height=600')
+
+// 3. Listen for postMessage
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'grovio:google-auth' && event.data.success) {
+    const { session, user } = event.data.data
+    // Store session and redirect
+  }
+})
 ```
+
+For complete frontend integration examples, see the documentation files above.
 
 ### Protected Routes
 Add `Authorization: Bearer <token>` header to access protected routes.

@@ -962,23 +962,24 @@ Format as JSON with this structure:
           }
         } else {
           analysisData = {
-          recommendedAllocation: {
-            essentials: budget * 0.4,
-            proteins: budget * 0.3,
-            vegetables: budget * 0.2,
-            other: budget * 0.1,
-          },
-          estimatedMeals: Math.floor(budget / (costPerMeal * familySize)),
-          costPerMeal,
-          suggestions: [
-            'Prioritize staples like rice, flour, and cooking oil',
-            'Buy proteins in bulk when on sale',
-            'Include seasonal vegetables for freshness',
-          ],
-          warnings: budget < 50 * familySize * (daysCount / 7) ? ['Budget may be tight for this duration'] : [],
-          budgetAdequacy: budget >= 100 * familySize ? 'good' : 'tight',
+            recommendedAllocation: {
+              essentials: budget * 0.4,
+              proteins: budget * 0.3,
+              vegetables: budget * 0.2,
+              other: budget * 0.1,
+            },
+            estimatedMeals: Math.floor(budget / (costPerMeal * familySize)),
+            costPerMeal,
+            suggestions: [
+              'Prioritize staples like rice, flour, and cooking oil',
+              'Buy proteins in bulk when on sale',
+              'Include seasonal vegetables for freshness',
+            ],
+            warnings: budget < 50 * familySize * (daysCount / 7) ? ['Budget may be tight for this duration'] : [],
+            budgetAdequacy: budget >= 100 * familySize ? 'good' : 'tight',
+          }
         }
-      } catch {
+      } catch (error) {
         analysisData = {
           estimatedMeals: Math.floor((budget / familySize) / 10),
           costPerMeal,
@@ -1074,7 +1075,8 @@ Format as JSON array:
           }
         } else {
           meals = []
-      } catch {
+        }
+      } catch (error) {
         meals = [
           {
             name: 'Jollof Rice with Chicken',

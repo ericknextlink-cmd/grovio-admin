@@ -474,9 +474,16 @@ class AuthService {
             if (req?.cookies?.[cookieName]) {
                 try {
                     const decoded = Buffer.from(req.cookies[cookieName], 'base64url').toString('utf8');
+                    // Validate the decoded string before parsing
+                    if (!decoded || decoded.length > 500) {
+                        throw new Error('Invalid cookie data length');
+                    }
                     const parsed = JSON.parse(decoded);
-                    if (parsed?.redirectTo && typeof parsed.redirectTo === 'string') {
-                        redirectTo = parsed.redirectTo;
+                    // Validate parsed object structure
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        if (parsed?.redirectTo && typeof parsed.redirectTo === 'string' && parsed.redirectTo.length < 200) {
+                            redirectTo = parsed.redirectTo;
+                        }
                     }
                 }
                 catch (err) {

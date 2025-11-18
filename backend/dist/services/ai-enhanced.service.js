@@ -697,25 +697,42 @@ Format as JSON with this structure:
             let analysisData;
             try {
                 const jsonMatch = content.match(/\{[\s\S]*\}/);
-                analysisData = jsonMatch ? JSON.parse(jsonMatch[0]) : {
-                    recommendedAllocation: {
-                        essentials: budget * 0.4,
-                        proteins: budget * 0.3,
-                        vegetables: budget * 0.2,
-                        other: budget * 0.1,
-                    },
-                    estimatedMeals: Math.floor(budget / (costPerMeal * familySize)),
-                    costPerMeal,
-                    suggestions: [
-                        'Prioritize staples like rice, flour, and cooking oil',
-                        'Buy proteins in bulk when on sale',
-                        'Include seasonal vegetables for freshness',
-                    ],
-                    warnings: budget < 50 * familySize * (daysCount / 7) ? ['Budget may be tight for this duration'] : [],
-                    budgetAdequacy: budget >= 100 * familySize ? 'good' : 'tight',
-                };
+                if (jsonMatch && jsonMatch[0]) {
+                    // Validate JSON string length before parsing
+                    const jsonStr = jsonMatch[0];
+                    if (jsonStr.length > 50000) {
+                        throw new Error('JSON response too large');
+                    }
+                    const parsed = JSON.parse(jsonStr);
+                    // Validate parsed object structure
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        analysisData = parsed;
+                    }
+                    else {
+                        throw new Error('Invalid JSON structure');
+                    }
+                }
+                else {
+                    analysisData = {
+                        recommendedAllocation: {
+                            essentials: budget * 0.4,
+                            proteins: budget * 0.3,
+                            vegetables: budget * 0.2,
+                            other: budget * 0.1,
+                        },
+                        estimatedMeals: Math.floor(budget / (costPerMeal * familySize)),
+                        costPerMeal,
+                        suggestions: [
+                            'Prioritize staples like rice, flour, and cooking oil',
+                            'Buy proteins in bulk when on sale',
+                            'Include seasonal vegetables for freshness',
+                        ],
+                        warnings: budget < 50 * familySize * (daysCount / 7) ? ['Budget may be tight for this duration'] : [],
+                        budgetAdequacy: budget >= 100 * familySize ? 'good' : 'tight',
+                    };
+                }
             }
-            catch {
+            catch (error) {
                 analysisData = {
                     estimatedMeals: Math.floor((budget / familySize) / 10),
                     costPerMeal,
@@ -780,9 +797,26 @@ Format as JSON array:
             let meals;
             try {
                 const jsonMatch = content.match(/\[[\s\S]*\]/);
-                meals = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+                if (jsonMatch && jsonMatch[0]) {
+                    // Validate JSON string length before parsing
+                    const jsonStr = jsonMatch[0];
+                    if (jsonStr.length > 50000) {
+                        throw new Error('JSON response too large');
+                    }
+                    const parsed = JSON.parse(jsonStr);
+                    // Validate parsed object structure - should be an array
+                    if (Array.isArray(parsed)) {
+                        meals = parsed;
+                    }
+                    else {
+                        throw new Error('Invalid JSON structure - expected array');
+                    }
+                }
+                else {
+                    meals = [];
+                }
             }
-            catch {
+            catch (error) {
                 meals = [
                     {
                         name: 'Jollof Rice with Chicken',

@@ -26,6 +26,59 @@ class UploadService {
         }
         return this.bucketMap.products;
     }
+    /**
+     * Validate image buffer by checking file signatures (magic numbers)
+     */
+    async validateImageBuffer(buffer) {
+        if (!buffer || buffer.length < 8) {
+            throw new Error('Invalid image: buffer too small');
+        }
+        const signatures = {
+            // JPEG: FF D8 FF
+            jpeg: [0xFF, 0xD8, 0xFF],
+            // PNG: 89 50 4E 47 0D 0A 1A 0A
+            png: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+            // WebP: RIFF....WEBP
+            webp: [0x52, 0x49, 0x46, 0x46],
+            // AVIF: ftyp...avif
+            avif: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70],
+            // GIF: GIF87a or GIF89a
+            gif87a: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61],
+            gif89a: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61],
+        };
+        const header = Array.from(buffer.slice(0, 12));
+        // Check JPEG
+        if (signatures.jpeg.every((byte, i) => header[i] === byte)) {
+            return;
+        }
+        // Check PNG
+        if (signatures.png.every((byte, i) => header[i] === byte)) {
+            return;
+        }
+        // Check WebP
+        if (signatures.webp.every((byte, i) => header[i] === byte) &&
+            buffer.toString('ascii', 8, 12) === 'WEBP') {
+            return;
+        }
+        // Check AVIF (simplified check)
+        const bufferStr = buffer.toString('ascii', 4, 12);
+        if (bufferStr.includes('ftyp') && bufferStr.includes('avif')) {
+            return;
+        }
+        // Check GIF
+        if (signatures.gif87a.every((byte, i) => header[i] === byte) ||
+            signatures.gif89a.every((byte, i) => header[i] === byte)) {
+            return;
+        }
+        // If none match, try to validate with sharp (fallback)
+        try {
+            await (0, sharp_1.default)(buffer).metadata();
+            return;
+        }
+        catch {
+            throw new Error('Invalid image: file signature verification failed');
+        }
+    }
     getFormatInfo(contentType) {
         switch (contentType) {
             case 'image/png':
@@ -79,7 +132,23 @@ class UploadService {
                 const matches = file.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
                 if (matches && matches.length === 3) {
                     contentType = matches[1];
+                    // Validate content type is an image
+                    if (!contentType.startsWith('image/')) {
+                        return {
+                            success: false,
+                            message: 'Invalid content type: only images are allowed'
+                        };
+                    }
                     imageBuffer = Buffer.from(matches[2], 'base64');
+                    // Validate buffer size (10MB max)
+                    if (imageBuffer.length > 10 * 1024 * 1024) {
+                        return {
+                            success: false,
+                            message: 'Image file too large (max 10MB)'
+                        };
+                    }
+                    // Verify it's actually a valid image by checking file signatures
+                    await this.validateImageBuffer(imageBuffer);
                 }
                 else {
                     return {
@@ -90,6 +159,15 @@ class UploadService {
             }
             else {
                 imageBuffer = file;
+                // Validate buffer size (10MB max)
+                if (imageBuffer.length > 10 * 1024 * 1024) {
+                    return {
+                        success: false,
+                        message: 'Image file too large (max 10MB)'
+                    };
+                }
+                // Verify it's actually a valid image by checking file signatures
+                await this.validateImageBuffer(imageBuffer);
             }
             const formatInfo = this.getFormatInfo(contentType);
             const transformer = (0, sharp_1.default)(imageBuffer).resize(1200, 1200, { fit: 'inside', withoutEnlargement: true });

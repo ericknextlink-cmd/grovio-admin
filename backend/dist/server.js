@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Load environment variables first
 require("./config/register-env");
 const express_1 = __importDefault(require("express"));
-const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
@@ -86,13 +85,27 @@ if (process.env.NODE_ENV !== 'production') {
 // Also allow Vercel preview URLs (always, not just in non-production)
 // This covers production, staging, and preview deployments
 allowedOrigins.push(/^https:\/\/.*\.vercel\.app$/);
-app.use((0, cors_1.default)({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, Postman, etc.)
-        if (!origin) {
-            return callback(null, true);
+// Custom CORS middleware that can access request path
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const isHealthCheck = req.path?.startsWith('/api/health') || false;
+    const isWebhook = req.path?.startsWith('/api/webhook') || false;
+    // In production, reject no-origin requests unless they're health checks or webhooks
+    if (!origin && process.env.NODE_ENV === 'production') {
+        if (!isHealthCheck && !isWebhook) {
+            return res.status(403).json({
+                success: false,
+                message: 'CORS: Origin header is required'
+            });
         }
-        // Check if origin is in allowed list
+        // For webhooks/health checks without origin, allow but don't set CORS headers
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        return next();
+    }
+    // Check if origin is in allowed list
+    if (origin) {
         const isAllowed = allowedOrigins.some(allowedOrigin => {
             if (typeof allowedOrigin === 'string') {
                 return origin === allowedOrigin;
@@ -103,29 +116,54 @@ app.use((0, cors_1.default)({
             return false;
         });
         if (isAllowed) {
-            callback(null, true);
+            res.header('Access-Control-Allow-Origin', origin);
+            res.header('Access-Control-Allow-Credentials', 'true');
+            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.header('Access-Control-Expose-Headers', 'Content-Type');
         }
         else {
             console.warn(`CORS blocked origin: ${origin}. Allowed origins:`, allowedOrigins);
-            callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
+            return res.status(403).json({
+                success: false,
+                message: `Not allowed by CORS. Origin: ${origin}`
+            });
         }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    exposedHeaders: ['Content-Type'],
-}));
+    }
+    else {
+        // In development, allow no-origin for testing tools
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    }
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(204).send();
+    }
+    next();
+});
 // Cookie parser (must come before routes)
 app.use((0, cookie_parser_1.default)());
-// Rate limiting
-const limiter = (0, express_rate_limit_1.default)({
+// Rate limiting - stricter for general API
+const generalLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 60, // limit each IP to 60 requests per windowMs (reduced from 100)
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
-app.use('/api/', limiter);
+// Webhook rate limiting - more permissive for payment provider callbacks
+const webhookLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 200, // Allow more requests for webhooks (payment providers may retry)
+    message: 'Too many webhook requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+// Apply webhook rate limiting to webhook routes
+app.use('/api/webhook', webhookLimiter);
+// Apply general rate limiting to all other API routes
+app.use('/api/', generalLimiter);
 // Body parsing middleware
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));

@@ -85,7 +85,7 @@ export class AuthController {
         // For navigation requests: redirect directly to Google OAuth
         // This ensures cookies are set during navigation, making them available on callback
         console.log('Redirecting directly to Google OAuth (navigation request)')
-        
+
         // Set redirect cookie
         if (result.cookieName && result.cookieValue) {
           const isProduction = process.env.NODE_ENV === 'production'
@@ -97,13 +97,13 @@ export class AuthController {
             path: '/',
           })
         }
-        
+
         // Redirect directly to Google OAuth URL
         res.redirect(result.url)
       } else {
         // For AJAX requests: return JSON with URL
         console.log('Returning OAuth URL (AJAX request)')
-        
+
         if (result.cookieName && result.cookieValue) {
           const isProduction = process.env.NODE_ENV === 'production'
           res.cookie(result.cookieName, result.cookieValue, {
@@ -114,7 +114,7 @@ export class AuthController {
             path: '/',
           })
         }
-        
+
         const { cookieName, cookieValue, ...responseData } = result
         res.status(200).json(responseData)
       }
@@ -232,10 +232,10 @@ export class AuthController {
         // Fallback redirect
         setTimeout(() => {
           window.location.replace(${JSON.stringify(
-            success 
-              ? `${frontendUrl}${payload.redirectTo || '/dashboard'}`
-              : `${frontendUrl}/login?error=${encodeURIComponent(payload.error || 'unknown_error')}`
-          )});
+        success
+          ? `${frontendUrl}${payload.redirectTo || '/dashboard'}`
+          : `${frontendUrl}/login?error=${encodeURIComponent(payload.error || 'unknown_error')}`
+      )});
         }, 500);
       })();
     </script>
@@ -282,7 +282,7 @@ export class AuthController {
 
       if (result.success && result.session) {
         console.log('OAuth callback successful, returning session to frontend')
-        
+
         // Return success response with session data for popup flow
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')

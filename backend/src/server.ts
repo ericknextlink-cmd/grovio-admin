@@ -95,20 +95,20 @@ app.use((req, res, next) => {
   const isHealthCheck = req.path?.startsWith('/api/health') || false
   const isWebhook = req.path?.startsWith('/api/webhook') || false
 
-  // In production, reject no-origin requests unless they're health checks or webhooks
-  if (!origin && process.env.NODE_ENV === 'production') {
-    if (!isHealthCheck && !isWebhook) {
-      return res.status(403).json({
-        success: false,
-        message: 'CORS: Origin header is required'
-      })
-    }
-    // For webhooks/health checks without origin, allow but don't set CORS headers
-    res.header('Access-Control-Allow-Origin', '*')
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    return next()
-  }
+  // // In production, reject no-origin requests unless they're health checks or webhooks
+  // if (!origin && process.env.NODE_ENV === 'production') {
+  //   if (!isHealthCheck && !isWebhook) {
+  //     return res.status(403).json({
+  //       success: false,
+  //       message: 'CORS: Origin header is required'
+  //     })
+  //   }
+  //   // For webhooks/health checks without origin, allow but don't set CORS headers
+  //   res.header('Access-Control-Allow-Origin', '*')
+  //   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  //   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  //   return next()
+  // }
 
   // Check if origin is in allowed list
   if (origin) {
@@ -242,10 +242,11 @@ const startServer = async () => {
   try {
     // Get the desired port from environment or default to 3000
     const desiredPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000
-    
+
     // Find an available port starting from the desired port
     const PORT = await findAvailablePort(desiredPort)
-    
+    // console.log(`PORT: ${PORT}`)
+
     app.listen(PORT, () => {
       console.log(` Grovio Backend Server running on port ${PORT}`)
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)

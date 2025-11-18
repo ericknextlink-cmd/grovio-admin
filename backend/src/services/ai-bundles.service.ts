@@ -137,7 +137,22 @@ Return ONLY the JSON array, no additional text.`
       let bundlesData
       try {
         const jsonMatch = content.match(/\[[\s\S]*\]/)
-        bundlesData = jsonMatch ? JSON.parse(jsonMatch[0]) : []
+        if (jsonMatch && jsonMatch[0]) {
+          // Validate JSON string length before parsing
+          const jsonStr = jsonMatch[0]
+          if (jsonStr.length > 50000) {
+            throw new Error('JSON response too large')
+          }
+          const parsed = JSON.parse(jsonStr)
+          // Validate parsed object structure - should be an array
+          if (Array.isArray(parsed)) {
+            bundlesData = parsed
+          } else {
+            throw new Error('Invalid JSON structure - expected array')
+          }
+        } else {
+          bundlesData = []
+        }
       } catch {
         console.warn('Failed to parse AI response, using deterministic method')
         return await this.generateDeterministicBundles(count)

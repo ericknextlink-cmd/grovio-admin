@@ -18,14 +18,14 @@ A sophisticated, responsive admin dashboard for grocery store management with ad
 - **👁️ Image Previews**: See all uploaded images with remove option
 - **✨ Auto-Extension**: Automatically adds `.png` to blob URLs
 
-### 📝 **Comprehensive Product Form**
+### **Comprehensive Product Form**
 - **Basic Info**: Name, brand, description
 - **Categories**: Dropdown with subcategories
 - **Specifications**: Quantity, weight, volume, type, packaging
 - **Stock Management**: In stock toggle, rating, reviews
 - **Validation**: Required fields and error handling
 
-### 🔄 **CRUD Operations**
+### **CRUD Operations**
 - **Create**: Add new products with full details
 - **Read**: View all products in organized table
 - **Update**: Edit existing products
@@ -36,7 +36,7 @@ A sophisticated, responsive admin dashboard for grocery store management with ad
 - **Real-time Updates**: Changes reflect immediately
 - **Data Persistence**: Products persist in memory during session
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 - Node.js 18+ 
@@ -153,7 +153,7 @@ interface GroceryProduct {
 }
 ```
 
-## 🚀 Deployment
+##  Deployment
 
 ### Build for Production
 ```bash

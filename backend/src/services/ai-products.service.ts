@@ -147,7 +147,22 @@ Return a JSON array of products with this exact structure:
         jsonContent = jsonContent.replace(/```\n?/g, '').trim()
       }
 
-      const products: Partial<AIProduct>[] = JSON.parse(jsonContent)
+      // Validate JSON string before parsing
+      if (!jsonContent || jsonContent.length > 100000) {
+        throw new Error('Invalid or too large JSON content')
+      }
+
+      let products: Partial<AIProduct>[]
+      try {
+        const parsed = JSON.parse(jsonContent)
+        // Validate parsed object structure - should be an array
+        if (!Array.isArray(parsed)) {
+          throw new Error('Invalid JSON structure - expected array')
+        }
+        products = parsed
+      } catch (parseError) {
+        throw new Error(`Failed to parse JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`)
+      }
 
       // Transform and save products
       const aiProducts: AIProduct[] = products.map((p) => {

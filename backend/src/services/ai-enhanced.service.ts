@@ -947,7 +947,21 @@ Format as JSON with this structure:
       let analysisData
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/)
-        analysisData = jsonMatch ? JSON.parse(jsonMatch[0]) : {
+        if (jsonMatch && jsonMatch[0]) {
+          // Validate JSON string length before parsing
+          const jsonStr = jsonMatch[0]
+          if (jsonStr.length > 50000) {
+            throw new Error('JSON response too large')
+          }
+          const parsed = JSON.parse(jsonStr)
+          // Validate parsed object structure
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            analysisData = parsed
+          } else {
+            throw new Error('Invalid JSON structure')
+          }
+        } else {
+          analysisData = {
           recommendedAllocation: {
             essentials: budget * 0.4,
             proteins: budget * 0.3,
@@ -1045,7 +1059,21 @@ Format as JSON array:
       let meals
       try {
         const jsonMatch = content.match(/\[[\s\S]*\]/)
-        meals = jsonMatch ? JSON.parse(jsonMatch[0]) : []
+        if (jsonMatch && jsonMatch[0]) {
+          // Validate JSON string length before parsing
+          const jsonStr = jsonMatch[0]
+          if (jsonStr.length > 50000) {
+            throw new Error('JSON response too large')
+          }
+          const parsed = JSON.parse(jsonStr)
+          // Validate parsed object structure - should be an array
+          if (Array.isArray(parsed)) {
+            meals = parsed
+          } else {
+            throw new Error('Invalid JSON structure - expected array')
+          }
+        } else {
+          meals = []
       } catch {
         meals = [
           {

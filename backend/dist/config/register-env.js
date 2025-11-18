@@ -15,7 +15,7 @@ const possibleEnvPaths = [
 let envLoaded = false;
 for (const envPath of possibleEnvPaths) {
     if ((0, fs_1.existsSync)(envPath)) {
-        // console.log(`📦 Loading environment variables from: ${envPath}`)
+        // console.log(`Loading environment variables from: ${envPath}`)
         (0, dotenv_1.config)({ path: envPath });
         envLoaded = true;
         break;

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,37 +18,58 @@ export default function AdminSignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const token = getAdminToken() || localStorage.getItem('admin_token')
-      if (!token) return
+  // Check if already authenticated (only once on mount, with delay to prevent rapid redirects)
+  useEffect(() => {
+    let isMounted = true
+    let timeoutId: NodeJS.Timeout | null = null
+    
+    const checkAuth = async () => {
+      // Small delay to prevent rapid redirects
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      if (!isMounted) return
+      
+      try {
+        const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
+        if (!token) return
 
-      // Check if admin token is valid by calling admin profile endpoint
-      const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      })
+        console.log('Signin page: Checking existing auth token')
+        console.log('API_BASE_URL:', API_BASE_URL)
 
-      if (response.ok) {
-        router.push('/admin')
+        // Check if admin token is valid by calling admin profile endpoint
+        const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        })
+
+        console.log('Signin page: Auth check response status:', response.status)
+
+        if (response.ok && isMounted) {
+          const data = await response.json()
+          console.log('Signin page: Auth check response data:', data)
+          if (data.success && data.data) {
+            console.log('Signin page: Already authenticated, redirecting to admin')
+            router.replace('/admin')
+          }
+        }
+      } catch (err) {
+        // Not authenticated, stay on signin page
+        console.error('Signin page: Auth check failed:', err)
       }
-    } catch (err) {
-      // Not authenticated, stay on signin page
-      console.error('Auth check failed:', err)
+    }
+    
+    timeoutId = setTimeout(() => {
+      checkAuth()
+    }, 100)
+    
+    return () => {
+      isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [router])
-
-  // Check if already authenticated
-  useEffect(() => {
-    const token = getAdminToken() || localStorage.getItem('admin_token')
-    if (token) {
-      // Verify token is still valid by checking admin profile
-      checkAuth()
-    }
-  }, [checkAuth])
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,7 +104,7 @@ export default function AdminSignInPage() {
         }
 
         // Redirect to admin dashboard
-        router.push('/admin')
+        router.replace('/admin')
       } else {
         setError(data.message || data.errors?.[0] || 'Sign in failed. Please check your credentials.')
         setLoading(false)

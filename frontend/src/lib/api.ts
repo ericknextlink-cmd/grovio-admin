@@ -20,11 +20,11 @@ const getBackendUrl = () => {
     // In browser, use deployed URL or empty string (relative URLs)
     return process.env.NODE_ENV === 'production' 
       ? 'https://grovio-admin-production.up.railway.app' 
-      : 'http://localhost:3002'
+      : 'http://localhost:5000'
   }
   
   // Server-side fallback
-  return 'http://localhost:3002'
+  return 'http://localhost:5000'
 }
 
 export const API_BASE_URL = getBackendUrl()

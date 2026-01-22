@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { getAdminToken, clearAdminCookies } from '@/lib/cookies'
@@ -12,56 +12,95 @@ interface AdminAuthGuardProps {
 
 export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const router = useRouter()
-  const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  
-  const checkAuth = useCallback(async () => {
-    try {
-      // Use ONLY cookies - never localStorage
-      const token = getAdminToken()
-      
-      if (!token) {
-        router.push('/admin/signin')
-        return
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      })
-      
-      if (!response.ok) {
-        // Clear cookies only
-        clearAdminCookies()
-        router.push('/admin/signin')
-        return
-      }
-      
-      const data = await response.json()
-      
-      if (!data.success || !data.data) {
-        clearAdminCookies()
-        router.push('/admin/signin')
-        return
-      }
-      
-      setIsAuthenticated(true)
-    } catch (error) {
-      console.error('Auth check error:', error)
-      clearAdminCookies()
-      router.push('/admin/signin')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [router])
+  const hasCheckedAuth = useRef(false)
+  const isRedirecting = useRef(false)
   
   useEffect(() => {
+    // Prevent multiple auth checks and redirect loops
+    if (hasCheckedAuth.current || isRedirecting.current) return
+    
+    const checkAuth = async () => {
+      try {
+        hasCheckedAuth.current = true
+        
+        // Check both cookies and localStorage for token
+        const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
+        
+        if (!token) {
+          console.log('No token found, redirecting to signin')
+          isRedirecting.current = true
+          clearAdminCookies()
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('admin_token')
+            localStorage.removeItem('admin_user')
+          }
+          router.replace('/admin/signin')
+          setIsLoading(false)
+          return
+        }
+
+        console.log('Checking auth with token:', token.substring(0, 20) + '...')
+        console.log('API_BASE_URL:', API_BASE_URL)
+
+        const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        })
+        
+        console.log('Auth response status:', response.status)
+        
+        if (!response.ok) {
+          console.log('Auth failed, status:', response.status)
+          isRedirecting.current = true
+          clearAdminCookies()
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('admin_token')
+            localStorage.removeItem('admin_user')
+          }
+          router.replace('/admin/signin')
+          setIsLoading(false)
+          return
+        }
+        
+        const data = await response.json()
+        console.log('Auth response data:', data)
+        
+        if (!data.success || !data.data) {
+          console.log('Auth response invalid:', data)
+          isRedirecting.current = true
+          clearAdminCookies()
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('admin_token')
+            localStorage.removeItem('admin_user')
+          }
+          router.replace('/admin/signin')
+          setIsLoading(false)
+          return
+        }
+        
+        console.log('Auth successful')
+        setIsAuthenticated(true)
+      } catch (error) {
+        console.error('Auth check error:', error)
+        isRedirecting.current = true
+        clearAdminCookies()
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('admin_token')
+          localStorage.removeItem('admin_user')
+        }
+        router.replace('/admin/signin')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
     checkAuth()
-  }, [pathname, checkAuth])
+  }, [router]) // Only run once on mount
   
   if (isLoading) {
     return (

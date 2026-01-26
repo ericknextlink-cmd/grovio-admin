@@ -38,8 +38,9 @@ export class CategoriesController {
   getCategoryById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const categoryId = Array.isArray(id) ? id[0] : id
 
-      const category = await this.categoriesService.getCategoryById(id)
+      const category = await this.categoriesService.getCategoryById(categoryId)
 
       if (!category) {
         res.status(404).json({
@@ -100,9 +101,10 @@ export class CategoriesController {
   updateCategory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const categoryId = Array.isArray(id) ? id[0] : id
       const updates = req.body
 
-      const result = await this.categoriesService.updateCategory(id, updates)
+      const result = await this.categoriesService.updateCategory(categoryId, updates)
 
       if (!result.success) {
         res.status(400).json({
@@ -132,8 +134,9 @@ export class CategoriesController {
   deleteCategory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const categoryId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.categoriesService.deleteCategory(id)
+      const result = await this.categoriesService.deleteCategory(categoryId)
 
       if (!result.success) {
         res.status(400).json({
@@ -162,6 +165,7 @@ export class CategoriesController {
   addSubcategory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const categoryId = Array.isArray(id) ? id[0] : id
       const { subcategory } = req.body
 
       if (!subcategory || typeof subcategory !== 'string') {
@@ -172,7 +176,7 @@ export class CategoriesController {
         return
       }
 
-      const result = await this.categoriesService.addSubcategory(id, subcategory)
+      const result = await this.categoriesService.addSubcategory(categoryId, subcategory)
 
       if (!result.success) {
         res.status(400).json({
@@ -202,6 +206,7 @@ export class CategoriesController {
   removeSubcategory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const categoryId = Array.isArray(id) ? id[0] : id
       const { subcategory } = req.body
 
       if (!subcategory || typeof subcategory !== 'string') {
@@ -212,7 +217,7 @@ export class CategoriesController {
         return
       }
 
-      const result = await this.categoriesService.removeSubcategory(id, subcategory)
+      const result = await this.categoriesService.removeSubcategory(categoryId, subcategory)
 
       if (!result.success) {
         res.status(400).json({

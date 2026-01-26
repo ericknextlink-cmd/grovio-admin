@@ -96,8 +96,9 @@ export class BundlesController {
   getBundleById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { bundleId } = req.params
+      const id = Array.isArray(bundleId) ? bundleId[0] : bundleId
 
-      const result = await this.bundlesService.getBundleById(bundleId)
+      const result = await this.bundlesService.getBundleById(id)
 
       if (result.success) {
         res.json({

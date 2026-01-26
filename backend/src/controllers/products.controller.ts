@@ -59,8 +59,9 @@ export class ProductsController {
   getProductById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const product = await this.productsService.getProductById(id)
+      const product = await this.productsService.getProductById(productId)
 
       if (!product) {
         res.status(404).json({
@@ -121,9 +122,10 @@ export class ProductsController {
   updateProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
       const updates = req.body
 
-      const result = await this.productsService.updateProduct(id, updates)
+      const result = await this.productsService.updateProduct(productId, updates)
 
       if (!result.success) {
         res.status(result.statusCode ?? 400).json({
@@ -153,8 +155,9 @@ export class ProductsController {
   deleteProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.productsService.deleteProduct(id)
+      const result = await this.productsService.deleteProduct(productId)
 
       if (!result.success) {
         res.status(result.statusCode ?? 400).json({
@@ -183,9 +186,10 @@ export class ProductsController {
   updateStock = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
       const { quantity, inStock } = req.body
 
-      const result = await this.productsService.updateStock(id, quantity, inStock)
+      const result = await this.productsService.updateStock(productId, quantity, inStock)
 
       if (!result.success) {
         res.status(result.statusCode ?? 400).json({

@@ -92,8 +92,9 @@ export class AIProductsController {
   getProductById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.aiProductsService.getProductById(id)
+      const result = await this.aiProductsService.getProductById(productId)
 
       if (!result.success || !result.data) {
         res.status(404).json({
@@ -123,9 +124,10 @@ export class AIProductsController {
   updateProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
       const updates = req.body
 
-      const result = await this.aiProductsService.updateProduct(id, updates)
+      const result = await this.aiProductsService.updateProduct(productId, updates)
 
       if (!result.success) {
         res.status(400).json({
@@ -155,8 +157,9 @@ export class AIProductsController {
   deleteProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.aiProductsService.deleteProduct(id)
+      const result = await this.aiProductsService.deleteProduct(productId)
 
       if (!result.success) {
         res.status(400).json({
@@ -185,8 +188,9 @@ export class AIProductsController {
   publishProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.aiProductsService.publishProduct(id)
+      const result = await this.aiProductsService.publishProduct(productId)
 
       if (!result.success) {
         res.status(400).json({
@@ -216,8 +220,9 @@ export class AIProductsController {
   unpublishProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.aiProductsService.unpublishProduct(id)
+      const result = await this.aiProductsService.unpublishProduct(productId)
 
       if (!result.success) {
         res.status(400).json({
@@ -247,8 +252,9 @@ export class AIProductsController {
   archiveProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const productId = Array.isArray(id) ? id[0] : id
 
-      const result = await this.aiProductsService.archiveProduct(id)
+      const result = await this.aiProductsService.archiveProduct(productId)
 
       if (!result.success) {
         res.status(400).json({

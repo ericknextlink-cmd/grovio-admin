@@ -74,7 +74,8 @@ class AIProductsController {
         this.getProductById = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.aiProductsService.getProductById(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.aiProductsService.getProductById(productId);
                 if (!result.success || !result.data) {
                     res.status(404).json({
                         success: false,
@@ -102,8 +103,9 @@ class AIProductsController {
         this.updateProduct = async (req, res) => {
             try {
                 const { id } = req.params;
+                const productId = Array.isArray(id) ? id[0] : id;
                 const updates = req.body;
-                const result = await this.aiProductsService.updateProduct(id, updates);
+                const result = await this.aiProductsService.updateProduct(productId, updates);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -131,7 +133,8 @@ class AIProductsController {
         this.deleteProduct = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.aiProductsService.deleteProduct(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.aiProductsService.deleteProduct(productId);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -158,7 +161,8 @@ class AIProductsController {
         this.publishProduct = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.aiProductsService.publishProduct(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.aiProductsService.publishProduct(productId);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -186,7 +190,8 @@ class AIProductsController {
         this.unpublishProduct = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.aiProductsService.unpublishProduct(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.aiProductsService.unpublishProduct(productId);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -214,7 +219,8 @@ class AIProductsController {
         this.archiveProduct = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.aiProductsService.archiveProduct(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.aiProductsService.archiveProduct(productId);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,

@@ -42,7 +42,8 @@ class ProductsController {
         this.getProductById = async (req, res) => {
             try {
                 const { id } = req.params;
-                const product = await this.productsService.getProductById(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const product = await this.productsService.getProductById(productId);
                 if (!product) {
                     res.status(404).json({
                         success: false,
@@ -98,8 +99,9 @@ class ProductsController {
         this.updateProduct = async (req, res) => {
             try {
                 const { id } = req.params;
+                const productId = Array.isArray(id) ? id[0] : id;
                 const updates = req.body;
-                const result = await this.productsService.updateProduct(id, updates);
+                const result = await this.productsService.updateProduct(productId, updates);
                 if (!result.success) {
                     res.status(result.statusCode ?? 400).json({
                         success: false,
@@ -127,7 +129,8 @@ class ProductsController {
         this.deleteProduct = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.productsService.deleteProduct(id);
+                const productId = Array.isArray(id) ? id[0] : id;
+                const result = await this.productsService.deleteProduct(productId);
                 if (!result.success) {
                     res.status(result.statusCode ?? 400).json({
                         success: false,
@@ -154,8 +157,9 @@ class ProductsController {
         this.updateStock = async (req, res) => {
             try {
                 const { id } = req.params;
+                const productId = Array.isArray(id) ? id[0] : id;
                 const { quantity, inStock } = req.body;
-                const result = await this.productsService.updateStock(id, quantity, inStock);
+                const result = await this.productsService.updateStock(productId, quantity, inStock);
                 if (!result.success) {
                     res.status(result.statusCode ?? 400).json({
                         success: false,

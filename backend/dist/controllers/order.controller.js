@@ -236,6 +236,7 @@ class OrderController {
             try {
                 const userId = req.user?.id;
                 const { id } = req.params;
+                const orderId = Array.isArray(id) ? id[0] : id;
                 if (!userId) {
                     res.status(401).json({
                         success: false,
@@ -244,7 +245,7 @@ class OrderController {
                     });
                     return;
                 }
-                const order = await this.orderService.getOrderById(id, userId);
+                const order = await this.orderService.getOrderById(orderId, userId);
                 if (order) {
                     res.json({
                         success: true,
@@ -276,6 +277,7 @@ class OrderController {
             try {
                 const userId = req.user?.id;
                 const { orderNumber } = req.params;
+                const number = Array.isArray(orderNumber) ? orderNumber[0] : orderNumber;
                 if (!userId) {
                     res.status(401).json({
                         success: false,
@@ -284,7 +286,7 @@ class OrderController {
                     });
                     return;
                 }
-                const order = await this.orderService.getOrderByOrderNumber(orderNumber, userId);
+                const order = await this.orderService.getOrderByOrderNumber(number, userId);
                 if (order) {
                     res.json({
                         success: true,
@@ -316,6 +318,7 @@ class OrderController {
             try {
                 const userId = req.user?.id;
                 const { id } = req.params;
+                const orderId = Array.isArray(id) ? id[0] : id;
                 const { reason } = req.body;
                 if (!userId) {
                     res.status(401).json({
@@ -325,7 +328,7 @@ class OrderController {
                     });
                     return;
                 }
-                const result = await this.orderService.cancelOrder(id, userId, reason);
+                const result = await this.orderService.cancelOrder(orderId, userId, reason);
                 if (result.success) {
                     res.json({
                         success: true,
@@ -356,6 +359,7 @@ class OrderController {
             try {
                 const userId = req.user?.id;
                 const { pendingOrderId } = req.params;
+                const id = Array.isArray(pendingOrderId) ? pendingOrderId[0] : pendingOrderId;
                 if (!userId) {
                     res.status(401).json({
                         success: false,
@@ -364,7 +368,7 @@ class OrderController {
                     });
                     return;
                 }
-                const result = await this.orderService.cancelPendingOrder(pendingOrderId, userId);
+                const result = await this.orderService.cancelPendingOrder(id, userId);
                 if (result.success) {
                     res.json({
                         success: true,
@@ -395,6 +399,7 @@ class OrderController {
             try {
                 const userId = req.user?.id;
                 const { pendingOrderId } = req.params;
+                const id = Array.isArray(pendingOrderId) ? pendingOrderId[0] : pendingOrderId;
                 if (!userId) {
                     res.status(401).json({
                         success: false,
@@ -403,7 +408,7 @@ class OrderController {
                     });
                     return;
                 }
-                const pendingOrder = await this.orderService.getPendingOrder(pendingOrderId, userId);
+                const pendingOrder = await this.orderService.getPendingOrder(id, userId);
                 if (pendingOrder) {
                     res.json({
                         success: true,
@@ -434,9 +439,10 @@ class OrderController {
         this.updateOrderStatus = async (req, res) => {
             try {
                 const { id } = req.params;
+                const orderId = Array.isArray(id) ? id[0] : id;
                 const { status, reason } = req.body;
                 const userId = req.user?.id;
-                const result = await this.orderService.updateOrderStatus(id, status, userId, reason);
+                const result = await this.orderService.updateOrderStatus(orderId, status, userId, reason);
                 if (result.success) {
                     res.json({
                         success: true,

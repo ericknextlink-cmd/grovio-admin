@@ -31,7 +31,8 @@ class CategoriesController {
         this.getCategoryById = async (req, res) => {
             try {
                 const { id } = req.params;
-                const category = await this.categoriesService.getCategoryById(id);
+                const categoryId = Array.isArray(id) ? id[0] : id;
+                const category = await this.categoriesService.getCategoryById(categoryId);
                 if (!category) {
                     res.status(404).json({
                         success: false,
@@ -87,8 +88,9 @@ class CategoriesController {
         this.updateCategory = async (req, res) => {
             try {
                 const { id } = req.params;
+                const categoryId = Array.isArray(id) ? id[0] : id;
                 const updates = req.body;
-                const result = await this.categoriesService.updateCategory(id, updates);
+                const result = await this.categoriesService.updateCategory(categoryId, updates);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -116,7 +118,8 @@ class CategoriesController {
         this.deleteCategory = async (req, res) => {
             try {
                 const { id } = req.params;
-                const result = await this.categoriesService.deleteCategory(id);
+                const categoryId = Array.isArray(id) ? id[0] : id;
+                const result = await this.categoriesService.deleteCategory(categoryId);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -143,6 +146,7 @@ class CategoriesController {
         this.addSubcategory = async (req, res) => {
             try {
                 const { id } = req.params;
+                const categoryId = Array.isArray(id) ? id[0] : id;
                 const { subcategory } = req.body;
                 if (!subcategory || typeof subcategory !== 'string') {
                     res.status(400).json({
@@ -151,7 +155,7 @@ class CategoriesController {
                     });
                     return;
                 }
-                const result = await this.categoriesService.addSubcategory(id, subcategory);
+                const result = await this.categoriesService.addSubcategory(categoryId, subcategory);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,
@@ -179,6 +183,7 @@ class CategoriesController {
         this.removeSubcategory = async (req, res) => {
             try {
                 const { id } = req.params;
+                const categoryId = Array.isArray(id) ? id[0] : id;
                 const { subcategory } = req.body;
                 if (!subcategory || typeof subcategory !== 'string') {
                     res.status(400).json({
@@ -187,7 +192,7 @@ class CategoriesController {
                     });
                     return;
                 }
-                const result = await this.categoriesService.removeSubcategory(id, subcategory);
+                const result = await this.categoriesService.removeSubcategory(categoryId, subcategory);
                 if (!result.success) {
                     res.status(400).json({
                         success: false,

@@ -19,7 +19,7 @@ const getBackendUrl = () => {
   if (typeof window !== 'undefined') {
     // In browser, use deployed URL or empty string (relative URLs)
     return process.env.NODE_ENV === 'production' 
-      ? 'https://grovio-admin-production.up.railway.app' 
+      ? 'https://grovio-backend.onrender.com' 
       : 'http://localhost:5000'
   }
   

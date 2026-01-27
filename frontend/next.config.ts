@@ -3,8 +3,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   images: {
-    domains: ["*"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+    ],
     unoptimized: true,
+  },
+  // Handle font loading issues during build
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
   },
 };
 

@@ -126,6 +126,28 @@ const mealSuggestionsValidation = [
         .withMessage('Family size must be between 1 and 20'),
     validation_middleware_1.handleValidationErrors
 ];
+const supplierProductRecommendationsValidation = [
+    (0, express_validator_1.body)('message')
+        .trim()
+        .notEmpty()
+        .withMessage('Message is required')
+        .isLength({ min: 1, max: 2000 })
+        .withMessage('Message must be between 1 and 2000 characters'),
+    (0, express_validator_1.body)('products')
+        .isArray({ min: 1 })
+        .withMessage('Products array is required and must not be empty'),
+    (0, express_validator_1.body)('products.*.name')
+        .trim()
+        .notEmpty()
+        .withMessage('Product name is required'),
+    (0, express_validator_1.body)('products.*.unitPrice')
+        .isFloat({ min: 0 })
+        .withMessage('Product unit price must be a positive number'),
+    (0, express_validator_1.body)('products.*.code')
+        .optional()
+        .trim(),
+    validation_middleware_1.handleValidationErrors
+];
 // Public AI routes (work for both authenticated and anonymous users)
 // Optional auth = better personalization for logged-in users
 router.post('/chat', optionalAuth_middleware_1.optionalAuth, chatValidation, aiController.getChatResponse);
@@ -133,6 +155,7 @@ router.post('/recommendations', optionalAuth_middleware_1.optionalAuth, recommen
 router.get('/search', optionalAuth_middleware_1.optionalAuth, searchValidation, aiController.searchProducts);
 router.post('/budget-analysis', optionalAuth_middleware_1.optionalAuth, budgetAnalysisValidation, aiController.getBudgetAnalysis);
 router.post('/meal-suggestions', optionalAuth_middleware_1.optionalAuth, mealSuggestionsValidation, aiController.getMealSuggestions);
+router.post('/supplier-recommendations', optionalAuth_middleware_1.optionalAuth, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations);
 // Thread management routes (require full authentication)
 router.get('/threads/:threadId', auth_middleware_1.authenticateToken, aiController.getConversationHistory);
 router.get('/threads', auth_middleware_1.authenticateToken, aiController.getUserThreads);

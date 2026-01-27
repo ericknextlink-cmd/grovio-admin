@@ -399,6 +399,61 @@ class AIController {
                 });
             }
         };
+        /**
+         * AI recommendations for supplier products
+         */
+        this.getSupplierProductRecommendations = async (req, res) => {
+            try {
+                const { message, products } = req.body;
+                if (!message || typeof message !== 'string') {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Message is required and must be a string',
+                        errors: ['Invalid message format']
+                    });
+                    return;
+                }
+                if (!products || !Array.isArray(products) || products.length === 0) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Products array is required and must not be empty',
+                        errors: ['Invalid products data']
+                    });
+                    return;
+                }
+                const supplierProducts = products.map((p) => ({
+                    code: p.code || '',
+                    name: p.name,
+                    unitPrice: p.unitPrice
+                }));
+                const userId = req.user?.id || 'admin';
+                const result = await this.aiService.chatWithSupplierProducts(message, supplierProducts, userId);
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'AI recommendations generated successfully',
+                        data: {
+                            response: result.message,
+                        },
+                    });
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: result.error || 'Failed to generate recommendations',
+                        errors: [result.error || 'AI service error'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Supplier product recommendations error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Something went wrong'],
+                });
+            }
+        };
         this.aiService = new ai_enhanced_service_1.AIEnhancedService();
     }
 }

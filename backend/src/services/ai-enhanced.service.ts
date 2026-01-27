@@ -467,6 +467,226 @@ export class AIEnhancedService {
     return contextSections.join('\n')
   }
 
+  private buildSupplierProductContext(
+    supplierProducts: Array<{ code: string; name: string; unitPrice: number }>,
+    query?: string,
+    maxProducts: number = 500
+  ): string {
+    if (!supplierProducts || supplierProducts.length === 0) {
+      return 'No supplier products available.'
+    }
+
+    let productsToInclude = [...supplierProducts]
+    const totalProducts = supplierProducts.length
+
+    if (query && query.trim()) {
+      const queryLower = query.toLowerCase()
+      const queryKeywords = queryLower.split(/\s+/).filter(k => k.length > 2)
+      
+      if (queryKeywords.length > 0) {
+        productsToInclude = supplierProducts
+          .map(p => {
+            const nameLower = p.name.toLowerCase()
+            const codeLower = (p.code || '').toLowerCase()
+            let score = 0
+            
+            queryKeywords.forEach(keyword => {
+              if (nameLower.includes(keyword)) score += 2
+              if (codeLower.includes(keyword)) score += 1
+            })
+            
+            return { product: p, score }
+          })
+          .filter(item => item.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, maxProducts)
+          .map(item => item.product)
+      }
+    }
+
+    if (productsToInclude.length > maxProducts) {
+      productsToInclude = productsToInclude.slice(0, maxProducts)
+    }
+
+    const contextSections: string[] = []
+    contextSections.push(`\n=== SUPPLIER PRODUCT CATALOG ===\n`)
+    contextSections.push(`Showing ${productsToInclude.length} of ${totalProducts} products${query ? ' (filtered by query)' : ''}\n`)
+    contextSections.push('IMPORTANT: You MUST ONLY recommend products from this catalog. Do NOT invent products.\n')
+
+    const productsByCategory = new Map<string, Array<{ code: string; name: string; unitPrice: number }>>()
+    
+    productsToInclude.forEach(p => {
+      const category = this.inferCategoryFromName(p.name)
+      if (!productsByCategory.has(category)) {
+        productsByCategory.set(category, [])
+      }
+      productsByCategory.get(category)!.push(p)
+    })
+
+    for (const [category, categoryProducts] of productsByCategory.entries()) {
+      const categorySection: string[] = []
+      categorySection.push(`\n${category} (${categoryProducts.length}):`)
+      
+      for (const p of categoryProducts) {
+        const productLine = `${p.name} | ₵${p.unitPrice.toFixed(2)}`
+        categorySection.push(productLine)
+      }
+      
+      contextSections.push(categorySection.join('\n'))
+    }
+
+    contextSections.push(`\n=== END CATALOG ===`)
+    if (productsToInclude.length < totalProducts) {
+      contextSections.push(`\nNOTE: Only ${productsToInclude.length} of ${totalProducts} products shown. If user asks for products not listed, mention that more products are available in the full catalog.`)
+    }
+
+    return contextSections.join('\n')
+  }
+
+  private inferCategoryFromName(name: string): string {
+    const lowerName = name.toLowerCase()
+    if (lowerName.includes('oil') || lowerName.includes('cooking oil')) return 'Oils & Fats'
+    if (lowerName.includes('rice')) return 'Grains & Rice'
+    if (lowerName.includes('sardine') || lowerName.includes('mackerel')) return 'Canned Fish'
+    if (lowerName.includes('milk')) return 'Dairy'
+    if (lowerName.includes('spaghetti') || lowerName.includes('pasta')) return 'Pasta & Noodles'
+    if (lowerName.includes('biscuit')) return 'Snacks & Biscuits'
+    if (lowerName.includes('pepper')) return 'Spices & Seasonings'
+    if (lowerName.includes('mayo') || lowerName.includes('mayonnaise')) return 'Condiments'
+    if (lowerName.includes('cube') || lowerName.includes('stock')) return 'Seasonings'
+    if (lowerName.includes('sugar')) return 'Sweeteners'
+    if (lowerName.includes('corn') && lowerName.includes('flake')) return 'Breakfast Cereals'
+    return 'Other'
+  }
+
+  async chatWithSupplierProducts(
+    message: string,
+    supplierProducts: Array<{ code: string; name: string; unitPrice: number }>,
+    userId: string = 'admin'
+  ): Promise<{
+    success: boolean
+    message?: string
+    error?: string
+  }> {
+    try {
+      if (!process.env.OPENAI_API_KEY) {
+        return {
+          success: false,
+          error: 'AI service is not configured. Please set OPENAI_API_KEY.',
+        }
+      }
+
+      if (!supplierProducts || supplierProducts.length === 0) {
+        return {
+          success: false,
+          error: 'No supplier products provided.',
+        }
+      }
+
+      let maxProducts = 500
+      let attempts = 0
+      const maxAttempts = 3
+      
+      while (attempts < maxAttempts) {
+        try {
+          const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts)
+
+          const systemPrompt = `You are Grovio AI, an intelligent grocery shopping assistant for supplier product recommendations. All prices are in Ghanaian Cedis (₵).
+
+**Your Capabilities:**
+- Provide personalized product recommendations with specific quantities
+- Calculate how long products will last based on family size and usage patterns
+- Create complete shopping lists with quantities, prices, and totals
+- Suggest meal combinations and practical usage estimates
+
+**CRITICAL RULES - READ CAREFULLY:**
+1. **ONLY use products from the supplier catalog below** - You MUST NOT invent, suggest, or mention products that are not in the catalog
+2. **Use exact product names** as they appear in the catalog
+3. **All products are available** - assume all listed products are in stock
+4. **ALWAYS specify quantities** - Every recommended product MUST include a quantity (e.g., "2 units", "3 packs", "1 bag")
+5. **Calculate duration estimates** - If user mentions duration (e.g., "last for a week/month") or family size, estimate how long products will last
+6. **Provide final shopping list** - Always end with a clear shopping list showing: Product Name, Quantity, Unit Price, Subtotal, and Grand Total
+7. **Use ₵ symbol** for all prices
+8. **Format important text** with **bold** for emphasis
+
+**Quantity Guidelines:**
+- For staples (rice, flour, oil): Consider family size and typical consumption (e.g., 5kg rice for family of 4 = ~2-3 weeks)
+- For canned goods: Consider meal frequency (e.g., 1 can per meal for family of 4)
+- For condiments/seasonings: Estimate based on typical usage (e.g., 1-2 units for a month)
+- Always provide practical quantities that make sense for the budget and family size
+
+**Duration Estimation Guidelines:**
+- Rice: ~200-250g per person per day (5kg = ~20-25 days for 1 person, ~5-6 days for family of 4)
+- Pasta/Spaghetti: ~100-150g per person per meal (500g = ~3-4 meals for family of 4)
+- Canned fish: 1 can typically serves 2-3 people
+- Oil: ~50ml per person per day for cooking (1L = ~20 days for 1 person, ~5 days for family of 4)
+- Use these estimates to calculate how long products will last
+
+**Supplier Product Catalog:**
+${productContext}
+
+**Response Format Requirements:**
+1. Start with a brief summary of recommendations
+2. List recommended products with quantities and reasoning
+3. Provide duration estimates if applicable (e.g., "This selection will last approximately X days/weeks for a family of Y")
+4. **MUST end with a final shopping list in this exact format:**
+
+### Final Shopping List:
+| Product Name | Quantity | Unit Price | Subtotal |
+|-------------|----------|------------|----------|
+| Product 1 | 2 units | ₵50.00 | ₵100.00 |
+| Product 2 | 1 unit | ₵75.00 | ₵75.00 |
+| **Total** | | | **₵175.00** |
+
+5. Include budget utilization (e.g., "Total: ₵175.00 out of ₵500.00 budget (35% utilized)")
+6. Mention remaining budget if applicable`
+
+          const systemMessage = new SystemMessage(systemPrompt)
+          const humanMessage = new HumanMessage(message)
+
+          const response = await this.model.invoke([systemMessage, humanMessage])
+          
+          const responseText = typeof response.content === 'string' 
+            ? response.content 
+            : JSON.stringify(response.content)
+
+          return {
+            success: true,
+            message: responseText,
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          
+          if (errorMessage.includes('maximum context length') || errorMessage.includes('context length')) {
+            attempts++
+            maxProducts = Math.floor(maxProducts * 0.6)
+            
+            if (attempts >= maxAttempts) {
+              return {
+                success: false,
+                error: `Product catalog is too large. Please refine your query or reduce the number of products.`,
+              }
+            }
+            continue
+          }
+          
+          throw error
+        }
+      }
+
+      return {
+        success: false,
+        error: 'Failed to process request after multiple attempts.',
+      }
+    } catch (error) {
+      console.error('Supplier product AI chat error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'AI service error',
+      }
+    }
+  }
+
   private async getOrCreateThread(userId: string, threadId?: string): Promise<string> {
     try {
       if (threadId) {

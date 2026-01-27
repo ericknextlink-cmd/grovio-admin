@@ -20,14 +20,16 @@ const getBackendUrl = () => {
     // In browser, use deployed URL or empty string (relative URLs)
     return process.env.NODE_ENV === 'production' 
       ? 'https://grovio-backend.onrender.com' 
-      : 'http://localhost:5000'
+      : ''
   }
   
   // Server-side fallback
-  return 'http://localhost:5000'
+  return ''
 }
 
-export const API_BASE_URL = getBackendUrl()
+// export const API_BASE_URL = getBackendUrl()
+// export const API_BASE_URL = 'https://grovio-backend.onrender.com'
+export const API_BASE_URL = 'http://localhost:3001'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -359,4 +361,10 @@ export const categoriesApi = {
   update: (id: string, data: any) => apiClient.put<any>(`/api/categories/${id}`, data),
 
   delete: (id: string) => apiClient.delete<any>(`/api/categories/${id}`),
+}
+
+// AI API
+export const aiApi = {
+  getSupplierRecommendations: (message: string, products: Array<{ code: string; name: string; unitPrice: number }>) =>
+    apiClient.post<any>('/api/ai/supplier-recommendations', { message, products }),
 }

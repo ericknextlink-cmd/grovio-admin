@@ -177,8 +177,8 @@ export class OrderService {
       }
 
       // 6. Initialize payment with Paystack
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000'
+      const frontendUrl = process.env.FRONTEND_URL || ''
+      const backendUrl = process.env.BACKEND_URL || ''
       
       const paystackResult = await this.paystack.initializeTransaction({
         email: user.email,

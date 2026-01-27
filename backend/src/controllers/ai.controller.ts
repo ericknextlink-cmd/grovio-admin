@@ -466,4 +466,68 @@ export class AIController {
       } as ApiResponse<null>)
     }
   }
+
+  /**
+   * AI recommendations for supplier products
+   */
+  getSupplierProductRecommendations = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { message, products } = req.body
+
+      if (!message || typeof message !== 'string') {
+        res.status(400).json({
+          success: false,
+          message: 'Message is required and must be a string',
+          errors: ['Invalid message format']
+        } as ApiResponse<null>)
+        return
+      }
+
+      if (!products || !Array.isArray(products) || products.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Products array is required and must not be empty',
+          errors: ['Invalid products data']
+        } as ApiResponse<null>)
+        return
+      }
+
+      const supplierProducts = products.map((p: { code?: string; name: string; unitPrice: number }) => ({
+        code: p.code || '',
+        name: p.name,
+        unitPrice: p.unitPrice
+      }))
+
+      const userId = req.user?.id || 'admin'
+
+      const result = await this.aiService.chatWithSupplierProducts(
+        message,
+        supplierProducts,
+        userId
+      )
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'AI recommendations generated successfully',
+          data: {
+            response: result.message,
+          },
+        } as ApiResponse<{ response: string }>)
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'Failed to generate recommendations',
+          errors: [result.error || 'AI service error'],
+        } as ApiResponse<null>)
+      }
+    } catch (error) {
+      console.error('Supplier product recommendations error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        errors: ['Something went wrong'],
+      } as ApiResponse<null>)
+    }
+  }
 }

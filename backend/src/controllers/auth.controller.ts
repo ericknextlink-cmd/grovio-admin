@@ -65,7 +65,7 @@ export class AuthController {
    */
   initiateGoogleAuth = async (req: Request, res: Response): Promise<void> => {
     try {
-      const redirectTo = req.query.redirectTo as string || '/dashboard'
+      const redirectTo = req.query.redirectTo as string || '/'
       const result = await this.authService.initiateGoogleAuth(redirectTo, req, res)
 
       if (!result.success || !result.url) {
@@ -181,7 +181,7 @@ export class AuthController {
         console.log('OAuth callback successful, redirecting to frontend')
         
         // Redirect to the stored redirect path or dashboard
-        const redirectPath = result.redirectTo || '/dashboard'
+        const redirectPath = result.redirectTo || '/'
         
         // Ensure path starts with /
         const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`

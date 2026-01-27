@@ -4,21 +4,32 @@ exports.authenticateUser = exports.requireUser = exports.requireAdmin = exports.
 const supabase_1 = require("../config/supabase");
 /**
  * Middleware to authenticate user using Supabase JWT token
+ * Supports both Bearer token in Authorization header and cookie-based auth
  */
 const authenticateToken = async (req, res, next) => {
     try {
+        let token = null;
+        // Check Authorization header
         const authHeader = req.headers.authorization;
-        const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: 'Access token is required',
-                errors: ['Missing authorization token']
-            });
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
         }
-        const supabase = (0, supabase_1.createClient)();
-        // Verify the JWT token with Supabase
-        const { data: { user }, error } = await supabase.auth.getUser(token);
+        // Initialize Supabase client with req/res to support cookie-based auth
+        const supabase = (0, supabase_1.createClient)(req, res);
+        let user = null;
+        let error = null;
+        if (token) {
+            // If token provided explicitly, verify it
+            const { data, error: tokenError } = await supabase.auth.getUser(token);
+            user = data.user;
+            error = tokenError;
+        }
+        else {
+            // Otherwise try to get user from session (cookies)
+            const { data, error: sessionError } = await supabase.auth.getUser();
+            user = data.user;
+            error = sessionError;
+        }
         if (error || !user) {
             return res.status(401).json({
                 success: false,

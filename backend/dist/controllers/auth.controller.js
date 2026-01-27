@@ -53,11 +53,7 @@ class AuthController {
         };
         /**
          * Initiate Google OAuth flow
-         * Option 1: Returns redirect URL (for AJAX requests)
-         * Option 2: Redirects directly to Google (for navigation/popup requests)
-         *
-         * If the request has Accept: text/html or is from a popup/navigation, redirect directly.
-         * Otherwise, return JSON with the OAuth URL.
+         * Redirects directly to Google
          */
         this.initiateGoogleAuth = async (req, res) => {
             try {
@@ -67,43 +63,20 @@ class AuthController {
                     res.status(500).json(result);
                     return;
                 }
-                // Check if this is a navigation request (from popup/window.open) or AJAX request
-                const acceptsHtml = req.headers.accept?.includes('text/html');
-                const isNavigation = acceptsHtml || !req.headers['x-requested-with'];
-                if (isNavigation) {
-                    // For navigation requests: redirect directly to Google OAuth
-                    // This ensures cookies are set during navigation, making them available on callback
-                    console.log('Redirecting directly to Google OAuth (navigation request)');
-                    // Set redirect cookie
-                    if (result.cookieName && result.cookieValue) {
-                        const isProduction = process.env.NODE_ENV === 'production';
-                        res.cookie(result.cookieName, result.cookieValue, {
-                            httpOnly: true,
-                            secure: isProduction,
-                            sameSite: isProduction ? 'none' : 'lax',
-                            maxAge: 10 * 60 * 1000, // 10 minutes
-                            path: '/',
-                        });
-                    }
-                    // Redirect directly to Google OAuth URL
-                    res.redirect(result.url);
+                console.log('Redirecting to Google OAuth');
+                // Set redirect cookie if provided
+                if (result.cookieName && result.cookieValue) {
+                    const isProduction = process.env.NODE_ENV === 'production';
+                    res.cookie(result.cookieName, result.cookieValue, {
+                        httpOnly: true,
+                        secure: isProduction,
+                        sameSite: isProduction ? 'none' : 'lax',
+                        maxAge: 10 * 60 * 1000, // 10 minutes
+                        path: '/',
+                    });
                 }
-                else {
-                    // For AJAX requests: return JSON with URL
-                    console.log('Returning OAuth URL (AJAX request)');
-                    if (result.cookieName && result.cookieValue) {
-                        const isProduction = process.env.NODE_ENV === 'production';
-                        res.cookie(result.cookieName, result.cookieValue, {
-                            httpOnly: true,
-                            secure: isProduction,
-                            sameSite: isProduction ? 'none' : 'lax',
-                            maxAge: 10 * 60 * 1000, // 10 minutes
-                            path: '/',
-                        });
-                    }
-                    const { cookieName, cookieValue, ...responseData } = result;
-                    res.status(200).json(responseData);
-                }
+                // Redirect directly to Google OAuth URL
+                res.redirect(result.url);
             }
             catch (error) {
                 console.error('Initiate Google auth error:', error);
@@ -149,103 +122,30 @@ class AuthController {
         /**
          * Handle Google OAuth callback (server-side SSR flow with PKCE)
          * Exchanges authorization code for session using PKCE code verifier from cookies
+         * Redirects to frontend with session cookies set
          */
         this.googleCallback = async (req, res) => {
             try {
                 const code = req.query.code;
                 const error = req.query.error;
                 const errorDescription = req.query.error_description;
-                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-                const frontendOrigin = new URL(frontendUrl).origin;
-                // Helper to build HTML response for popup flow
-                const buildResponseHTML = (payload, success) => `
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>${success ? 'Authentication Success' : 'Authentication Error'}</title>
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0;
-        padding: 32px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 16px;
-        color: #0f172a;
-        background: #f8fafc;
-      }
-    </style>
-  </head>
-  <body>
-    <p>${success ? 'Authentication successful. Closing window...' : 'Authentication failed. Closing window...'}</p>
-    <script>
-      (function () {
-        const payload = ${JSON.stringify(payload)};
-        const targetOrigin = ${JSON.stringify(frontendOrigin)};
-
-        function notifyParent() {
-          try {
-            if (window.opener && !window.opener.closed) {
-              window.opener.postMessage(
-                {
-                  type: 'grovio:google-auth',
-                  success: ${success},
-                  data: payload
-                },
-                targetOrigin
-              );
-            }
-          } catch (err) {
-            console.warn('Failed to notify opener:', err);
-          }
-        }
-
-        notifyParent();
-
-        // Attempt to close popup
-        try {
-          window.close();
-        } catch (err) {
-          console.warn('Unable to close window:', err);
-        }
-
-        // Fallback redirect
-        setTimeout(() => {
-          window.location.replace(${JSON.stringify(success
-                    ? `${frontendUrl}${payload.redirectTo || '/dashboard'}`
-                    : `${frontendUrl}/login?error=${encodeURIComponent(payload.error || 'unknown_error')}`)});
-        }, 500);
-      })();
-    </script>
-  </body>
-</html>`;
+                // Determine frontend URL
+                // Use FRONTEND_URL env var, or referer, or default to localhost:3000
+                let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+                // Clean up trailing slash
+                if (frontendUrl.endsWith('/')) {
+                    frontendUrl = frontendUrl.slice(0, -1);
+                }
                 // Handle OAuth errors
                 if (error) {
                     console.error('Google OAuth error:', error, errorDescription);
-                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-                    res.setHeader('Pragma', 'no-cache');
-                    res.setHeader('Expires', '0');
-                    res.status(400).send(buildResponseHTML({
-                        error,
-                        errorDescription: errorDescription || 'OAuth callback with invalid state'
-                    }, false));
+                    res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorDescription || error)}`);
                     return;
                 }
                 // Handle missing authorization code
                 if (!code) {
                     console.error('Missing authorization code');
-                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-                    res.setHeader('Pragma', 'no-cache');
-                    res.setHeader('Expires', '0');
-                    res.status(400).send(buildResponseHTML({
-                        error: 'invalid_request',
-                        errorDescription: 'Missing authorization code'
-                    }, false));
+                    res.redirect(`${frontendUrl}/login?error=missing_code`);
                     return;
                 }
                 // Exchange code for session (server-side SSR flow with PKCE)
@@ -257,34 +157,21 @@ class AuthController {
                     res.clearCookie(cookieName, { path: '/' });
                 }
                 if (result.success && result.session) {
-                    console.log('OAuth callback successful, returning session to frontend');
-                    // Return success response with session data for popup flow
-                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-                    res.setHeader('Pragma', 'no-cache');
-                    res.setHeader('Expires', '0');
-                    res.status(200).send(buildResponseHTML({
-                        session: result.session,
-                        user: result.user,
-                        redirectTo: result.redirectTo || '/dashboard'
-                    }, true));
+                    console.log('OAuth callback successful, redirecting to frontend');
+                    // Redirect to the stored redirect path or dashboard
+                    const redirectPath = result.redirectTo || '/dashboard';
+                    // Ensure path starts with /
+                    const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`;
+                    res.redirect(`${frontendUrl}${safePath}`);
                 }
                 else {
                     console.error('OAuth callback failed:', result.errors);
-                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-                    res.setHeader('Pragma', 'no-cache');
-                    res.setHeader('Expires', '0');
-                    res.status(400).send(buildResponseHTML({
-                        error: 'authentication_failed',
-                        errorDescription: result.message || 'Failed to process OAuth callback',
-                        errors: result.errors
-                    }, false));
+                    res.redirect(`${frontendUrl}/login?error=auth_failed&message=${encodeURIComponent(result.message || 'Authentication failed')}`);
                 }
             }
             catch (error) {
                 console.error('Google callback error:', error);
-                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
                 res.redirect(`${frontendUrl}/login?error=server_error`);
             }
         };

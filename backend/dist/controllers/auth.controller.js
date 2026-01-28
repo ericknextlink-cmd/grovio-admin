@@ -57,7 +57,7 @@ class AuthController {
          */
         this.initiateGoogleAuth = async (req, res) => {
             try {
-                const redirectTo = req.query.redirectTo || '/dashboard';
+                const redirectTo = req.query.redirectTo || '/';
                 const result = await this.authService.initiateGoogleAuth(redirectTo, req, res);
                 if (!result.success || !result.url) {
                     res.status(500).json(result);
@@ -159,10 +159,16 @@ class AuthController {
                 if (result.success && result.session) {
                     console.log('OAuth callback successful, redirecting to frontend');
                     // Redirect to the stored redirect path or dashboard
-                    const redirectPath = result.redirectTo || '/dashboard';
+                    const redirectPath = result.redirectTo || '/';
                     // Ensure path starts with /
                     const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`;
-                    res.redirect(`${frontendUrl}${safePath}`);
+                    // Append tokens to the redirect URL as query params (fallback for cross-domain cookies)
+                    const tokenParams = new URLSearchParams({
+                        access_token: result.session.access_token,
+                        refresh_token: result.session.refresh_token,
+                    }).toString();
+                    const separator = safePath.includes('?') ? '&' : '?';
+                    res.redirect(`${frontendUrl}${safePath}${separator}${tokenParams}`);
                 }
                 else {
                     console.error('OAuth callback failed:', result.errors);

@@ -985,6 +985,22 @@ export class AuthService {
   }
 
   /**
+   * Decode JWT payload without verifying (Supabase will verify the token).
+   * Returns the payload object or null if invalid.
+   */
+  private decodeIdTokenPayload(idToken: string): { nonce?: string } | null {
+    try {
+      const parts = idToken.split('.')
+      if (parts.length !== 3) return null
+      const payload = parts[1]
+      const decoded = Buffer.from(payload, 'base64url').toString('utf8')
+      return JSON.parse(decoded) as { nonce?: string }
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Google OAuth authentication (ID token method - legacy)
    */
   async googleAuth(googleData: GoogleAuthRequest): Promise<AuthResponse> {
@@ -1001,13 +1017,18 @@ export class AuthService {
     try {
       const supabase = createClient()
 
-      // Do NOT pass nonce to signInWithIdToken for Google. Supabase requires "passed nonce"
-      // and "nonce in id_token" to either both exist or both be absent. Google ID tokens
-      // typically do not include a nonce, so passing one causes AuthApiError.
-      const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
+      // Supabase requires: if the id_token has a nonce claim, we must pass the same nonce.
+      // Google/GSI often includes nonce (e.g. "not_provided"). Decode and pass it when present.
+      const payload = this.decodeIdTokenPayload(idToken)
+      const nonceFromToken = payload?.nonce && typeof payload.nonce === 'string' ? payload.nonce : undefined
+
+      const signInOptions: { provider: 'google'; token: string; nonce?: string } = {
         provider: 'google',
         token: idToken,
-      })
+      }
+      if (nonceFromToken) signInOptions.nonce = nonceFromToken
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithIdToken(signInOptions)
 
       if (authError) {
         console.error('Google auth error:', authError)

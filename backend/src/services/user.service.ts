@@ -1,17 +1,19 @@
-import { createClient } from '../config/supabase'
+import { createClient, createAdminClient } from '../config/supabase'
 import { AuthResponse, UserProfile } from '../types/auth'
 
 export class UserService {
 
   /**
-   * Get user profile by ID
+   * Get user profile by ID.
+   * Uses admin client so this works when called from auth context (e.g. GET /api/auth/me)
+   * after token verification; anon client + RLS would block the read.
    */
   async getUserProfile(userId: string): Promise<AuthResponse> {
     try {
-      const supabase = createClient()
+      const adminSupabase = createAdminClient()
 
-      // Get user data from our database
-      const { data: userData, error: userError } = await supabase
+      // Get user data from our database (admin bypasses RLS)
+      const { data: userData, error: userError } = await adminSupabase
         .from('users')
         .select('*')
         .eq('id', userId)
@@ -26,7 +28,7 @@ export class UserService {
       }
 
       // Get user preferences
-      const { data: preferences } = await supabase
+      const { data: preferences } = await adminSupabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userData.id)

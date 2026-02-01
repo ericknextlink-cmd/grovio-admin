@@ -4,13 +4,15 @@ exports.UserService = void 0;
 const supabase_1 = require("../config/supabase");
 class UserService {
     /**
-     * Get user profile by ID
+     * Get user profile by ID.
+     * Uses admin client so this works when called from auth context (e.g. GET /api/auth/me)
+     * after token verification; anon client + RLS would block the read.
      */
     async getUserProfile(userId) {
         try {
-            const supabase = (0, supabase_1.createClient)();
-            // Get user data from our database
-            const { data: userData, error: userError } = await supabase
+            const adminSupabase = (0, supabase_1.createAdminClient)();
+            // Get user data from our database (admin bypasses RLS)
+            const { data: userData, error: userError } = await adminSupabase
                 .from('users')
                 .select('*')
                 .eq('id', userId)
@@ -23,7 +25,7 @@ class UserService {
                 };
             }
             // Get user preferences
-            const { data: preferences } = await supabase
+            const { data: preferences } = await adminSupabase
                 .from('user_preferences')
                 .select('*')
                 .eq('user_id', userData.id)

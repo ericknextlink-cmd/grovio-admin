@@ -1001,11 +1001,11 @@ export class AuthService {
     try {
       const supabase = createClient()
 
-      // Sign in with Google ID token
+      // Sign in with Google ID token (only pass nonce if provided – GSI/One Tap typically don't use nonce)
       const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
-        nonce
+        ...(nonce ? { nonce } : {}),
       })
 
       if (authError) {

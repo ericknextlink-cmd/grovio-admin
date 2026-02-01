@@ -988,7 +988,7 @@ export class AuthService {
    * Google OAuth authentication (ID token method - legacy)
    */
   async googleAuth(googleData: GoogleAuthRequest): Promise<AuthResponse> {
-    const { idToken, nonce } = googleData
+    const { idToken } = googleData
 
     if (!idToken) {
       return {
@@ -1001,11 +1001,12 @@ export class AuthService {
     try {
       const supabase = createClient()
 
-      // Sign in with Google ID token (only pass nonce if provided – GSI/One Tap typically don't use nonce)
+      // Do NOT pass nonce to signInWithIdToken for Google. Supabase requires "passed nonce"
+      // and "nonce in id_token" to either both exist or both be absent. Google ID tokens
+      // typically do not include a nonce, so passing one causes AuthApiError.
       const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
-        ...(nonce ? { nonce } : {}),
       })
 
       if (authError) {

@@ -10,7 +10,7 @@ class OtpController {
          */
         this.sendEmailOtp = async (req, res) => {
             try {
-                const { email, type = 'signup' } = req.body;
+                const { email } = req.body;
                 if (!email) {
                     res.status(400).json({
                         success: false,

@@ -56,7 +56,8 @@ class AdminService {
                 role: admin.role
             }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '24h' });
             // Remove password hash from response
-            const { password_hash, ...adminData } = admin;
+            const { password_hash: _pw, ...adminData } = admin;
+            void _pw;
             return {
                 success: true,
                 message: 'Login successful',
@@ -190,7 +191,7 @@ class AdminService {
                 role: decoded.role
             };
         }
-        catch (error) {
+        catch {
             return null;
         }
     }

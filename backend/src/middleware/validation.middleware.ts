@@ -11,7 +11,7 @@ export const handleValidationErrors = (req: Request, res: Response, next: NextFu
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
-      errors: errors.array().map((error: any) => error.msg)
+      errors: errors.array().map((err: { msg?: string }) => err.msg ?? 'Invalid value')
     })
   }
 

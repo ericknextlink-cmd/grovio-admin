@@ -90,7 +90,7 @@ export class UserService {
       }
 
       // Update user data
-      const userUpdateData: any = {
+      const userUpdateData: Record<string, unknown> = {
         updated_at: new Date().toISOString()
       }
 
@@ -174,7 +174,7 @@ export class UserService {
   /**
    * Get all users (admin only)
    */
-  async getAllUsers(page: number = 1, limit: number = 10): Promise<any> {
+  async getAllUsers(page: number = 1, limit: number = 10): Promise<Record<string, unknown>> {
     try {
       const supabase = createClient()
       const offset = (page - 1) * limit

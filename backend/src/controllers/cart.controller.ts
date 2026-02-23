@@ -101,8 +101,8 @@ export class CartController {
       res.json({
         success: true,
         message: result.message,
-        data: (result as any).data
-      } as ApiResponse<any>)
+        data: (result as ApiResponse<unknown>).data
+      } as ApiResponse<unknown>)
     } catch (error) {
       console.error('Update cart error:', error)
       res.status(500).json({

@@ -9,14 +9,12 @@ exports.sanitizeDatabaseError = sanitizeDatabaseError;
 exports.sanitizeAuthError = sanitizeAuthError;
 exports.sanitizeApiError = sanitizeApiError;
 exports.sanitizeError = sanitizeError;
-/**
- * Sanitize database errors for user-facing messages
- */
 function sanitizeDatabaseError(error) {
     if (!error)
         return 'An unexpected error occurred';
-    const errorMessage = error.message || String(error);
-    const errorCode = error.code || '';
+    const e = error;
+    const errorMessage = e.message ?? String(error);
+    const errorCode = e.code ?? '';
     // Map known database errors to user-friendly messages
     if (errorCode === '23505' || errorMessage.includes('duplicate key')) {
         // Unique constraint violation
@@ -61,7 +59,8 @@ function sanitizeDatabaseError(error) {
 function sanitizeAuthError(error) {
     if (!error)
         return 'An unexpected error occurred';
-    const errorMessage = error.message || String(error);
+    const e = error;
+    const errorMessage = e.message ?? String(error);
     // Map common Supabase Auth errors
     if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
         return 'This account already exists. Try signing in instead.';
@@ -96,7 +95,8 @@ function sanitizeAuthError(error) {
 function sanitizeApiError(error) {
     if (!error)
         return 'An unexpected error occurred';
-    const errorMessage = error.message || String(error);
+    const e = error;
+    const errorMessage = e.message ?? String(error);
     if (errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('timeout')) {
         return 'Connection error. Please check your internet connection and try again.';
     }

@@ -23,6 +23,7 @@ import { aiProductsRoutes } from './routes/ai-products.routes'
 import { uploadRoutes } from './routes/upload.routes'
 import { cartRoutes } from './routes/cart.routes'
 import { favoritesRoutes } from './routes/favorites.routes'
+import { pricingRoutes } from './routes/pricing.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
 import { findAvailablePort } from './utils/port'
@@ -92,9 +93,6 @@ allowedOrigins.push(/^https:\/\/.*\.vercel\.app$/)
 // Custom CORS middleware that can access request path
 app.use((req, res, next) => {
   const origin = req.headers.origin
-  const isHealthCheck = req.path?.startsWith('/api/health') || false
-  const isWebhook = req.path?.startsWith('/api/webhook') || false
-
   // // In production, reject no-origin requests unless they're health checks or webhooks
   // if (!origin && process.env.NODE_ENV === 'production') {
   //   if (!isHealthCheck && !isWebhook) {
@@ -202,6 +200,7 @@ app.use('/api/ai-products', aiProductsRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/cart', cartRoutes)
 app.use('/api/favorites', favoritesRoutes)
+app.use('/api/pricing', pricingRoutes)
 
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', orderRoutes)

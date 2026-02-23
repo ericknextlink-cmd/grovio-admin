@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '../config/supabase'
+import { createAdminClient } from '../config/supabase'
 
 /**
  * User Preferences Service
@@ -34,7 +34,7 @@ export class UserPreferencesService {
     preferences: UserPreferencesData
   ): Promise<{
     success: boolean
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {
@@ -119,7 +119,7 @@ export class UserPreferencesService {
    */
   async getPreferences(userId: string): Promise<{
     success: boolean
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {
@@ -174,7 +174,7 @@ export class UserPreferencesService {
         .single()
 
       return data?.onboarding_completed || false
-    } catch (error) {
+    } catch {
       return false
     }
   }
@@ -182,7 +182,7 @@ export class UserPreferencesService {
   /**
    * Format preferences for API response
    */
-  private formatPreferencesResponse(data: any) {
+  private formatPreferencesResponse(data: Record<string, unknown>) {
     return {
       familySize: data.family_size,
       role: data.role,
@@ -213,11 +213,11 @@ export class UserPreferencesService {
     updates: Partial<UserPreferencesData>
   ): Promise<{
     success: boolean
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {
-      const updateData: any = {}
+      const updateData: Record<string, unknown> = {}
 
       if (updates.familySize !== undefined) updateData.family_size = updates.familySize
       if (updates.role) updateData.role = updates.role.toLowerCase()

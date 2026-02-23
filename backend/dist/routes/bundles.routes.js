@@ -39,6 +39,19 @@ const generateBundlesValidation = [
         .optional()
         .isInt({ min: 1, max: 50 })
         .withMessage('Count must be between 1 and 50'),
+    (0, express_validator_1.body)('prompt')
+        .optional()
+        .isString()
+        .isLength({ max: 2000 })
+        .withMessage('Prompt must be at most 2000 characters'),
+    (0, express_validator_1.body)('budgetMin')
+        .optional()
+        .isFloat({ min: 0 })
+        .withMessage('Budget min must be a non-negative number'),
+    (0, express_validator_1.body)('budgetMax')
+        .optional()
+        .isFloat({ min: 0 })
+        .withMessage('Budget max must be a non-negative number'),
     validation_middleware_1.handleValidationErrors,
 ];
 // Public routes (optional auth for personalization)

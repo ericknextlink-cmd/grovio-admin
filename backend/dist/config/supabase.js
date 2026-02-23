@@ -38,7 +38,6 @@ function createClient(req, res) {
                     // Set cookies using Express's cookie method with options from Supabase
                     cookiesToSet.forEach(({ name, value, options }) => {
                         const isProduction = process.env.NODE_ENV === 'production';
-                        const isDevelopment = process.env.NODE_ENV === 'development';
                         // Check if this is a PKCE code verifier cookie (critical for OAuth flow)
                         const isPKCECookie = name.includes('code-verifier') || name.includes('auth-token');
                         // For OAuth/PKCE flows, we ALWAYS need SameSite=None with Secure for cross-domain redirects
@@ -70,7 +69,7 @@ function createClient(req, res) {
                                     secure = false; // Development can use HTTP
                                 }
                             }
-                            catch (e) {
+                            catch {
                                 // Fallback to lax if URL parsing fails
                                 sameSite = 'lax';
                                 secure = false;

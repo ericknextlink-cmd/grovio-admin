@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '../config/supabase'
+import { createAdminClient } from '../config/supabase'
 import { PaystackService } from './paystack.service'
 import { PDFInvoiceService, InvoiceData } from './pdf-invoice.service'
 import { v4 as uuidv4 } from 'uuid'
@@ -178,7 +178,6 @@ export class OrderService {
 
       // 6. Initialize payment with Paystack
       const frontendUrl = process.env.FRONTEND_URL || ''
-      const backendUrl = process.env.BACKEND_URL || ''
       
       const paystackResult = await this.paystack.initializeTransaction({
         email: user.email,
@@ -339,16 +338,16 @@ export class OrderService {
       }
 
       // 6. Create order items
-      const orderItems = pendingOrder.cart_items.map((item: any) => ({
+      const orderItems = (pendingOrder.cart_items as Array<Record<string, unknown>>).map((item) => ({
         order_id: order.id,
-        product_id: item.productId,
-        product_name: item.name,
-        product_description: item.description,
-        product_image: item.image,
-        category_name: item.category,
-        unit_price: item.price,
-        quantity: item.quantity,
-        total_price: item.total,
+        product_id: item.productId as string,
+        product_name: item.name as string,
+        product_description: (item.description as string) ?? '',
+        product_image: item.image as string,
+        category_name: item.category as string,
+        unit_price: item.price as number,
+        quantity: item.quantity as number,
+        total_price: item.total as number,
       }))
 
       await this.supabase
@@ -400,11 +399,11 @@ export class OrderService {
         customerAddress: `${pendingOrder.delivery_address.street}, ${pendingOrder.delivery_address.city}, ${pendingOrder.delivery_address.region}`,
         customerPhone: pendingOrder.delivery_address.phone,
         customerEmail: pendingOrder.metadata.userEmail,
-        items: pendingOrder.cart_items.map((item: any) => ({
-          description: item.name,
-          quantity: item.quantity,
-          unitPrice: item.price,
-          total: item.total,
+        items: (pendingOrder.cart_items as Array<Record<string, unknown>>).map((item) => ({
+          description: (item.name as string) ?? '',
+          quantity: (item.quantity as number) ?? 0,
+          unitPrice: (item.price as number) ?? 0,
+          total: (item.total as number) ?? 0,
         })),
         subtotal: pendingOrder.subtotal,
         discount: pendingOrder.discount,
@@ -457,7 +456,7 @@ export class OrderService {
   /**
    * Get order by ID
    */
-  async getOrderById(orderId: string, userId: string): Promise<any> {
+  async getOrderById(orderId: string, userId: string): Promise<unknown | null> {
     try {
       const { data: order, error } = await this.supabase
         .from('orders')
@@ -486,7 +485,7 @@ export class OrderService {
   /**
    * Get order by order number
    */
-  async getOrderByOrderNumber(orderNumber: string, userId: string): Promise<any> {
+  async getOrderByOrderNumber(orderNumber: string, userId: string): Promise<unknown | null> {
     try {
       const { data: order, error } = await this.supabase
         .from('orders')
@@ -523,8 +522,8 @@ export class OrderService {
     } = {}
   ): Promise<{
     success: boolean
-    data?: any[]
-    pagination?: any
+    data?: unknown[]
+    pagination?: Record<string, unknown>
     error?: string
   }> {
     try {
@@ -750,7 +749,7 @@ export class OrderService {
   /**
    * Get pending order details
    */
-  async getPendingOrder(pendingOrderId: string, userId: string): Promise<any> {
+  async getPendingOrder(pendingOrderId: string, userId: string): Promise<unknown | null> {
     try {
       const { data: pendingOrder, error } = await this.supabase
         .from('pending_orders')
@@ -776,7 +775,7 @@ export class OrderService {
   async checkPaymentStatus(reference: string): Promise<{
     success: boolean
     status?: string
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {
@@ -794,7 +793,7 @@ export class OrderService {
   /**
    * Get order statistics for admin
    */
-  async getOrderStats(): Promise<any> {
+  async getOrderStats(): Promise<Record<string, unknown> | null> {
     try {
       const { data: orders } = await this.supabase
         .from('orders')

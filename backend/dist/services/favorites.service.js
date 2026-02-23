@@ -180,7 +180,7 @@ class FavoritesService {
                 isFavorite: !!data && !error
             };
         }
-        catch (error) {
+        catch {
             return {
                 success: false,
                 isFavorite: false

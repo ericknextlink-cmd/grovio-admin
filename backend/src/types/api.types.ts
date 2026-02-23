@@ -1,4 +1,4 @@
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean
   message: string
   data?: T
@@ -23,6 +23,6 @@ export interface PaginationResponse {
 
 export interface QueryParams {
   search?: string
-  filter?: Record<string, any>
+  filter?: Record<string, unknown>
   pagination?: PaginationParams
 }

@@ -163,9 +163,10 @@ class AuthController {
                     // Ensure path starts with /
                     const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`;
                     // Append tokens to the redirect URL as query params (fallback for cross-domain cookies)
+                    const session = result.session;
                     const tokenParams = new URLSearchParams({
-                        access_token: result.session.access_token,
-                        refresh_token: result.session.refresh_token,
+                        access_token: session.access_token ?? '',
+                        refresh_token: session.refresh_token ?? '',
                     }).toString();
                     const separator = safePath.includes('?') ? '&' : '?';
                     res.redirect(`${frontendUrl}${safePath}${separator}${tokenParams}`);

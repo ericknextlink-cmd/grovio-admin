@@ -83,7 +83,8 @@ export class AdminService {
       )
 
       // Remove password hash from response
-      const { password_hash, ...adminData } = admin
+      const { password_hash: _pw, ...adminData } = admin
+      void _pw
 
       return {
         success: true,
@@ -229,13 +230,13 @@ export class AdminService {
    */
   verifyToken(token: string): { adminId: string; username: string; role: string } | null {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as { adminId: string; username: string; role: string }
       return {
         adminId: decoded.adminId,
         username: decoded.username,
         role: decoded.role
       }
-    } catch (error) {
+    } catch {
       return null
     }
   }

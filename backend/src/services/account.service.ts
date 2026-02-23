@@ -238,7 +238,7 @@ export class AccountService {
         }
       }
 
-      const deletedUser = tokenResult.deletedUser
+      const deletedUser = tokenResult.deletedUser as { email: string; first_name: string; last_name: string; phone_number: string }
 
       // Create new auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({

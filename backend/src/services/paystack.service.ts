@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import axios, { AxiosInstance } from 'axios'
 import { createAdminClient } from '../config/supabase'
 
@@ -11,7 +12,7 @@ export interface PaystackInitializeParams {
   amount: number  // Amount in kobo (GHS * 100)
   reference: string  // Unique transaction reference
   callback_url?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   channels?: string[]  // ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
 }
 
@@ -37,7 +38,7 @@ export interface PaystackVerifyResponse {
     channel: string
     currency: string
     ip_address: string
-    metadata: Record<string, any>
+    metadata: Record<string, unknown>
     fees: number
     customer: {
       id: number
@@ -115,11 +116,12 @@ export class PaystackService {
       } else {
         throw new Error(response.data.message || 'Failed to initialize payment')
       }
-    } catch (error: any) {
-      console.error('Paystack initialization error:', error.response?.data || error.message)
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string }
+      console.error('Paystack initialization error:', err.response?.data ?? err.message)
       throw new Error(
-        error.response?.data?.message || 
-        error.message || 
+        (err.response?.data as { message?: string } | undefined)?.message ??
+        err.message ??
         'Failed to initialize payment with Paystack'
       )
     }
@@ -145,11 +147,12 @@ export class PaystackService {
       } else {
         throw new Error(response.data.message || 'Payment verification failed')
       }
-    } catch (error: any) {
-      console.error('Paystack verification error:', error.response?.data || error.message)
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string }
+      console.error('Paystack verification error:', err.response?.data ?? err.message)
       throw new Error(
-        error.response?.data?.message || 
-        error.message || 
+        (err.response?.data as { message?: string } | undefined)?.message ??
+        err.message ??
         'Failed to verify payment'
       )
     }
@@ -166,7 +169,6 @@ export class PaystackService {
         return false
       }
 
-      const crypto = require('crypto')
       const hash = crypto
         .createHmac('sha512', this.secretKey)
         .update(payload)
@@ -182,19 +184,20 @@ export class PaystackService {
   /**
    * Handle webhook event from Paystack
    */
-  async handleWebhook(event: any): Promise<{
+  async handleWebhook(event: Record<string, unknown>): Promise<{
     success: boolean
     message: string
   }> {
     try {
       const { event: eventType, data } = event
 
+      const chargeData = data as { reference?: string; paid_at?: string; [key: string]: unknown }
       switch (eventType) {
         case 'charge.success':
-          return await this.handleChargeSuccess(data)
-        
+          return await this.handleChargeSuccess(chargeData)
+
         case 'charge.failed':
-          return await this.handleChargeFailed(data)
+          return await this.handleChargeFailed(chargeData)
         
         case 'transfer.success':
         case 'transfer.failed':
@@ -219,7 +222,7 @@ export class PaystackService {
   /**
    * Handle successful charge
    */
-  private async handleChargeSuccess(data: any): Promise<{ success: boolean; message: string }> {
+  private async handleChargeSuccess(data: { reference?: string; paid_at?: string; [key: string]: unknown }): Promise<{ success: boolean; message: string }> {
     try {
       const supabase = createAdminClient()
       const reference = data.reference
@@ -262,7 +265,7 @@ export class PaystackService {
   /**
    * Handle failed charge
    */
-  private async handleChargeFailed(data: any): Promise<{ success: boolean; message: string }> {
+  private async handleChargeFailed(data: { reference?: string; [key: string]: unknown }): Promise<{ success: boolean; message: string }> {
     try {
       const supabase = createAdminClient()
       const reference = data.reference
@@ -300,7 +303,7 @@ export class PaystackService {
   async getTransactionStatus(reference: string): Promise<{
     success: boolean
     status: string
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {

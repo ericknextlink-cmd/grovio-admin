@@ -6,11 +6,13 @@
 /**
  * Sanitize database errors for user-facing messages
  */
-export function sanitizeDatabaseError(error: any): string {
+interface ErrorLike { message?: string; code?: string }
+
+export function sanitizeDatabaseError(error: unknown): string {
   if (!error) return 'An unexpected error occurred'
-  
-  const errorMessage = error.message || String(error)
-  const errorCode = error.code || ''
+  const e = error as ErrorLike
+  const errorMessage = e.message ?? String(error)
+  const errorCode = e.code ?? ''
   
   // Map known database errors to user-friendly messages
   if (errorCode === '23505' || errorMessage.includes('duplicate key')) {
@@ -54,10 +56,10 @@ export function sanitizeDatabaseError(error: any): string {
 /**
  * Sanitize Supabase Auth errors
  */
-export function sanitizeAuthError(error: any): string {
+export function sanitizeAuthError(error: unknown): string {
   if (!error) return 'An unexpected error occurred'
-  
-  const errorMessage = error.message || String(error)
+  const e = error as ErrorLike
+  const errorMessage = e.message ?? String(error)
   
   // Map common Supabase Auth errors
   if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
@@ -99,10 +101,10 @@ export function sanitizeAuthError(error: any): string {
 /**
  * Sanitize API errors (for external services)
  */
-export function sanitizeApiError(error: any): string {
+export function sanitizeApiError(error: unknown): string {
   if (!error) return 'An unexpected error occurred'
-  
-  const errorMessage = error.message || String(error)
+  const e = error as ErrorLike
+  const errorMessage = e.message ?? String(error)
   
   if (errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('timeout')) {
     return 'Connection error. Please check your internet connection and try again.'
@@ -131,7 +133,7 @@ export function sanitizeApiError(error: any): string {
 /**
  * Sanitize any error - tries all sanitizers
  */
-export function sanitizeError(error: any): string {
+export function sanitizeError(error: unknown): string {
   if (!error) return 'An unexpected error occurred'
   
   // Try database error first

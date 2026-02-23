@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -11,11 +44,41 @@ const supabase_1 = require("../config/supabase");
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = require("fs");
+/** Decode a data URL (e.g. from QRCode.toDataURL) to PNG bytes for pdf-lib embedPng */
+function dataUrlToPngBytes(dataUrl) {
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+    const binary = Buffer.from(base64, 'base64');
+    return new Uint8Array(binary);
+}
+/** Default template filename in storage (templates folder) and local public folder */
+const DEFAULT_TEMPLATE_FILENAME = 'Template.pdf';
 class PDFInvoiceService {
     constructor() {
+        /** Bucket for generated invoices (output) */
         this.bucketName = 'invoices';
         this.supabase = (0, supabase_1.createAdminClient)();
-        this.templatePath = path_1.default.join(__dirname, '../../public/Template.pdf');
+        this.templatesBucketName = process.env.SUPABASE_STORAGE_BUCKET || 'invoices';
+        this.localTemplatePath = path_1.default.join(process.cwd(), 'public', DEFAULT_TEMPLATE_FILENAME);
+    }
+    /**
+     * Load template PDF bytes: first from Supabase storage (templates/Template.pdf),
+     * then fallback to local public/Template.pdf.
+     */
+    async getTemplateBytes() {
+        const storagePath = `templates/${DEFAULT_TEMPLATE_FILENAME}`;
+        const { data, error } = await this.supabase.storage
+            .from(this.templatesBucketName)
+            .download(storagePath);
+        if (!error && data) {
+            const bytes = new Uint8Array(await data.arrayBuffer());
+            if (bytes.length > 0)
+                return bytes;
+        }
+        if ((0, fs_1.existsSync)(this.localTemplatePath)) {
+            const buf = await promises_1.default.readFile(this.localTemplatePath);
+            return new Uint8Array(buf);
+        }
+        throw new Error(`Invoice template not found. Upload templates/${DEFAULT_TEMPLATE_FILENAME} to Supabase bucket "${this.templatesBucketName}" or place Template.pdf in backend/public/`);
     }
     /**
      * Ensure Supabase storage bucket exists
@@ -43,6 +106,19 @@ class PDFInvoiceService {
         }
     }
     /**
+     * Generate invoice PDF and return bytes only (no upload). Use for testing or custom storage.
+     */
+    async generateInvoiceToBuffer(data) {
+        const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber);
+        try {
+            const templateBytes = await this.getTemplateBytes();
+            return await this.fillTemplate(data, qrCodeData, templateBytes);
+        }
+        catch {
+            return await this.createInvoiceFromScratch(data, qrCodeData);
+        }
+    }
+    /**
      * Generate invoice PDF from template
      */
     async generateInvoice(data) {
@@ -50,12 +126,13 @@ class PDFInvoiceService {
             await this.ensureBucketExists();
             // 1. Generate QR Code
             const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber);
-            // 2. Load or create PDF
+            // 2. Load or create PDF (template from Supabase templates/ or local public/)
             let pdfBytes;
-            if ((0, fs_1.existsSync)(this.templatePath)) {
-                pdfBytes = await this.fillTemplate(data, qrCodeData);
+            try {
+                const templateBytes = await this.getTemplateBytes();
+                pdfBytes = await this.fillTemplate(data, qrCodeData, templateBytes);
             }
-            else {
+            catch {
                 pdfBytes = await this.createInvoiceFromScratch(data, qrCodeData);
             }
             // 3. Upload PDF to Supabase storage
@@ -87,11 +164,11 @@ class PDFInvoiceService {
         }
     }
     /**
-     * Fill Template.pdf with invoice data
+     * Fill Template.pdf with invoice data.
+     * Uses consistent row height per item so multiple products don't require fixed template lines.
      */
-    async fillTemplate(data, qrCodeDataUrl) {
+    async fillTemplate(data, qrCodeDataUrl, templateBytes) {
         try {
-            const templateBytes = await promises_1.default.readFile(this.templatePath);
             const pdfDoc = await pdf_lib_1.PDFDocument.load(templateBytes);
             const pages = pdfDoc.getPages();
             const firstPage = pages[0];
@@ -99,12 +176,11 @@ class PDFInvoiceService {
             // Embed fonts
             const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
             const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
-            // Embed QR code
-            const qrImage = await pdfDoc.embedPng(qrCodeDataUrl);
+            // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+            const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl));
             const qrDims = qrImage.scale(0.35);
             // Position calculations (adjust based on actual template)
             const leftMargin = 60;
-            const rightMargin = width - 60;
             // Invoice Number (top right)
             firstPage.drawText(data.invoiceNumber, {
                 x: width - 180,
@@ -153,12 +229,13 @@ class PDFInvoiceService {
             });
             // Items header - adjust based on template
             yPos = height - 320;
-            // Items
+            // Items: same row height for each line (works for 6 or many more products)
             data.items.forEach((item) => {
                 if (yPos < 200)
                     return; // Prevent overflow
+                const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT;
                 // Description
-                const desc = item.description.substring(0, 60); // Truncate if too long
+                const desc = item.description.substring(0, 60);
                 firstPage.drawText(desc, {
                     x: leftMargin,
                     y: yPos,
@@ -190,7 +267,7 @@ class PDFInvoiceService {
                     font: helvetica,
                     color: (0, pdf_lib_1.rgb)(0, 0, 0),
                 });
-                yPos -= 25;
+                yPos -= rowHeight;
             });
             // Totals section
             yPos = yPos - 40;
@@ -257,8 +334,8 @@ class PDFInvoiceService {
         const { width, height } = page.getSize();
         const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
         const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
-        // Embed QR code
-        const qrImage = await pdfDoc.embedPng(qrCodeDataUrl);
+        // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+        const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl));
         const qrDims = qrImage.scale(0.3);
         // Header
         page.drawText('Grovio', {
@@ -448,9 +525,8 @@ class PDFInvoiceService {
      */
     async generatePDFImage(pdfBytes, invoiceNumber) {
         try {
-            // Using Puppeteer to convert PDF to image
-            const puppeteer = require('puppeteer');
-            const browser = await puppeteer.launch({
+            const puppeteer = await Promise.resolve().then(() => __importStar(require('puppeteer')));
+            const browser = await puppeteer.default.launch({
                 headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
             });
@@ -487,7 +563,7 @@ class PDFInvoiceService {
      */
     async uploadToStorage(fileName, fileBuffer, contentType) {
         try {
-            const { data, error } = await this.supabase.storage
+            const { error } = await this.supabase.storage
                 .from(this.bucketName)
                 .upload(fileName, fileBuffer, {
                 contentType,
@@ -549,3 +625,5 @@ class PDFInvoiceService {
     }
 }
 exports.PDFInvoiceService = PDFInvoiceService;
+/** Fixed row height for each item line (same spacing for any number of products) */
+PDFInvoiceService.ITEM_ROW_HEIGHT = 28;

@@ -11,7 +11,7 @@ const handleValidationErrors = (req, res, next) => {
         return res.status(400).json({
             success: false,
             message: 'Validation failed',
-            errors: errors.array().map((error) => error.msg)
+            errors: errors.array().map((err) => err.msg ?? 'Invalid value')
         });
     }
     next();

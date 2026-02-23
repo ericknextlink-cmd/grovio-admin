@@ -14,7 +14,7 @@ class ProfileService {
             const uniqueFileName = `${userId}-${Date.now()}.${fileExtension}`;
             const filePath = `profiles/${uniqueFileName}`;
             // Upload to Supabase Storage
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            const { error: uploadError } = await supabase.storage
                 .from('avatars')
                 .upload(filePath, file, {
                 contentType: mimeType,

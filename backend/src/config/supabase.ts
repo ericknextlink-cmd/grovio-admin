@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
+import { createServerClient, parseCookieHeader } from '@supabase/ssr'
 import type { Request, Response } from 'express'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -41,8 +41,7 @@ export function createClient(req?: Request, res?: Response) {
           // Set cookies using Express's cookie method with options from Supabase
           cookiesToSet.forEach(({ name, value, options }) => {
             const isProduction = process.env.NODE_ENV === 'production'
-            const isDevelopment = process.env.NODE_ENV === 'development'
-            
+
             // Check if this is a PKCE code verifier cookie (critical for OAuth flow)
             const isPKCECookie = name.includes('code-verifier') || name.includes('auth-token')
             
@@ -74,7 +73,7 @@ export function createClient(req?: Request, res?: Response) {
                   sameSite = 'lax'
                   secure = false // Development can use HTTP
                 }
-              } catch (e) {
+              } catch {
                 // Fallback to lax if URL parsing fails
                 sameSite = 'lax'
                 secure = false
@@ -140,3 +139,5 @@ export function createAdminClient() {
     }
   })
 }
+
+

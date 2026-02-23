@@ -1,4 +1,4 @@
-import { Request, Response } from 'express'
+import { Response } from 'express'
 import { ProfileService } from '../services/profile.service'
 import { ApiResponse } from '../types/api.types'
 import { AuthRequest } from '../middleware/auth.middleware'

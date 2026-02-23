@@ -42,7 +42,7 @@ export interface RecentActivity {
   action: string
   description: string
   timestamp: string
-  metadata?: any
+  metadata?: Record<string, unknown>
 }
 
 export interface SalesAnalytics {

@@ -214,6 +214,34 @@ export class ProductsController {
   }
 
   /**
+   * Bulk create products from supplier import (Admin only). Uses original_price and price from unitPrice.
+   */
+  createBulkProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { products: items } = req.body as { products: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }> }
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Request body must include products array with name and unitPrice'
+        } as ApiResponse<null>)
+        return
+      }
+      const result = await this.productsService.createBulkProducts(items)
+      res.status(201).json({
+        success: true,
+        message: `Created ${result.created} product(s). ${result.failed} failed.`,
+        data: result
+      } as ApiResponse<typeof result>)
+    } catch (error) {
+      console.error('Bulk create products error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      } as ApiResponse<null>)
+    }
+  }
+
+  /**
    * Get product statistics (Admin only)
    */
   getProductStats = async (req: Request, res: Response): Promise<void> => {

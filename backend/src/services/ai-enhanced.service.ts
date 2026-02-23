@@ -102,7 +102,7 @@ export class AIEnhancedService {
       client.auth.setSession({
         access_token: userToken,
         refresh_token: '',
-      } as any).catch(err => {
+      } as { access_token: string; refresh_token: string }).catch((err: { message?: string }) => {
         console.warn('Failed to set user session in Supabase client:', err.message)
       })
     }
@@ -294,7 +294,7 @@ export class AIEnhancedService {
       }
 
       if (queryIntent?.budget || context.budget) {
-        const budget = queryIntent?.budget || context.budget || 1000
+        void (queryIntent?.budget ?? context.budget ?? 1000)
       }
 
       query = query.order('rating', { ascending: false })
@@ -562,7 +562,7 @@ export class AIEnhancedService {
   async chatWithSupplierProducts(
     message: string,
     supplierProducts: Array<{ code: string; name: string; unitPrice: number }>,
-    userId: string = 'admin'
+    _userId: string = 'admin'
   ): Promise<{
     success: boolean
     message?: string
@@ -987,7 +987,7 @@ When recommending products, format like this:
     let remaining = budget
     const categoriesIncluded = new Set<string>()
 
-    for (const { product, score } of sorted) {
+    for (const { product } of sorted) {
       if (remaining <= 5) break
 
       const baseQty = product.price <= 15 ? Math.min(2, Math.ceil(familySize / 2)) : 1
@@ -1058,7 +1058,7 @@ When recommending products, format like this:
     error?: string
   }> {
     try {
-      const userContext = await this.getUserContext(userId, userToken)
+      const _userContext = await this.getUserContext(userId, userToken)
 
       const productsSupabase = userToken 
         ? this.getUserSupabaseClient(userToken)
@@ -1111,7 +1111,7 @@ When recommending products, format like this:
     userToken?: string
   ): Promise<{
     success: boolean
-    data?: any
+    data?: unknown
     error?: string
   }> {
     try {
@@ -1199,7 +1199,7 @@ Format as JSON with this structure:
             budgetAdequacy: budget >= 100 * familySize ? 'good' : 'tight',
           }
         }
-      } catch (error) {
+      } catch {
         analysisData = {
           estimatedMeals: Math.floor((budget / familySize) / 10),
           costPerMeal,
@@ -1234,7 +1234,7 @@ Format as JSON with this structure:
     userToken?: string
   ): Promise<{
     success: boolean
-    data?: any[]
+    data?: unknown[]
     error?: string
   }> {
     try {
@@ -1245,7 +1245,7 @@ Format as JSON with this structure:
         }
       }
 
-      const userContext = await this.getUserContext(userId, userToken)
+      await this.getUserContext(userId, userToken)
 
       const prompt = `Suggest 3 Ghanaian or African-inspired meal ideas:
 
@@ -1296,7 +1296,7 @@ Format as JSON array:
         } else {
           meals = []
         }
-      } catch (error) {
+      } catch {
         meals = [
           {
             name: 'Jollof Rice with Chicken',
@@ -1348,7 +1348,7 @@ Format as JSON array:
 
 // Helper function (exported for use in service)
 // SECURITY: This function uses admin client - should be updated to use user token
-async function getUserContext(userId: string, userToken?: string): Promise<RecommendationContext> {
+export async function _getUserContext(userId: string, userToken?: string): Promise<RecommendationContext> {
   try {
     // SECURITY: Use user token if available to respect RLS
     // If no token or anonymous user, return minimal context
@@ -1365,7 +1365,7 @@ async function getUserContext(userId: string, userToken?: string): Promise<Recom
     await supabase.auth.setSession({
       access_token: userToken,
       refresh_token: '',
-    } as any)
+    } as { access_token: string; refresh_token: string })
 
     const { data: preferences } = await supabase
       .from('user_preferences')
@@ -1404,7 +1404,7 @@ async function getUserContext(userId: string, userToken?: string): Promise<Recom
       dietary_restrictions: preferences?.dietary_restrictions || [],
       preferred_categories: preferences?.preferred_categories || [],
     }
-  } catch (error) {
+  } catch {
     const hash = Buffer.from(userId).toString('base64').substring(0, 10)
     return {
       userId: `anon_${hash}`,

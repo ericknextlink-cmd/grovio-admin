@@ -12,7 +12,7 @@ export const errorHandler = (
   error: ApiError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction // Express requires 4-arg signature for error middleware
 ) => {
   let { statusCode = 500, message } = error
 
@@ -51,7 +51,9 @@ export const errorHandler = (
 /**
  * Async error handler wrapper
  */
-export const asyncHandler = (fn: Function) => {
+type AsyncRequestHandler = (req: Request, res: Response, next: NextFunction) => void | Promise<void>
+
+export const asyncHandler = (fn: AsyncRequestHandler) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next)
   }

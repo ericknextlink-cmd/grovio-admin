@@ -85,7 +85,7 @@ class CartService {
                 };
             }
             // Check if item already in cart
-            const { data: existingItem, error: checkError } = await this.supabase
+            const { data: existingItem } = await this.supabase
                 .from('cart')
                 .select('*')
                 .eq('user_id', userId)

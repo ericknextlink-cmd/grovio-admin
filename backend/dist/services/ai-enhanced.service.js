@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIEnhancedService = void 0;
+exports._getUserContext = _getUserContext;
 const openai_1 = require("@langchain/openai");
 const prompts_1 = require("@langchain/core/prompts");
 const output_parsers_1 = require("@langchain/core/output_parsers");
@@ -27,7 +28,7 @@ class AIEnhancedService {
             client.auth.setSession({
                 access_token: userToken,
                 refresh_token: '',
-            }).catch(err => {
+            }).catch((err) => {
                 console.warn('Failed to set user session in Supabase client:', err.message);
             });
         }
@@ -178,7 +179,7 @@ class AIEnhancedService {
                 }
             }
             if (queryIntent?.budget || context.budget) {
-                const budget = queryIntent?.budget || context.budget || 1000;
+                void (queryIntent?.budget ?? context.budget ?? 1000);
             }
             query = query.order('rating', { ascending: false })
                 .order('price', { ascending: true });
@@ -407,7 +408,7 @@ class AIEnhancedService {
             return 'Breakfast Cereals';
         return 'Other';
     }
-    async chatWithSupplierProducts(message, supplierProducts, userId = 'admin') {
+    async chatWithSupplierProducts(message, supplierProducts, _userId = 'admin') {
         try {
             if (!process.env.OPENAI_API_KEY) {
                 return {
@@ -751,7 +752,7 @@ When recommending products, format like this:
         const items = [];
         let remaining = budget;
         const categoriesIncluded = new Set();
-        for (const { product, score } of sorted) {
+        for (const { product } of sorted) {
             if (remaining <= 5)
                 break;
             const baseQty = product.price <= 15 ? Math.min(2, Math.ceil(familySize / 2)) : 1;
@@ -803,7 +804,7 @@ When recommending products, format like this:
     }
     async searchProducts(query, userId, limit = 10, userToken) {
         try {
-            const userContext = await this.getUserContext(userId, userToken);
+            const _userContext = await this.getUserContext(userId, userToken);
             const productsSupabase = userToken
                 ? this.getUserSupabaseClient(userToken)
                 : (0, supabase_1.createClient)();
@@ -926,7 +927,7 @@ Format as JSON with this structure:
                     };
                 }
             }
-            catch (error) {
+            catch {
                 analysisData = {
                     estimatedMeals: Math.floor((budget / familySize) / 10),
                     costPerMeal,
@@ -959,7 +960,7 @@ Format as JSON with this structure:
                     error: 'AI service is not configured',
                 };
             }
-            const userContext = await this.getUserContext(userId, userToken);
+            await this.getUserContext(userId, userToken);
             const prompt = `Suggest 3 Ghanaian or African-inspired meal ideas:
 
 **Available Ingredients:** ${ingredients.join(', ')}
@@ -1010,7 +1011,7 @@ Format as JSON array:
                     meals = [];
                 }
             }
-            catch (error) {
+            catch {
                 meals = [
                     {
                         name: 'Jollof Rice with Chicken',
@@ -1060,7 +1061,7 @@ Format as JSON array:
 exports.AIEnhancedService = AIEnhancedService;
 // Helper function (exported for use in service)
 // SECURITY: This function uses admin client - should be updated to use user token
-async function getUserContext(userId, userToken) {
+async function _getUserContext(userId, userToken) {
     try {
         // SECURITY: Use user token if available to respect RLS
         // If no token or anonymous user, return minimal context
@@ -1111,7 +1112,7 @@ async function getUserContext(userId, userToken) {
             preferred_categories: preferences?.preferred_categories || [],
         };
     }
-    catch (error) {
+    catch {
         const hash = Buffer.from(userId).toString('base64').substring(0, 10);
         return {
             userId: `anon_${hash}`,

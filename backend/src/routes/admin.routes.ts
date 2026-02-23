@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { AdminController } from '../controllers/admin.controller'
-import { authenticateAdmin, requireSuperAdmin } from '../middleware/adminAuth.middleware'
+import { authenticateAdmin } from '../middleware/adminAuth.middleware'
 import { body } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
 

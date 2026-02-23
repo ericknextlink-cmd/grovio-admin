@@ -17,7 +17,7 @@ export class OtpController {
    */
   sendEmailOtp = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { email, type = 'signup' } = req.body
+      const { email } = req.body as { email?: string }
 
       if (!email) {
         res.status(400).json({

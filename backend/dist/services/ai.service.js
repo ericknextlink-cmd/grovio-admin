@@ -218,41 +218,38 @@ I can help you with:
     isProductQuery(message) {
         return /find|search|look for|need|want|buy/i.test(message);
     }
-    generateBudgetBasedRecommendations(products, budget, familySize, role, preferences) {
-        // Priority categories for budget allocation
+    generateBudgetBasedRecommendations(products, budget, _familySize, _role, _preferences) {
         const priorityCategories = [
             'grains', 'flour', 'oils', 'cereals', 'meat', 'vegetables',
             'seasonings', 'pasta', 'canned', 'beverages'
         ];
         const recommendations = [];
         let remainingBudget = budget;
-        // Sort products by category priority and price
         const sortedProducts = [...products].sort((a, b) => {
-            const aPriority = priorityCategories.indexOf(a.category_name.toLowerCase());
-            const bPriority = priorityCategories.indexOf(b.category_name.toLowerCase());
+            const aPriority = priorityCategories.indexOf((a.category_name ?? '').toLowerCase());
+            const bPriority = priorityCategories.indexOf((b.category_name ?? '').toLowerCase());
             if (aPriority !== bPriority) {
                 return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
             }
-            return a.price - b.price;
+            return (a.price ?? 0) - (b.price ?? 0);
         });
-        // Select products within budget
         for (const product of sortedProducts) {
             if (remainingBudget <= 0)
                 break;
-            const quantity = Math.min(Math.floor(remainingBudget / product.price), product.price <= 10 ? 2 : 1 // More of cheaper staples
-            );
+            const price = Number(product.price ?? 0);
+            const quantity = Math.min(Math.floor(remainingBudget / price), price <= 10 ? 2 : 1);
             if (quantity > 0) {
-                const subtotal = quantity * product.price;
+                const subtotal = quantity * price;
                 recommendations.push({
-                    id: product.id,
-                    name: product.name,
-                    price: product.price,
+                    id: String(product.id ?? ''),
+                    name: String(product.name ?? ''),
+                    price,
                     quantity,
-                    category: product.category_name,
+                    category: String(product.category_name ?? ''),
                     subcategory: product.subcategory,
-                    images: product.images || [],
-                    rating: product.rating,
-                    inStock: product.in_stock,
+                    images: (product.images ?? []),
+                    rating: product.rating ?? 0,
+                    inStock: product.in_stock ?? true,
                     subtotal
                 });
                 remainingBudget -= subtotal;
@@ -292,7 +289,7 @@ ${productsList}
 
 **Tell me your budget to generate a complete shopping list.**`;
     }
-    generateHelpfulResponse(message) {
+    generateHelpfulResponse(_message) {
         return `I can help you with grocery recommendations and budget planning. Here are some things you can ask me:
 
 • "I have ₵50 for groceries" - Get budget recommendations
@@ -311,7 +308,7 @@ ${productsList}
             default: return baseCost * 21;
         }
     }
-    generateBudgetSuggestions(budget, familySize, duration) {
+    generateBudgetSuggestions(budget, familySize, _duration) {
         const suggestions = [];
         if (budget < 50 * familySize) {
             suggestions.push('Focus on staples like rice, flour, and cooking oil for maximum value');
@@ -325,20 +322,18 @@ ${productsList}
         suggestions.push('Compare prices across different brands');
         return suggestions;
     }
-    generateBudgetWarnings(budget, familySize, duration) {
+    generateBudgetWarnings(budget, familySize, _duration) {
         const warnings = [];
-        const minimumBudget = familySize * (duration === 'day' ? 25 : duration === 'week' ? 150 : 600);
+        const minimumBudget = familySize * (_duration === 'day' ? 25 : _duration === 'week' ? 150 : 600);
         if (budget < minimumBudget) {
-            warnings.push(`Budget may be insufficient for ${duration}ly groceries for ${familySize} people`);
+            warnings.push(`Budget may be insufficient for ${_duration}ly groceries for ${familySize} people`);
             warnings.push('Consider prioritizing essential nutrients');
         }
         return warnings;
     }
     generateSimpleMeals(products, mealType, familySize) {
-        // This is a simplified implementation
-        // In practice, you'd use a more sophisticated meal generation algorithm
         const meals = [];
-        if (products.some(p => p.name.toLowerCase().includes('rice'))) {
+        if (products.some(p => (p.name ?? '').toLowerCase().includes('rice'))) {
             meals.push({
                 name: 'Jollof Rice',
                 description: 'Traditional Ghanaian rice dish with vegetables and spices',

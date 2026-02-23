@@ -75,7 +75,7 @@ export class EmailService {
   /**
    * Verify email OTP
    */
-  async verifyEmailOtp(email: string, token: string): Promise<{ success: boolean; message: string; session?: any; errors?: string[] }> {
+  async verifyEmailOtp(email: string, token: string): Promise<{ success: boolean; message: string; session?: unknown; errors?: string[] }> {
     try {
       const supabase = createClient()
 
@@ -111,7 +111,7 @@ export class EmailService {
   /**
    * Verify email with token hash (PKCE flow)
    */
-  async verifyEmailWithTokenHash(tokenHash: string, type: 'email' | 'recovery' = 'email'): Promise<{ success: boolean; message: string; session?: any; errors?: string[] }> {
+  async verifyEmailWithTokenHash(tokenHash: string, type: 'email' | 'recovery' = 'email'): Promise<{ success: boolean; message: string; session?: unknown; errors?: string[] }> {
     try {
       const supabase = createClient()
 

@@ -17,6 +17,9 @@ export interface Product {
   category_id?: string
   category_name: string
   subcategory?: string
+  /** Cost from supplier; unchanged by pricing page */
+  original_price?: number | null
+  /** Selling price; updated when pricing ranges are applied */
   price: number
   currency: string
   quantity: number
@@ -158,14 +161,20 @@ export class ProductsService {
       // Generate slug from name
       const slug = this.generateSlug(productData.name)
 
+      const payload: Record<string, unknown> = {
+        ...productData,
+        category: productData.category_name ?? productData.category,
+        slug,
+        currency: productData.currency || 'GHS'
+      }
+      if (payload.original_price !== undefined) {
+        // Keep original_price as-is when provided (e.g. from supplier import)
+      } else if (payload.price !== undefined) {
+        payload.original_price = payload.price
+      }
       const { data: product, error } = await this.supabase
         .from('products')
-        .insert({
-          ...productData,
-          category: productData.category_name ?? productData.category,
-          slug,
-          currency: productData.currency || 'GHS'
-        })
+        .insert(payload)
         .select()
         .single()
 
@@ -378,6 +387,64 @@ export class ProductsService {
   }
 
   /**
+   * Bulk create products from supplier data (e.g. CSV/Excel). Uses unitPrice as both original_price and price.
+   */
+  async createBulkProducts(
+    items: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }>
+  ): Promise<{ created: number; failed: number; errors: string[] }> {
+    let created = 0
+    const errors: string[] = []
+    for (const item of items) {
+      const slug = this.generateSlug(item.name)
+      const payload = {
+        name: item.name,
+        brand: item.code ?? '',
+        category_name: item.category_name ?? 'General',
+        category: item.category_name ?? 'General',
+        original_price: item.unitPrice,
+        price: item.unitPrice,
+        currency: 'GHS',
+        quantity: 0,
+        in_stock: false,
+        rating: 0,
+        reviews_count: 0,
+        images: [],
+        slug
+      }
+      const { error } = await this.supabase.from('products').insert(payload).select('id').single()
+      if (error) {
+        errors.push(`${item.name}: ${error.message}`)
+        continue
+      }
+      created++
+    }
+    return { created, failed: items.length - created, errors }
+  }
+
+  /**
+   * Get all products for pricing (id, original_price, price). Used by pricing apply.
+   */
+  async getAllForPricing(): Promise<Array<{ id: string; original_price: number | null; price: number }>> {
+    const { data, error } = await this.supabase
+      .from('products')
+      .select('id, original_price, price')
+    if (error) throw error
+    return (data ?? []).map((p: { id: string; original_price?: number | null; price: number }) => ({
+      id: p.id,
+      original_price: p.original_price ?? null,
+      price: p.price
+    }))
+  }
+
+  /**
+   * Update selling price for a product (used after pricing apply).
+   */
+  async updateProductPrice(id: string, price: number): Promise<void> {
+    const { error } = await this.supabase.from('products').update({ price }).eq('id', id)
+    if (error) throw error
+  }
+
+  /**
    * Generate slug from product name
    */
   private generateSlug(name: string): string {
@@ -390,13 +457,13 @@ export class ProductsService {
       .replace(/^-|-$/g, '')
   }
 
-  private mapSupabaseError(error: any, defaultMessage: string): { message: string; statusCode?: number } {
+  private mapSupabaseError(error: unknown, defaultMessage: string): { message: string; statusCode?: number } {
     if (!error) {
       return { message: defaultMessage }
     }
-
-    const code = error.code || error?.details?.code
-    const rawMessage = typeof error.message === 'string' ? error.message : ''
+    const e = error as { code?: string; details?: { code?: string }; message?: string }
+    const code = e.code ?? e.details?.code
+    const rawMessage = typeof e.message === 'string' ? e.message : ''
 
     if (code === '23505' || rawMessage.includes('duplicate key value')) {
       if (rawMessage.includes('products_slug_unique')) {

@@ -107,12 +107,17 @@ class BundlesController {
             }
         };
         /**
-         * Generate new bundles (Admin only)
+         * Generate new bundles (Admin only). Optional: prompt, budgetMin, budgetMax for AI-driven bundle content and price range.
          */
         this.generateBundles = async (req, res) => {
             try {
-                const { count = 20 } = req.body;
-                const result = await this.bundlesService.generateBundles(count);
+                const { count = 20, prompt, budgetMin, budgetMax } = req.body;
+                const result = await this.bundlesService.generateBundles({
+                    count: typeof count === 'number' ? count : parseInt(String(count), 10) || 20,
+                    prompt: typeof prompt === 'string' ? prompt.trim() || undefined : undefined,
+                    budgetMin: typeof budgetMin === 'number' ? budgetMin : budgetMin != null ? parseFloat(String(budgetMin)) : undefined,
+                    budgetMax: typeof budgetMax === 'number' ? budgetMax : budgetMax != null ? parseFloat(String(budgetMax)) : undefined,
+                });
                 if (result.success && result.bundles) {
                     // Save bundles to database
                     let savedCount = 0;

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { AuthService } from '../services/auth.service'
+import type { AuthRequest } from '../middleware/auth.middleware'
 import { UserService } from '../services/user.service'
 import { ApiResponse } from '../types/api.types'
 import { SignupRequest, SigninRequest, GoogleAuthRequest } from '../types/auth'
@@ -187,9 +188,10 @@ export class AuthController {
         const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`
         
         // Append tokens to the redirect URL as query params (fallback for cross-domain cookies)
+        const session = result.session as { access_token?: string; refresh_token?: string }
         const tokenParams = new URLSearchParams({
-          access_token: result.session.access_token,
-          refresh_token: result.session.refresh_token,
+          access_token: session.access_token ?? '',
+          refresh_token: session.refresh_token ?? '',
         }).toString()
 
         const separator = safePath.includes('?') ? '&' : '?'
@@ -255,7 +257,7 @@ export class AuthController {
    */
   getProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = (req as any).user?.id
+      const userId = (req as AuthRequest).user?.id
 
       if (!userId) {
         res.status(401).json({
@@ -288,7 +290,7 @@ export class AuthController {
    */
   updateProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = (req as any).user?.id
+      const userId = (req as AuthRequest).user?.id
 
       if (!userId) {
         res.status(401).json({

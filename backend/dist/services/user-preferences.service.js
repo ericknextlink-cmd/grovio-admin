@@ -133,7 +133,7 @@ class UserPreferencesService {
                 .single();
             return data?.onboarding_completed || false;
         }
-        catch (error) {
+        catch {
             return false;
         }
     }

@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaystackService = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const axios_1 = __importDefault(require("axios"));
 const supabase_1 = require("../config/supabase");
 class PaystackService {
@@ -55,9 +56,10 @@ class PaystackService {
             }
         }
         catch (error) {
-            console.error('Paystack initialization error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.message ||
-                error.message ||
+            const err = error;
+            console.error('Paystack initialization error:', err.response?.data ?? err.message);
+            throw new Error(err.response?.data?.message ??
+                err.message ??
                 'Failed to initialize payment with Paystack');
         }
     }
@@ -82,9 +84,10 @@ class PaystackService {
             }
         }
         catch (error) {
-            console.error('Paystack verification error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.message ||
-                error.message ||
+            const err = error;
+            console.error('Paystack verification error:', err.response?.data ?? err.message);
+            throw new Error(err.response?.data?.message ??
+                err.message ??
                 'Failed to verify payment');
         }
     }
@@ -98,8 +101,7 @@ class PaystackService {
                 console.error('Cannot verify webhook: PAYSTACK_SECRET_KEY not set');
                 return false;
             }
-            const crypto = require('crypto');
-            const hash = crypto
+            const hash = crypto_1.default
                 .createHmac('sha512', this.secretKey)
                 .update(payload)
                 .digest('hex');
@@ -116,11 +118,12 @@ class PaystackService {
     async handleWebhook(event) {
         try {
             const { event: eventType, data } = event;
+            const chargeData = data;
             switch (eventType) {
                 case 'charge.success':
-                    return await this.handleChargeSuccess(data);
+                    return await this.handleChargeSuccess(chargeData);
                 case 'charge.failed':
-                    return await this.handleChargeFailed(data);
+                    return await this.handleChargeFailed(chargeData);
                 case 'transfer.success':
                 case 'transfer.failed':
                 case 'transfer.reversed':

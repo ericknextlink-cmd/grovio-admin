@@ -100,8 +100,8 @@ export class FavoritesController {
       res.json({
         success: true,
         message: result.message,
-        data: (result as any).data
-      } as ApiResponse<any>)
+        data: (result as ApiResponse<unknown>).data
+      } as ApiResponse<unknown>)
     } catch (error) {
       console.error('Update favorites error:', error)
       res.status(500).json({

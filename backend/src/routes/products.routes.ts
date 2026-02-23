@@ -219,6 +219,7 @@ router.get('/:id', productIdValidation, productsController.getProductById)
 router.use(authenticateAdmin)
 
 router.post('/', createProductValidation, productsController.createProduct)
+router.post('/bulk', productsController.createBulkProducts)
 router.put('/:id', updateProductValidation, productsController.updateProduct)
 router.delete('/:id', productIdValidation, productsController.deleteProduct)
 router.patch('/:id/stock', updateStockValidation, productsController.updateStock)

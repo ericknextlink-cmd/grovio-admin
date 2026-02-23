@@ -8,7 +8,7 @@ export interface FavoriteItem {
 }
 
 export interface FavoriteItemWithProduct extends FavoriteItem {
-  product: any // Product details from products table
+  product: Record<string, unknown> // Product details from products table
 }
 
 export class FavoritesService {
@@ -226,7 +226,7 @@ export class FavoritesService {
         success: true,
         isFavorite: !!data && !error
       }
-    } catch (error) {
+    } catch {
       return {
         success: false,
         isFavorite: false

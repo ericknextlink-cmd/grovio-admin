@@ -10,7 +10,7 @@ export interface CartItem {
 }
 
 export interface CartItemWithProduct extends CartItem {
-  product: any // Product details from products table
+  product: Record<string, unknown> // Product details from products table
 }
 
 export class CartService {
@@ -116,7 +116,7 @@ export class CartService {
       }
 
       // Check if item already in cart
-      const { data: existingItem, error: checkError } = await this.supabase
+      const { data: existingItem } = await this.supabase
         .from('cart')
         .select('*')
         .eq('user_id', userId)

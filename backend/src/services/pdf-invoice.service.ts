@@ -6,6 +6,13 @@ import fs from 'fs/promises'
 import path from 'path'
 import { existsSync } from 'fs'
 
+/** Decode a data URL (e.g. from QRCode.toDataURL) to PNG bytes for pdf-lib embedPng */
+function dataUrlToPngBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+  const binary = Buffer.from(base64, 'base64')
+  return new Uint8Array(binary)
+}
+
 export interface InvoiceData {
   invoiceNumber: string  // 4787837473
   orderNumber: string    // ORD-AC23-233E
@@ -42,14 +49,47 @@ export interface InvoiceGenerationResult {
   error?: string
 }
 
+/** Default template filename in storage (templates folder) and local public folder */
+const DEFAULT_TEMPLATE_FILENAME = 'Template.pdf'
+
 export class PDFInvoiceService {
   private supabase
+  /** Bucket for generated invoices (output) */
   private bucketName = 'invoices'
-  private templatePath: string
+  /** Bucket for templates (from env SUPABASE_STORAGE_BUCKET); templates live in folder "templates/" */
+  private templatesBucketName: string
+  /** Local fallback path (e.g. backend/public/Template.pdf) */
+  private localTemplatePath: string
 
   constructor() {
     this.supabase = createAdminClient()
-    this.templatePath = path.join(__dirname, '../../public/Template.pdf')
+    this.templatesBucketName = process.env.SUPABASE_STORAGE_BUCKET || 'invoices'
+    this.localTemplatePath = path.join(process.cwd(), 'public', DEFAULT_TEMPLATE_FILENAME)
+  }
+
+  /**
+   * Load template PDF bytes: first from Supabase storage (templates/Template.pdf),
+   * then fallback to local public/Template.pdf.
+   */
+  private async getTemplateBytes(): Promise<Uint8Array> {
+    const storagePath = `templates/${DEFAULT_TEMPLATE_FILENAME}`
+    const { data, error } = await this.supabase.storage
+      .from(this.templatesBucketName)
+      .download(storagePath)
+
+    if (!error && data) {
+      const bytes = new Uint8Array(await data.arrayBuffer())
+      if (bytes.length > 0) return bytes
+    }
+
+    if (existsSync(this.localTemplatePath)) {
+      const buf = await fs.readFile(this.localTemplatePath)
+      return new Uint8Array(buf)
+    }
+
+    throw new Error(
+      `Invoice template not found. Upload templates/${DEFAULT_TEMPLATE_FILENAME} to Supabase bucket "${this.templatesBucketName}" or place Template.pdf in backend/public/`
+    )
   }
 
   /**
@@ -59,7 +99,7 @@ export class PDFInvoiceService {
     try {
       const { data: buckets } = await this.supabase.storage.listBuckets()
       
-      const bucketExists = buckets?.some((b: any) => b.name === this.bucketName)
+      const bucketExists = buckets?.some((b: { name: string }) => b.name === this.bucketName)
       
       if (!bucketExists) {
         const { error } = await this.supabase.storage.createBucket(this.bucketName, {
@@ -80,6 +120,19 @@ export class PDFInvoiceService {
   }
 
   /**
+   * Generate invoice PDF and return bytes only (no upload). Use for testing or custom storage.
+   */
+  async generateInvoiceToBuffer(data: InvoiceData): Promise<Uint8Array> {
+    const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber)
+    try {
+      const templateBytes = await this.getTemplateBytes()
+      return await this.fillTemplate(data, qrCodeData, templateBytes)
+    } catch {
+      return await this.createInvoiceFromScratch(data, qrCodeData)
+    }
+  }
+
+  /**
    * Generate invoice PDF from template
    */
   async generateInvoice(data: InvoiceData): Promise<InvoiceGenerationResult> {
@@ -89,12 +142,12 @@ export class PDFInvoiceService {
       // 1. Generate QR Code
       const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber)
 
-      // 2. Load or create PDF
+      // 2. Load or create PDF (template from Supabase templates/ or local public/)
       let pdfBytes: Uint8Array
-      
-      if (existsSync(this.templatePath)) {
-        pdfBytes = await this.fillTemplate(data, qrCodeData)
-      } else {
+      try {
+        const templateBytes = await this.getTemplateBytes()
+        pdfBytes = await this.fillTemplate(data, qrCodeData, templateBytes)
+      } catch {
         pdfBytes = await this.createInvoiceFromScratch(data, qrCodeData)
       }
 
@@ -130,12 +183,15 @@ export class PDFInvoiceService {
     }
   }
 
+  /** Fixed row height for each item line (same spacing for any number of products) */
+  private static readonly ITEM_ROW_HEIGHT = 28
+
   /**
-   * Fill Template.pdf with invoice data
+   * Fill Template.pdf with invoice data.
+   * Uses consistent row height per item so multiple products don't require fixed template lines.
    */
-  private async fillTemplate(data: InvoiceData, qrCodeDataUrl: string): Promise<Uint8Array> {
+  private async fillTemplate(data: InvoiceData, qrCodeDataUrl: string, templateBytes: Uint8Array): Promise<Uint8Array> {
     try {
-      const templateBytes = await fs.readFile(this.templatePath)
       const pdfDoc = await PDFDocument.load(templateBytes)
       
       const pages = pdfDoc.getPages()
@@ -146,13 +202,12 @@ export class PDFInvoiceService {
       const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
       
-      // Embed QR code
-      const qrImage = await pdfDoc.embedPng(qrCodeDataUrl)
+      // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+      const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl))
       const qrDims = qrImage.scale(0.35)
       
       // Position calculations (adjust based on actual template)
       const leftMargin = 60
-      const rightMargin = width - 60
       
       // Invoice Number (top right)
       firstPage.drawText(data.invoiceNumber, {
@@ -208,12 +263,14 @@ export class PDFInvoiceService {
       // Items header - adjust based on template
       yPos = height - 320
       
-      // Items
+      // Items: same row height for each line (works for 6 or many more products)
       data.items.forEach((item) => {
         if (yPos < 200) return // Prevent overflow
-        
+
+        const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT
+
         // Description
-        const desc = item.description.substring(0, 60)  // Truncate if too long
+        const desc = item.description.substring(0, 60)
         firstPage.drawText(desc, {
           x: leftMargin,
           y: yPos,
@@ -221,7 +278,7 @@ export class PDFInvoiceService {
           font: helvetica,
           color: rgb(0, 0, 0),
         })
-        
+
         // Quantity
         firstPage.drawText(item.quantity.toString(), {
           x: width - 300,
@@ -230,7 +287,7 @@ export class PDFInvoiceService {
           font: helvetica,
           color: rgb(0, 0, 0),
         })
-        
+
         // Unit Price
         firstPage.drawText(item.unitPrice.toFixed(2), {
           x: width - 200,
@@ -239,7 +296,7 @@ export class PDFInvoiceService {
           font: helvetica,
           color: rgb(0, 0, 0),
         })
-        
+
         // Total
         firstPage.drawText(item.total.toFixed(2), {
           x: width - 100,
@@ -248,8 +305,8 @@ export class PDFInvoiceService {
           font: helvetica,
           color: rgb(0, 0, 0),
         })
-        
-        yPos -= 25
+
+        yPos -= rowHeight
       })
       
       // Totals section
@@ -327,8 +384,8 @@ export class PDFInvoiceService {
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
     
-    // Embed QR code
-    const qrImage = await pdfDoc.embedPng(qrCodeDataUrl)
+    // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+    const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl))
     const qrDims = qrImage.scale(0.3)
     
     // Header
@@ -545,10 +602,9 @@ export class PDFInvoiceService {
    */
   private async generatePDFImage(pdfBytes: Uint8Array, invoiceNumber: string): Promise<string | null> {
     try {
-      // Using Puppeteer to convert PDF to image
-      const puppeteer = require('puppeteer')
+      const puppeteer = await import('puppeteer')
       
-      const browser = await puppeteer.launch({
+      const browser = await puppeteer.default.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       })
@@ -597,7 +653,7 @@ export class PDFInvoiceService {
     contentType: string
   ): Promise<string | null> {
     try {
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(this.bucketName)
         .upload(fileName, fileBuffer, {
           contentType,

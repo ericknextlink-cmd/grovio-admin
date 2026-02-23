@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import type { AuthenticatedAdminRequest } from '../middleware/adminAuth.middleware'
 import { AdminService } from '../services/admin.service'
 import { ApiResponse } from '../types/api.types'
 
@@ -64,7 +65,7 @@ export class AdminController {
    */
   getProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-      const adminId = (req as any).adminId
+      const adminId = (req as AuthenticatedAdminRequest).adminId
 
       const admin = await this.adminService.getAdminById(adminId)
 
@@ -95,7 +96,7 @@ export class AdminController {
    */
   updateProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-      const adminId = (req as any).adminId
+      const adminId = (req as AuthenticatedAdminRequest).adminId
       const updates = req.body
 
       const result = await this.adminService.updateAdmin(adminId, updates)
@@ -127,7 +128,7 @@ export class AdminController {
    */
   changePassword = async (req: Request, res: Response): Promise<void> => {
     try {
-      const adminId = (req as any).adminId
+      const adminId = (req as AuthenticatedAdminRequest).adminId
       const { currentPassword, newPassword } = req.body
 
       if (!currentPassword || !newPassword) {
@@ -166,7 +167,7 @@ export class AdminController {
    */
   refreshToken = async (req: Request, res: Response): Promise<void> => {
     try {
-      const adminId = (req as any).adminId
+      const adminId = (req as AuthenticatedAdminRequest).adminId
 
       const result = await this.adminService.refreshToken(adminId)
 

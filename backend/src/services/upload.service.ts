@@ -230,7 +230,7 @@ export class UploadService {
       await this.ensureBucketExists(bucketName)
 
       // Upload to Supabase Storage
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(bucketName)
         .upload(filePath, optimizedBuffer, {
           contentType,

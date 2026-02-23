@@ -71,11 +71,8 @@ export class AIProductsService {
         .select('name, subcategories')
         .limit(20)
 
-      // Get sample products to understand structure
-      const { data: sampleProducts } = await this.supabase
-        .from('products')
-        .select('*')
-        .limit(10)
+      // Get sample products to understand structure (query runs for schema context)
+      await this.supabase.from('products').select('*').limit(10)
 
       const categoriesList = categories?.map(c => c.name).join(', ') || 'Fruits & Vegetables, Dairy & Eggs, Meat & Seafood, Pantry, Beverages'
       const subcategoriesList = categories?.flatMap(c => c.subcategories || []).slice(0, 20).join(', ') || 'Fresh Fruits, Milk, Cheese, Beef, Chicken'
@@ -358,7 +355,7 @@ Return a JSON array of products with this exact structure:
     error?: string
   }> {
     try {
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         ...updates,
         updated_at: new Date().toISOString(),
       }

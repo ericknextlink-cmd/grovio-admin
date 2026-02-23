@@ -114,7 +114,6 @@ class OrderService {
             }
             // 6. Initialize payment with Paystack
             const frontendUrl = process.env.FRONTEND_URL || '';
-            const backendUrl = process.env.BACKEND_URL || '';
             const paystackResult = await this.paystack.initializeTransaction({
                 email: user.email,
                 amount: this.paystack.toKobo(totalAmount), // Convert to kobo
@@ -265,7 +264,7 @@ class OrderService {
                 order_id: order.id,
                 product_id: item.productId,
                 product_name: item.name,
-                product_description: item.description,
+                product_description: item.description ?? '',
                 product_image: item.image,
                 category_name: item.category,
                 unit_price: item.price,
@@ -318,10 +317,10 @@ class OrderService {
                 customerPhone: pendingOrder.delivery_address.phone,
                 customerEmail: pendingOrder.metadata.userEmail,
                 items: pendingOrder.cart_items.map((item) => ({
-                    description: item.name,
-                    quantity: item.quantity,
-                    unitPrice: item.price,
-                    total: item.total,
+                    description: item.name ?? '',
+                    quantity: item.quantity ?? 0,
+                    unitPrice: item.price ?? 0,
+                    total: item.total ?? 0,
                 })),
                 subtotal: pendingOrder.subtotal,
                 discount: pendingOrder.discount,

@@ -4,7 +4,8 @@ exports.createApiError = exports.asyncHandler = exports.errorHandler = void 0;
 /**
  * Global error handler middleware
  */
-const errorHandler = (error, req, res, next) => {
+const errorHandler = (error, req, res, _next // Express requires 4-arg signature for error middleware
+) => {
     let { statusCode = 500, message } = error;
     // Handle specific error types
     if (error.name === 'ValidationError') {
@@ -38,9 +39,6 @@ const errorHandler = (error, req, res, next) => {
     });
 };
 exports.errorHandler = errorHandler;
-/**
- * Async error handler wrapper
- */
 const asyncHandler = (fn) => {
     return (req, res, next) => {
         Promise.resolve(fn(req, res, next)).catch(next);

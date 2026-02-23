@@ -5,10 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
+    "build": "pnpm run lint && tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --watch 'src/**/*.ts' --exec \"ts-node\" src/server.ts",
-    "lint": "eslint 'src/**/*.ts'"
+    "lint": "eslint 'src/**/*.ts'",
+    "test:invoice": "ts-node -r dotenv/config scripts/test-invoice.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.3.57",

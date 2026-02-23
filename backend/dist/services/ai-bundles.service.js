@@ -16,28 +16,28 @@ class AIBundlesService {
         this.supabase = (0, supabase_1.createAdminClient)();
     }
     /**
-     * Generate product bundles using AI
+     * Generate product bundles using AI.
+     * Optional prompt + budget range: bundles will match the description and have total (sum of items) within [budgetMin, budgetMax] GHS.
      */
-    async generateBundles(count = 20) {
+    async generateBundles(options = {}) {
+        const count = options.count ?? 20;
+        const { prompt: customPrompt, budgetMin, budgetMax } = options;
         try {
             if (!process.env.OPENAI_API_KEY) {
-                // Fallback to deterministic generation
                 return await this.generateDeterministicBundles(count);
             }
-            // Fetch all in-stock products from database
             const { data: products, error: productsError } = await this.supabase
                 .from('products')
                 .select('*')
                 .eq('in_stock', true)
                 .order('rating', { ascending: false })
-                .limit(100);
+                .limit(150);
             if (productsError || !products || products.length === 0) {
                 return {
                     success: false,
                     error: 'No products available',
                 };
             }
-            // Build product catalog for AI
             const productCatalog = products.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -47,45 +47,37 @@ class AIBundlesService {
                 brand: p.brand,
                 rating: p.rating,
             }));
+            const budgetConstraint = budgetMin != null && budgetMax != null
+                ? `**CRITICAL - Budget:** Each bundle's total (sum of selected product prices) MUST be between ${budgetMin} and ${budgetMax} GHS. Choose productIds so that the sum of their prices falls in this range.`
+                : 'Each bundle should have a sensible total price (sum of product prices).';
+            const taskInstruction = customPrompt?.trim()
+                ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. Each bundle = 3-6 products from the list below.`
+                : `Create ${count} diverse product bundles that combine 3-6 products each. Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`;
             const prompt = `You are a grocery shopping expert creating curated product bundles for Ghanaian shoppers.
 
-**Available Products:**
+**Available Products (use ONLY these id and price values):**
 ${JSON.stringify(productCatalog, null, 2)}
 
-**Task:** Create ${count} diverse product bundles that combine 3-6 products each.
-
-**Bundle Categories to create:**
-- Student Essentials (budget-friendly basics)
-- Family Dinner Bundle (proteins + vegetables + seasonings)
-- Healthy Breakfast Set (nutritious morning items)
-- Quick Lunch Combo (fast meal ingredients)
-- Vegetarian Delight (plant-based meals)
-- Protein Power Pack (high-protein items)
-- Baking Essentials (flour, eggs, etc.)
-- Weekend BBQ Pack (grilling items)
-- Comfort Food Classic (traditional favorites)
-- Spice Master Collection (seasonings)
+**Task:** ${taskInstruction}
 
 **Requirements:**
-1. Each bundle should have 3-6 products
-2. Products should complement each other (make sense together)
-3. Target a specific audience (students, families, fitness, etc.)
-4. Price range variety (budget to premium)
-5. Include products from different categories for balance
-6. Consider Ghanaian cooking culture
+1. Each bundle must have 3-6 products. Use ONLY product "id" values from the Available Products list above.
+2. Products should complement each other (make sense together).
+3. ${budgetConstraint}
+4. Include products from different categories for balance.
 
-**Output Format (JSON array):**
+**Output Format (JSON array only, no other text):**
 [{
-  "title": "Student Essentials Pack",
-  "description": "Perfect starter pack for students living on their own",
-  "category": "Student",
-  "targetAudience": "university students, young professionals",
-  "badge": "Most Popular",
-  "productIds": ["product-id-1", "product-id-2", ...],
-  "discountPercentage": 15
+  "title": "Bundle title",
+  "description": "Short description",
+  "category": "Category name",
+  "targetAudience": "who it's for",
+  "badge": "Optional badge",
+  "productIds": ["<actual-uuid-from-list>", "<actual-uuid-from-list>", ...],
+  "discountPercentage": 0
 }]
 
-Return ONLY the JSON array, no additional text.`;
+Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JSON array.`;
             const response = await this.model.invoke(prompt);
             const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
             // Extract JSON from response
@@ -276,28 +268,28 @@ Return ONLY the JSON array, no additional text.`;
             if (bundleProducts.length < 2) {
                 return null;
             }
-            const originalPrice = bundleProducts.reduce((sum, p) => sum + parseFloat(p.price), 0);
-            const discountPercentage = bundleData.discountPercentage || 15;
+            const originalPrice = bundleProducts.reduce((sum, p) => sum + parseFloat(String(p.price)), 0);
+            const discountPercentage = Number(bundleData.discountPercentage) || 15;
             const currentPrice = originalPrice * (1 - discountPercentage / 100);
             const bundle = {
                 id: (0, uuid_1.v4)(),
                 bundleId: `BUNDLE-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`,
-                title: bundleData.title,
-                description: bundleData.description,
-                category: bundleData.category,
-                targetAudience: bundleData.targetAudience,
-                badge: bundleData.badge || 'Featured',
+                title: String(bundleData.title ?? ''),
+                description: String(bundleData.description ?? ''),
+                category: String(bundleData.category ?? ''),
+                targetAudience: String(bundleData.targetAudience ?? ''),
+                badge: String(bundleData.badge ?? 'Featured'),
                 productIds: bundleData.productIds,
                 products: bundleProducts.map(p => ({
                     id: p.id,
-                    name: p.name,
-                    price: parseFloat(p.price),
+                    name: String(p.name ?? ''),
+                    price: parseFloat(String(p.price)),
                     quantity: 1,
                 })),
                 originalPrice: parseFloat(originalPrice.toFixed(2)),
                 currentPrice: parseFloat(currentPrice.toFixed(2)),
                 savings: parseFloat((originalPrice - currentPrice).toFixed(2)),
-                discountPercentage: parseFloat(discountPercentage.toFixed(2)),
+                discountPercentage,
                 rating: 4.5 + Math.random() * 0.4,
                 reviewsCount: Math.floor(Math.random() * 200) + 50,
                 imageUrl: '/grocery.png',
@@ -551,7 +543,7 @@ Return ONLY the JSON array, no additional text.`;
                 .update({ is_active: false })
                 .eq('generated_by', 'ai');
             // Generate new bundles
-            const result = await this.generateBundles(20);
+            const result = await this.generateBundles({ count: 20 });
             if (!result.success || !result.bundles) {
                 return {
                     success: false,

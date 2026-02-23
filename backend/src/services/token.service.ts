@@ -162,7 +162,7 @@ export class TokenService {
   /**
    * Verify account recovery token
    */
-  async verifyRecoveryToken(email: string, token: string): Promise<{ success: boolean; deletedUser?: any; message: string; errors?: string[] }> {
+  async verifyRecoveryToken(email: string, token: string): Promise<{ success: boolean; deletedUser?: unknown; message: string; errors?: string[] }> {
     try {
       const supabase = createClient()
 

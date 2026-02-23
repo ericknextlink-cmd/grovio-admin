@@ -21,7 +21,7 @@ export class ProfileService {
       const filePath = `profiles/${uniqueFileName}`
 
       // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
           contentType: mimeType,
@@ -147,7 +147,7 @@ export class ProfileService {
     firstName?: string
     lastName?: string
     phoneNumber?: string
-    preferences?: any
+    preferences?: Record<string, unknown>
   }): Promise<AuthResponse> {
     try {
       const supabase = createClient()
@@ -155,7 +155,7 @@ export class ProfileService {
       const { firstName, lastName, phoneNumber, preferences } = profileData
 
       // Prepare update data
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         updated_at: new Date().toISOString()
       }
 

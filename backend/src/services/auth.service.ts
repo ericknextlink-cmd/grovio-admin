@@ -1,6 +1,6 @@
-import { Request } from 'express'
+import type { Request, Response } from 'express'
 import { createClient, createAdminClient } from '../config/supabase'
-import { hashPassword, verifyPassword, isValidEmail, isValidPassword, isValidPhoneNumber, generateToken } from '../utils/auth'
+import { hashPassword, isValidEmail, isValidPassword, isValidPhoneNumber } from '../utils/auth'
 import { sanitizeDatabaseError, sanitizeAuthError, sanitizeError } from '../utils/error-sanitizer'
 import { SignupRequest, SigninRequest, GoogleAuthRequest, AuthResponse } from '../types/auth'
 import { UserService } from './user.service'
@@ -364,7 +364,7 @@ export class AuthService {
   /**
    * Initiate Google OAuth flow - returns redirect URL
    */
-  async initiateGoogleAuth(redirectTo: string = '/dashboard', req?: any, res?: any): Promise<AuthResponse & { url?: string; cookieName?: string; cookieValue?: string }> {
+  async initiateGoogleAuth(redirectTo: string = '/dashboard', req?: Request, res?: Response): Promise<AuthResponse & { url?: string; cookieName?: string; cookieValue?: string }> {
     try {
       // Use cookie-based client for PKCE flow
       const supabase = createClient(req, res)
@@ -442,7 +442,7 @@ export class AuthService {
    * Handle Google OAuth callback (server-side SSR flow)
    * Exchanges authorization code for session using PKCE code verifier from cookies
    */
-  async handleGoogleCallback(code: string, req?: any, res?: any): Promise<AuthResponse & { session?: any; redirectTo?: string }> {
+  async handleGoogleCallback(code: string, req?: Request, res?: Response): Promise<AuthResponse & { session?: { access_token?: string; refresh_token?: string; user?: unknown }; redirectTo?: string }> {
     try {
       if (!code) {
         return {
@@ -512,7 +512,7 @@ export class AuthService {
       })
 
       // Process user profile creation/update
-      const userResult = await this.processGoogleUser(authData.user, authData.session)
+      const userResult = await this.processGoogleUser(authData.user as { id: string; email?: string; user_metadata?: Record<string, unknown>; email_confirmed_at?: unknown; phone_confirmed_at?: unknown; phone?: string }, authData.session as unknown as { access_token?: string; refresh_token?: string; [key: string]: unknown })
 
       // Get redirectTo from cookie if it exists
       let redirectTo = '/dashboard'
@@ -555,9 +555,16 @@ export class AuthService {
    * Process Google user profile (helper method)
    * Creates or updates user profile and preferences
    */
-  private async processGoogleUser(googleUser: any, session: any): Promise<AuthResponse> {
+  private async processGoogleUser(googleUser: {
+    id: string
+    email?: string
+    user_metadata?: Record<string, unknown>
+    email_confirmed_at?: unknown
+    phone_confirmed_at?: unknown
+    phone?: string
+  }, session: { access_token?: string; refresh_token?: string; [key: string]: unknown }): Promise<AuthResponse> {
     try {
-      const userMetadata = googleUser.user_metadata || {}
+      const userMetadata = (googleUser.user_metadata || {}) as Record<string, string | unknown>
       const adminSupabase = createAdminClient()
 
       // Check if user exists in our database
@@ -576,19 +583,19 @@ export class AuthService {
           email: googleUser.email,
         })
 
-        const firstName = userMetadata.given_name ||
-                         userMetadata.first_name ||
-                         userMetadata.full_name?.split(' ')[0] ||
-                         userMetadata.name?.split(' ')[0] ||
+        const firstName = (userMetadata.given_name as string) ||
+                         (userMetadata.first_name as string) ||
+                         (typeof userMetadata.full_name === 'string' ? userMetadata.full_name.split(' ')[0] : null) ||
+                         (typeof userMetadata.name === 'string' ? userMetadata.name.split(' ')[0] : null) ||
                          googleUser.email?.split('@')[0] ||
                          'User'
-        const lastName = userMetadata.family_name ||
-                        userMetadata.last_name ||
-                        userMetadata.full_name?.split(' ').slice(1).join(' ') ||
-                        userMetadata.name?.split(' ').slice(1).join(' ') ||
+        const lastName = (userMetadata.family_name as string) ||
+                        (userMetadata.last_name as string) ||
+                        (typeof userMetadata.full_name === 'string' ? userMetadata.full_name.split(' ').slice(1).join(' ') : '') ||
+                        (typeof userMetadata.name === 'string' ? userMetadata.name.split(' ').slice(1).join(' ') : '') ||
                         ''
-        const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || ''
-        const countryCode = userMetadata.country_code || '+233'
+        const phoneNumber = (userMetadata.phone as string) || (userMetadata.phone_number as string) || googleUser.phone || ''
+        const countryCode = (userMetadata.country_code as string) || '+233'
 
         const { data: newUser, error: insertError } = await adminSupabase
           .from('users')
@@ -655,7 +662,7 @@ export class AuthService {
         }
       } else {
         // Existing user - update profile if needed
-        const updateData: any = {
+        const updateData: Record<string, unknown> = {
           updated_at: new Date().toISOString(),
         }
 
@@ -739,7 +746,7 @@ export class AuthService {
    * When OAuth is initiated client-side, the frontend exchanges the code for a session
    * and sends the session to this endpoint to create/update user profile
    */
-  async handleGoogleCallbackSession(session: any): Promise<AuthResponse> {
+  async handleGoogleCallbackSession(session: { access_token?: string; refresh_token?: string; user?: { user_metadata?: Record<string, unknown> } }): Promise<AuthResponse> {
     try {
       if (!session?.access_token || !session?.user) {
         return {
@@ -764,7 +771,7 @@ export class AuthService {
 
       // Use verified user data
       const googleUser = verifiedUser
-      const userMetadata = googleUser.user_metadata || session.user?.user_metadata || {}
+      const userMetadata = (googleUser.user_metadata || session.user?.user_metadata || {}) as Record<string, unknown>
       
       // Check if user exists in our database using admin client to bypass RLS
       const { data: existingUser, error: userError } = await adminSupabase
@@ -785,19 +792,21 @@ export class AuthService {
           metadataKeys: Object.keys(userMetadata),
         })
         
-        const firstName = userMetadata.given_name || 
-                         userMetadata.first_name ||
-                         userMetadata.full_name?.split(' ')[0] || 
-                         userMetadata.name?.split(' ')[0] ||
-                         googleUser.email?.split('@')[0] || 
+        const fullName = typeof userMetadata.full_name === 'string' ? userMetadata.full_name : ''
+        const nameStr = typeof userMetadata.name === 'string' ? userMetadata.name : ''
+        const firstName = (userMetadata.given_name as string) ||
+                         (userMetadata.first_name as string) ||
+                         fullName.split(' ')[0] ||
+                         nameStr.split(' ')[0] ||
+                         googleUser.email?.split('@')[0] ||
                          'User'
-        const lastName = userMetadata.family_name || 
-                        userMetadata.last_name ||
-                        userMetadata.full_name?.split(' ').slice(1).join(' ') ||
-                        userMetadata.name?.split(' ').slice(1).join(' ') ||
+        const lastName = (userMetadata.family_name as string) ||
+                        (userMetadata.last_name as string) ||
+                        fullName.split(' ').slice(1).join(' ') ||
+                        nameStr.split(' ').slice(1).join(' ') ||
                         ''
-        const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || ''
-        const countryCode = userMetadata.country_code || '+233'
+        const phoneNumber = (userMetadata.phone as string) || (userMetadata.phone_number as string) || googleUser.phone || ''
+        const countryCode = (userMetadata.country_code as string) || '+233'
 
         // Use a transaction-like approach: insert user and preferences together
         // If user insert fails, we don't want to proceed
@@ -898,7 +907,7 @@ export class AuthService {
           email: googleUser.email,
         })
         
-        const updateData: any = {
+        const updateData: Record<string, unknown> = {
           updated_at: new Date().toISOString(),
         }
 
@@ -906,7 +915,6 @@ export class AuthService {
           updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture
         }
 
-        // Update email verification status if it changed
         if (googleUser.email_confirmed_at) {
           updateData.is_email_verified = true
         }
@@ -920,7 +928,6 @@ export class AuthService {
 
         if (updateError) {
           console.warn(' Failed to update user profile (non-fatal):', updateError.message)
-          // Use existing user data if update fails
           userData = existingUser
         } else {
           userData = updatedUser || existingUser
@@ -1111,7 +1118,7 @@ export class AuthService {
         userData = newUser
       } else {
         // Existing user - update profile picture if needed
-        const updateData: any = {
+        const updateData: Record<string, unknown> = {
           updated_at: new Date().toISOString()
         }
 
@@ -1119,7 +1126,7 @@ export class AuthService {
           updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture
         }
 
-        const { data: updatedUser, error: updateError } = await supabase
+        const { data: updatedUser } = await supabase
           .from('users')
           .update(updateData)
           .eq('id', googleUser.id)
@@ -1173,7 +1180,7 @@ export class AuthService {
   /**
    * Sign out user
    */
-  async signOut(req: Request): Promise<AuthResponse> {
+  async signOut(_req: Request): Promise<AuthResponse> {
     try {
       const supabase = createClient()
 

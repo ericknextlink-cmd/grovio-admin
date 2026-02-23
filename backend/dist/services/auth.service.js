@@ -511,7 +511,7 @@ class AuthService {
      */
     async processGoogleUser(googleUser, session) {
         try {
-            const userMetadata = googleUser.user_metadata || {};
+            const userMetadata = (googleUser.user_metadata || {});
             const adminSupabase = (0, supabase_1.createAdminClient)();
             // Check if user exists in our database
             const { data: existingUser, error: userError } = await adminSupabase
@@ -528,14 +528,14 @@ class AuthService {
                 });
                 const firstName = userMetadata.given_name ||
                     userMetadata.first_name ||
-                    userMetadata.full_name?.split(' ')[0] ||
-                    userMetadata.name?.split(' ')[0] ||
+                    (typeof userMetadata.full_name === 'string' ? userMetadata.full_name.split(' ')[0] : null) ||
+                    (typeof userMetadata.name === 'string' ? userMetadata.name.split(' ')[0] : null) ||
                     googleUser.email?.split('@')[0] ||
                     'User';
                 const lastName = userMetadata.family_name ||
                     userMetadata.last_name ||
-                    userMetadata.full_name?.split(' ').slice(1).join(' ') ||
-                    userMetadata.name?.split(' ').slice(1).join(' ') ||
+                    (typeof userMetadata.full_name === 'string' ? userMetadata.full_name.split(' ').slice(1).join(' ') : '') ||
+                    (typeof userMetadata.name === 'string' ? userMetadata.name.split(' ').slice(1).join(' ') : '') ||
                     '';
                 const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || '';
                 const countryCode = userMetadata.country_code || '+233';
@@ -705,7 +705,7 @@ class AuthService {
             }
             // Use verified user data
             const googleUser = verifiedUser;
-            const userMetadata = googleUser.user_metadata || session.user?.user_metadata || {};
+            const userMetadata = (googleUser.user_metadata || session.user?.user_metadata || {});
             // Check if user exists in our database using admin client to bypass RLS
             const { data: existingUser, error: userError } = await adminSupabase
                 .from('users')
@@ -722,16 +722,18 @@ class AuthService {
                     hasMetadata: !!userMetadata,
                     metadataKeys: Object.keys(userMetadata),
                 });
+                const fullName = typeof userMetadata.full_name === 'string' ? userMetadata.full_name : '';
+                const nameStr = typeof userMetadata.name === 'string' ? userMetadata.name : '';
                 const firstName = userMetadata.given_name ||
                     userMetadata.first_name ||
-                    userMetadata.full_name?.split(' ')[0] ||
-                    userMetadata.name?.split(' ')[0] ||
+                    fullName.split(' ')[0] ||
+                    nameStr.split(' ')[0] ||
                     googleUser.email?.split('@')[0] ||
                     'User';
                 const lastName = userMetadata.family_name ||
                     userMetadata.last_name ||
-                    userMetadata.full_name?.split(' ').slice(1).join(' ') ||
-                    userMetadata.name?.split(' ').slice(1).join(' ') ||
+                    fullName.split(' ').slice(1).join(' ') ||
+                    nameStr.split(' ').slice(1).join(' ') ||
                     '';
                 const phoneNumber = userMetadata.phone || userMetadata.phone_number || googleUser.phone || '';
                 const countryCode = userMetadata.country_code || '+233';
@@ -840,7 +842,6 @@ class AuthService {
                 if (userMetadata.avatar_url || userMetadata.picture) {
                     updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture;
                 }
-                // Update email verification status if it changed
                 if (googleUser.email_confirmed_at) {
                     updateData.is_email_verified = true;
                 }
@@ -852,7 +853,6 @@ class AuthService {
                     .single();
                 if (updateError) {
                     console.warn(' Failed to update user profile (non-fatal):', updateError.message);
-                    // Use existing user data if update fails
                     userData = existingUser;
                 }
                 else {
@@ -1033,7 +1033,7 @@ class AuthService {
                 if (userMetadata.avatar_url || userMetadata.picture) {
                     updateData.profile_picture = userMetadata.avatar_url || userMetadata.picture;
                 }
-                const { data: updatedUser, error: updateError } = await supabase
+                const { data: updatedUser } = await supabase
                     .from('users')
                     .update(updateData)
                     .eq('id', googleUser.id)
@@ -1084,7 +1084,7 @@ class AuthService {
     /**
      * Sign out user
      */
-    async signOut(req) {
+    async signOut(_req) {
         try {
             const supabase = (0, supabase_1.createClient)();
             const { error } = await supabase.auth.signOut();

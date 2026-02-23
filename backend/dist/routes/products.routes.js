@@ -214,6 +214,7 @@ router.get('/:id', productIdValidation, productsController.getProductById);
 // Admin routes (require authentication)
 router.use(adminAuth_middleware_1.authenticateAdmin);
 router.post('/', createProductValidation, productsController.createProduct);
+router.post('/bulk', productsController.createBulkProducts);
 router.put('/:id', updateProductValidation, productsController.updateProduct);
 router.delete('/:id', productIdValidation, productsController.deleteProduct);
 router.patch('/:id/stock', updateStockValidation, productsController.updateStock);

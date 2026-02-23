@@ -133,10 +133,12 @@ export default function Home() {
       <footer className="px-6 py-8 border-t border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-gray-600 dark:text-gray-400">
-            © 2024 Grovio. All rights reserved. Built with Next.js and Tailwind CSS.
+            {new Date().toLocaleDateString()}
           </p>
         </div>
       </footer>
     </div>
   )
 }
+
+

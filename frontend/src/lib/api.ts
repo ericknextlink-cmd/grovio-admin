@@ -50,7 +50,7 @@ export interface ApiResponse<T> {
  */
 function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
   // Admin-specific routes
-  if (endpoint.includes('/api/admin/') || endpoint.includes('/api/dashboard/')) {
+  if (endpoint.includes('/api/admin/') || endpoint.includes('/api/dashboard/') || endpoint.includes('/api/pricing')) {
     return true
   }
   
@@ -63,7 +63,8 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
       endpoint.includes('/api/ai-products') ||
       endpoint.includes('/api/orders') ||
       endpoint.includes('/api/transactions') ||
-      endpoint.includes('/api/upload')
+      endpoint.includes('/api/upload') ||
+      endpoint.includes('/api/bundles')
     ) {
       return true
     }
@@ -305,6 +306,9 @@ export const productsApi = {
 
   create: (data: any) => apiClient.post<any>('/api/products', data),
 
+  bulkCreate: (products: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }>) =>
+    apiClient.post<any>('/api/products/bulk', { products }),
+
   update: (id: string, data: any) => apiClient.put<any>(`/api/products/${id}`, data),
 
   delete: (id: string) => apiClient.delete<any>(`/api/products/${id}`),
@@ -361,6 +365,23 @@ export const categoriesApi = {
   update: (id: string, data: any) => apiClient.put<any>(`/api/categories/${id}`, data),
 
   delete: (id: string) => apiClient.delete<any>(`/api/categories/${id}`),
+}
+
+// Bundles API (GET public; generate/refresh admin)
+export const bundlesApi = {
+  getAll: (params?: { category?: string; limit?: number; offset?: number }) =>
+    apiClient.get<any>('/api/bundles', params),
+  getById: (bundleId: string) => apiClient.get<any>(`/api/bundles/${bundleId}`),
+  generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number }) =>
+    apiClient.post<any>('/api/bundles/generate', body),
+  refresh: () => apiClient.post<any>('/api/bundles/refresh'),
+}
+
+// Pricing API (admin)
+export const pricingApi = {
+  getRanges: () => apiClient.get<any>('/api/pricing/ranges'),
+  applyPricing: (ranges: Array<{ min_value: number; max_value: number; percentage: number }>) =>
+    apiClient.post<any>('/api/pricing/apply', { ranges }),
 }
 
 // AI API

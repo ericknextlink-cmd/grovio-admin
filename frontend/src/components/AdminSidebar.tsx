@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles, FileText } from 'lucide-react'
+import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles, FileText, Percent, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { getAdminToken, getAdminUser, clearAdminCookies } from '@/lib/cookies'
@@ -75,7 +75,9 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
     { icon: ShoppingBag, label: 'Dashboard', active: currentPage === 'dashboard', href: '/admin' },
     { icon: Package, label: 'Products', active: currentPage === 'products', href: '/admin/products' },
     { icon: Sparkles, label: 'AI Products', active: currentPage === 'ai-products', href: '/admin/ai-products' },
+    { icon: Layers, label: 'Bundles', active: currentPage === 'bundles', href: '/admin/bundles' },
     { icon: FileText, label: 'Supplier Products', active: currentPage === 'supplier-products', href: '/admin/supplier-products' },
+    { icon: Percent, label: 'Pricing', active: currentPage === 'pricing', href: '/admin/pricing' },
     { icon: Tag, label: 'Categories', active: currentPage === 'categories', href: '/admin/categories' },
     { icon: Package, label: 'Orders', active: currentPage === 'orders', href: '/admin/orders' },
     { icon: CreditCard, label: 'Transactions', active: currentPage === 'transactions', href: '/admin/transactions' },

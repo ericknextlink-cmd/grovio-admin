@@ -245,7 +245,9 @@ export default function AIProductsPage() {
                 <Sparkles className="h-6 w-6 text-purple-600" />
                 AI Products
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">Manage AI-generated products</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                Manage AI-generated single product suggestions. For bundled products (combinations of items + budget), use the Bundles page.
+              </p>
             </div>
             <button
               onClick={handleGenerate}

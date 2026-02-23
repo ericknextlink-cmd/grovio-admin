@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
 import { FileText, Loader2, Package, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Percent, DollarSign, ChevronsDown, ChevronsUp, Sparkles, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { aiApi } from '@/lib/api'
+import { aiApi, productsApi } from '@/lib/api'
 import { toast } from 'sonner'
 
 interface SupplierProduct {
@@ -68,6 +68,7 @@ export default function SupplierProductsPage() {
   const [aiPrompt, setAiPrompt] = useState<string>('')
   const [aiLoading, setAiLoading] = useState<boolean>(false)
   const [aiResponse, setAiResponse] = useState<string>('')
+  const [addToDbLoading, setAddToDbLoading] = useState<boolean>(false)
 
   const parseCSV = async (filePath: string): Promise<SupplierProduct[]> => {
     try {
@@ -405,6 +406,36 @@ export default function SupplierProductsPage() {
       : <ArrowDown className="h-4 w-4 text-blue-600" />
   }
 
+  const handleAddAllToDatabase = async () => {
+    if (products.length === 0) {
+      toast.error('Load products from a file first')
+      return
+    }
+    setAddToDbLoading(true)
+    try {
+      const payload = products.map((p) => ({
+        name: p.name,
+        code: p.code,
+        unitPrice: p.unitPrice,
+        category_name: selectedCategory || CATEGORIES[0]
+      }))
+      const res = await productsApi.bulkCreate(payload)
+      if (res.success && res.data) {
+        const data = res.data as { created: number; failed: number; errors?: string[] }
+        toast.success(`Added ${data.created} product(s) to the database.${data.failed ? ` ${data.failed} failed.` : ''}`)
+        if (data.errors?.length) {
+          data.errors.slice(0, 3).forEach((err: string) => toast.error(err))
+        }
+      } else {
+        toast.error(res.message || 'Failed to add products to database')
+      }
+    } catch (e) {
+      toast.error('Failed to add products to database')
+    } finally {
+      setAddToDbLoading(false)
+    }
+  }
+
   const handleAIRecommendation = async () => {
     if (!aiPrompt.trim()) {
       toast.error('Please enter a prompt')
@@ -464,6 +495,14 @@ export default function SupplierProductsPage() {
 
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <button
+                  onClick={handleAddAllToDatabase}
+                  disabled={products.length === 0 || addToDbLoading}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {addToDbLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+                  Add all to database
+                </button>
                 <button
                   onClick={() => setShowAIRecommendationModal(true)}
                   disabled={products.length === 0}

@@ -18,24 +18,33 @@ export class BundlesController {
   }
 
   /**
-   * Get all product bundles
+   * Get all product bundles (paginated, optional filter by category/source)
    */
   getBundles = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { category, limit, offset } = req.query
+      const { category, limit, offset, page, source } = req.query
+      const pageNum = page ? parseInt(page as string, 10) : 1
+      const limitNum = limit ? parseInt(limit as string, 10) : 20
+      const offsetNum = offset != null ? parseInt(offset as string, 10) : undefined
 
       const result = await this.bundlesService.getBundles({
         category: category as string,
-        limit: limit ? parseInt(limit as string, 10) : 20,
-        offset: offset ? parseInt(offset as string, 10) : 0,
+        source: source as 'ai' | 'admin' | undefined,
+        page: pageNum,
+        limit: limitNum,
+        offset: offsetNum,
       })
 
       if (result.success) {
-        res.json({
+        const payload: Record<string, unknown> = {
           success: true,
           message: 'Bundles retrieved successfully',
           data: result.data,
-        })
+        }
+        if (result.pagination) {
+          payload.pagination = result.pagination
+        }
+        res.json(payload)
       } else {
         res.status(500).json({
           success: false,
@@ -170,6 +179,51 @@ export class BundlesController {
         message: 'Internal server error',
         errors: ['Failed to generate bundles'],
       } as ApiResponse)
+    }
+  }
+
+  /**
+   * Create manual bundle (Admin only). Body: title, description, category, productIds.
+   */
+  createManualBundle = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { title, description, category, productIds } = req.body as {
+        title?: string
+        description?: string
+        category?: string
+        productIds?: string[]
+      }
+      if (!title?.trim() || !Array.isArray(productIds)) {
+        res.status(400).json({
+          success: false,
+          message: 'Title and productIds (array) are required',
+        } as ApiResponse<null>)
+        return
+      }
+      const result = await this.bundlesService.createManualBundle({
+        title: title.trim(),
+        description: typeof description === 'string' ? description.trim() : '',
+        category: typeof category === 'string' ? category.trim() : 'General',
+        productIds,
+      })
+      if (result.success && result.data) {
+        res.status(201).json({
+          success: true,
+          message: 'Bundle created successfully',
+          data: result.data,
+        })
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || 'Failed to create bundle',
+        } as ApiResponse<null>)
+      }
+    } catch (error) {
+      console.error('Create manual bundle error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+      } as ApiResponse<null>)
     }
   }
 

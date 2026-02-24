@@ -25,6 +25,39 @@ const getBundlesValidation = [
         .optional()
         .isInt({ min: 0 })
         .withMessage('Offset must be a non-negative integer'),
+    (0, express_validator_1.query)('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    (0, express_validator_1.query)('source')
+        .optional()
+        .isIn(['ai', 'admin'])
+        .withMessage('Source must be ai or admin'),
+    validation_middleware_1.handleValidationErrors,
+];
+const createManualBundleValidation = [
+    (0, express_validator_1.body)('title')
+        .trim()
+        .notEmpty()
+        .withMessage('Title is required')
+        .isLength({ max: 200 })
+        .withMessage('Title must be at most 200 characters'),
+    (0, express_validator_1.body)('description')
+        .optional()
+        .trim()
+        .isLength({ max: 2000 })
+        .withMessage('Description must be at most 2000 characters'),
+    (0, express_validator_1.body)('category')
+        .optional()
+        .trim()
+        .isLength({ max: 100 })
+        .withMessage('Category must be at most 100 characters'),
+    (0, express_validator_1.body)('productIds')
+        .isArray()
+        .withMessage('productIds must be an array'),
+    (0, express_validator_1.body)('productIds.*')
+        .isUUID()
+        .withMessage('Each product ID must be a valid UUID'),
     validation_middleware_1.handleValidationErrors,
 ];
 const bundleIdValidation = [
@@ -75,6 +108,12 @@ router.get('/personalized', optionalAuth_middleware_1.optionalAuth, bundlesContr
 router.get('/:bundleId', bundleIdValidation, bundlesController.getBundleById);
 // Admin routes
 router.use(adminAuth_middleware_1.authenticateAdmin);
+/**
+ * @route   POST /api/bundles
+ * @desc    Create manual bundle (Admin only). Body: title, description?, category?, productIds.
+ * @access  Admin
+ */
+router.post('/', createManualBundleValidation, bundlesController.createManualBundle);
 /**
  * @route   POST /api/bundles/generate
  * @desc    Generate new AI bundles (Admin only)

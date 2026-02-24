@@ -13,6 +13,17 @@ function dataUrlToPngBytes(dataUrl: string): Uint8Array {
   return new Uint8Array(binary)
 }
 
+/** Split text into lines of up to N words per line (word wrap). */
+function wrapTextByWords(text: string, wordsPerLine: number): string[] {
+  if (!text?.trim()) return ['']
+  const words = text.trim().split(/\s+/)
+  const lines: string[] = []
+  for (let i = 0; i < words.length; i += wordsPerLine) {
+    lines.push(words.slice(i, i + wordsPerLine).join(' '))
+  }
+  return lines
+}
+
 export interface InvoiceData {
   invoiceNumber: string  // 4787837473
   orderNumber: string    // ORD-AC23-233E
@@ -51,6 +62,9 @@ export interface InvoiceGenerationResult {
 
 /** Default template filename in storage (templates folder) and local public folder */
 const DEFAULT_TEMPLATE_FILENAME = 'Template.pdf'
+/** Logo filename (SVG or PNG) in templates/ and public/ */
+const LOGO_FILENAME = 'logo-black.svg'
+const LOGO_FILENAME_PNG = 'logo-black.png'
 
 export class PDFInvoiceService {
   private supabase
@@ -65,6 +79,46 @@ export class PDFInvoiceService {
     this.supabase = createAdminClient()
     this.templatesBucketName = process.env.SUPABASE_STORAGE_BUCKET || 'invoices'
     this.localTemplatePath = path.join(process.cwd(), 'public', DEFAULT_TEMPLATE_FILENAME)
+  }
+
+  /**
+   * Load logo as PNG bytes: try Supabase templates/ (logo-black.png then logo-black.svg),
+   * then local public/logo-black.svg. Converts SVG to PNG via sharp.
+   */
+  private async getLogoBytes(): Promise<Uint8Array | null> {
+    const tryPaths = [
+      `templates/${LOGO_FILENAME_PNG}`,
+      `templates/${LOGO_FILENAME}`,
+    ]
+    for (const storagePath of tryPaths) {
+      const { data, error } = await this.supabase.storage
+        .from(this.templatesBucketName)
+        .download(storagePath)
+      if (!error && data) {
+        const bytes = new Uint8Array(await data.arrayBuffer())
+        if (bytes.length > 0) {
+          if (storagePath.endsWith('.svg')) {
+            const png = await sharp(Buffer.from(bytes))
+              .png()
+              .toBuffer()
+            return new Uint8Array(png)
+          }
+          return bytes
+        }
+      }
+    }
+    const localSvg = path.join(process.cwd(), 'public', LOGO_FILENAME)
+    const localPng = path.join(process.cwd(), 'public', LOGO_FILENAME_PNG)
+    if (existsSync(localPng)) {
+      const buf = await fs.readFile(localPng)
+      return new Uint8Array(buf)
+    }
+    if (existsSync(localSvg)) {
+      const buf = await fs.readFile(localSvg)
+      const png = await sharp(buf).png().toBuffer()
+      return new Uint8Array(png)
+    }
+    return null
   }
 
   /**
@@ -187,6 +241,15 @@ export class PDFInvoiceService {
   private static readonly ITEM_ROW_HEIGHT = 28
 
   /**
+   * Multi-page strategy (for when items > ~6):
+   * - Page 1: Current template WITHOUT footer (logo, Billed To, barcode, QR, first ~5–6 items). No "Grovio – Redefining..." or secure check.
+   * - Page 2: Continuation of items (full page of rows), then totals, then footer (tagline, secure check, contact). If items still don't fit:
+   * - Page 2..N-1: Full pages of item listing only (same template or listing-only template).
+   * - Page N: Remaining items, then totals, then footer.
+   * Requires: TemplatePage1NoFooter.pdf (or strip footer when items > 6), optional TemplateListingOnly.pdf for continuation pages.
+   */
+
+  /**
    * Fill Template.pdf with invoice data.
    * Uses consistent row height per item so multiple products don't require fixed template lines.
    */
@@ -202,19 +265,47 @@ export class PDFInvoiceService {
       const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
       
-      // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+      // Embed QR code (smaller source = chunkier modules when scaled up)
       const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl))
-      const qrDims = qrImage.scale(0.35)
+      const qrDims = qrImage.scale(3.2)
       
       // Position calculations (adjust based on actual template)
-      const leftMargin = 60
+      const leftMargin = 250
+      const descLineHeight = 42
+      // Item row lines: horizontal position (width) and thickness
+      const itemLineLeftOffset = 700   // distance from leftMargin to start of line (increase = line starts further right, shorter)
+      const itemLineRightMargin = 200 // distance from page right to end of line (smaller = line extends further right)
+      const lineLeft = leftMargin + itemLineLeftOffset
+      const lineRight = width - itemLineRightMargin
+      const lineThickness = 0.5       // line thickness in points (e.g. 0.5, 1, 1.5)
+      // Vertical position of line under each item: positive = move line up (closer under text), negative = move line down (in points)
+      const itemLineVerticalOffset = 75
+      
+      // Logo (top left) – from public/ or Supabase templates
+      const logoMarginTop = 220 // distance from top of page to top of logo (decrease to move logo up, increase to move down)
+      const logoBytes = await this.getLogoBytes()
+      if (logoBytes) {
+        try {
+          const logoImage = await pdfDoc.embedPng(logoBytes)
+          const logoH = 180
+          const logoW = (logoImage.width / logoImage.height) * logoH
+          firstPage.drawImage(logoImage, {
+            x: leftMargin,
+            y: height - logoMarginTop - logoH,
+            width: logoW,
+            height: logoH,
+          })
+        } catch (e) {
+          console.warn('Logo embed skipped:', e)
+        }
+      }
       
       // Invoice Number (top right)
       firstPage.drawText(data.invoiceNumber, {
-        x: width - 180,
-        y: height - 80,
-        size: 12,
-        font: helveticaBold,
+        x: width - 1530,
+        y: height - 320,
+        size: 48,
+        font: helvetica,
         color: rgb(0, 0, 0),
       })
       
@@ -225,143 +316,244 @@ export class PDFInvoiceService {
         year: 'numeric',
       })
       firstPage.drawText(dateStr, {
-        x: width - 180,
-        y: height - 110,
-        size: 10,
+        x: width - 1530,
+        y: height - 520,
+        size: 48,
         font: helvetica,
         color: rgb(0, 0, 0),
       })
       
       // Billed To
-      let yPos = height - 200
+      let yPos = height - 1000
       firstPage.drawText(data.customerName, {
         x: leftMargin,
         y: yPos,
-        size: 11,
+        size: 52,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       })
       
-      yPos -= 20
-      firstPage.drawText(data.customerAddress, {
-        x: leftMargin,
-        y: yPos,
-        size: 9,
-        font: helvetica,
-        color: rgb(0.2, 0.2, 0.2),
-      })
-      
-      yPos -= 15
+      yPos -= 60
+      const addressLines = wrapTextByWords(data.customerAddress, 3)
+      for (let i = 0; i < addressLines.length; i++) {
+        firstPage.drawText(addressLines[i], {
+          x: leftMargin,
+          y: yPos - 40 - i * 52,
+          size: 52,
+          font: helvetica,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+      }
+      yPos -= 60 + Math.max(0, (addressLines.length - 1) * 52)
       firstPage.drawText(data.customerPhone, {
         x: leftMargin,
-        y: yPos,
-        size: 9,
+        y: yPos - 80,
+        size: 52,
         font: helvetica,
         color: rgb(0.2, 0.2, 0.2),
       })
       
-      // Items header - adjust based on template
-      yPos = height - 320
+      // Serial barcode (below Billed To)
+      const barcodePng = await this.generateBarcodePng(data.invoiceNumber)
+      if (barcodePng) {
+        try {
+          const barcodeImage = await pdfDoc.embedPng(barcodePng)
+          const barcodeW = 320
+          const barcodeH = (barcodeImage.height / barcodeImage.width) * barcodeW
+          const barcodeY = yPos - 80 - 120
+          firstPage.drawImage(barcodeImage, {
+            x: leftMargin,
+            y: barcodeY - barcodeH,
+            width: barcodeW,
+            height: barcodeH,
+          })
+          const serialDisplay = this.formatSerialForDisplay(data.invoiceNumber)
+          firstPage.drawText(serialDisplay, {
+            x: leftMargin,
+            y: barcodeY - barcodeH - 36,
+            size: 32,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          })
+        } catch (e) {
+          console.warn('Barcode embed skipped:', e)
+        }
+      }
       
-      // Items: same row height for each line (works for 6 or many more products)
+      // Items header – table headers only; line under each row is drawn below row content
+      yPos = height - 320
+
+      // Items: description wrapped to 4 words per line; row height grows with wrap lines
       data.items.forEach((item) => {
-        if (yPos < 200) return // Prevent overflow
+        const descLines = wrapTextByWords(item.description, 4)
+        const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight)
+        const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset
 
-        const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT
+        // Only draw item content and line when there is space (so last drawn item always has a line)
+        if (yPos >= 200) {
+          // Description (multi-line, 4 words per line)
+          descLines.forEach((line, i) => {
+            firstPage.drawText(line, {
+              x: leftMargin + 700,
+              y: yPos - 530 - i * descLineHeight,
+              size: 38,
+              font: helveticaBold,
+              color: rgb(0, 0, 0),
+            })
+          })
 
-        // Description
-        const desc = item.description.substring(0, 60)
-        firstPage.drawText(desc, {
-          x: leftMargin,
-          y: yPos,
-          size: 9,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        })
+          // Quantity, Unit Price, Total (aligned to first line of description)
+          firstPage.drawText(item.quantity.toString(), {
+            x: width - 840,
+            y: yPos - 530,
+            size: 38,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          })
+          firstPage.drawText(item.unitPrice.toFixed(2), {
+            x: width - 560,
+            y: yPos - 530,
+            size: 38,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          })
+          firstPage.drawText(item.total.toFixed(2), {
+            x: width - 280,
+            y: yPos - 525,
+            size: 38,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          })
 
-        // Quantity
-        firstPage.drawText(item.quantity.toString(), {
-          x: width - 300,
-          y: yPos,
-          size: 9,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        })
-
-        // Unit Price
-        firstPage.drawText(item.unitPrice.toFixed(2), {
-          x: width - 200,
-          y: yPos,
-          size: 9,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        })
-
-        // Total
-        firstPage.drawText(item.total.toFixed(2), {
-          x: width - 100,
-          y: yPos,
-          size: 9,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        })
-
+          // Line under this item row (below row content) – every drawn item gets a line
+          firstPage.drawLine({
+            start: { x: lineLeft, y: rowContentBottom },
+            end: { x: lineRight + 90, y: rowContentBottom },
+            thickness: lineThickness,
+            color: rgb(0, 0, 0),
+          })
+        }
         yPos -= rowHeight
       })
+
+      // Totals section (labels same x as items listing, values on right)
+      yPos = yPos - 620
+      const totalsLabelX = leftMargin + 700
+      const totalsValueX = width - 320
+      const totalAmountGap = 18 // gap between line above Total Amount and the text (reduced so Total Amount comes up)
+
       
-      // Totals section
-      yPos = yPos - 40
-      
-      // Subtotal
+      // Subtotal (label left, value right)
+      firstPage.drawText('Subtotal', { 
+        x: totalsLabelX, 
+        y: yPos + 40, 
+        size: 48, 
+        font: helveticaBold, 
+        color: rgb(0, 0, 0)
+       })
       firstPage.drawText(`GHC ${data.subtotal.toFixed(2)}`, {
-        x: width - 110,
-        y: yPos,
-        size: 11,
+        x: totalsValueX - 80,
+        y: yPos + 40,
+        size: 48,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       })
-      
-      yPos -= 30
-      
+
+      yPos -= 66
+
+      // Discounts & Credits section title
+      firstPage.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: rgb(0, 0, 0) })
+      yPos -= 86
+
       // Discount
-      if (data.discount > 0) {
-        firstPage.drawText(`GHC ${data.discount.toFixed(2)}`, {
-          x: width - 110,
-          y: yPos,
-          size: 10,
-          font: helvetica,
-          color: rgb(0.83, 0.37, 0.05),  // Orange color
-        })
-        yPos -= 25
-      }
-      
-      // Credits
-      if (data.credits > 0) {
-        firstPage.drawText(`GHC ${data.credits.toFixed(2)}`, {
-          x: width - 110,
-          y: yPos,
-          size: 10,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        })
-        yPos -= 25
-      }
-      
-      yPos -= 10
-      
-      // Total Amount
-      firstPage.drawText(`GHC ${data.totalAmount.toFixed(2)}`, {
-        x: width - 120,
+      firstPage.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: rgb(0, 0, 0) })
+      firstPage.drawText(`GHC ${data.discount.toFixed(2)}`, {
+        x: width - 360,
         y: yPos,
-        size: 14,
+        size: 48,
+        font: helvetica,
+        color: rgb(0, 0, 0),
+      })
+      yPos -= 86
+      
+      // Credits (always show; 0.00 when zero)
+      firstPage.drawText('Credits', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: rgb(0, 0, 0) })
+      firstPage.drawText(`GHC ${data.credits.toFixed(2)}`, {
+        x: width - 360,
+        y: yPos,
+        size: 48,
+        font: helvetica,
+        color: rgb(0, 0, 0),
+      })
+      yPos -= 86
+
+      
+      // Discount + Credits subtotal
+      firstPage.drawText('Subtotal', { x: totalsLabelX, y: yPos, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+      firstPage.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, {
+        x: width - 360,
+        y: yPos,
+        size: 48,
         font: helveticaBold,
-        color: rgb(0.83, 0.37, 0.05),  // Orange color
+        color: rgb(0, 0, 0),
+      })
+      yPos -= 38
+      
+      // Line above Subtotal
+      firstPage.drawLine({  
+        start: { x: lineLeft, y: yPos + 92 },
+        end: { x: lineRight + 90, y: yPos + 92 },
+        thickness: lineThickness,
+        color: rgb(0, 0, 0),
+      })
+
+      // Line under Discounts & Credits section only
+      firstPage.drawLine({
+        start: { x: lineLeft, y: yPos + 188 },
+        end: { x: lineRight + 90, y: yPos + 188 },
+        thickness: lineThickness,
+        color: rgb(0, 0, 0),
+      })
+      yPos -= totalAmountGap
+
+      // Line above Total Amount (last line before total)
+      firstPage.drawLine({
+        start: { x: lineLeft, y: yPos },
+        end: { x: lineRight + 90, y: yPos },
+        thickness: lineThickness,
+        color: rgb(0, 0, 0),
+      })
+      yPos -= totalAmountGap
+
+      // Total Amount (label left, value right) – brought up closer to the line above
+      firstPage.drawText('Total Amount', { 
+        x: totalsLabelX, 
+        y: yPos - 80, 
+        size: 48, 
+        font: helveticaBold, 
+        color: rgb(0, 0, 0) 
+      })
+      firstPage.drawText(`GHC ${data.totalAmount.toFixed(2)}`, {
+        x: width - 380,
+        y: yPos - 80,
+        size: 48,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      })
+
+      // Thank you – just below totals (same x-axis as items)
+      firstPage.drawText('Thank you for shopping with us!', {
+        x: totalsLabelX - 90,
+        y: yPos - 250,
+        size: 60,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
       })
       
       // QR Code (bottom center)
       firstPage.drawImage(qrImage, {
-        x: leftMargin,
-        y: 120,
+        x: leftMargin - 40,
+        y: 1240,
         width: qrDims.width,
         height: qrDims.height,
       })
@@ -384,18 +576,33 @@ export class PDFInvoiceService {
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
     
-    // Embed QR code (pdf-lib expects PNG bytes, not data URL)
+    // Embed QR code (chunkier modules from smaller source, scaled up)
     const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl))
-    const qrDims = qrImage.scale(0.3)
+    const qrDims = qrImage.scale(1.2)
     
-    // Header
-    page.drawText('Grovio', {
-      x: 50,
-      y: height - 50,
-      size: 24,
-      font: helveticaBold,
-      color: rgb(0.83, 0.37, 0.05),
-    })
+    // Logo (top left) when available
+    const logoBytesScratch = await this.getLogoBytes()
+    if (logoBytesScratch) {
+      try {
+        const logoImg = await pdfDoc.embedPng(logoBytesScratch)
+        const lh = 80
+        const lw = (logoImg.width / logoImg.height) * lh
+        page.drawImage(logoImg, { x: 50, y: height - 550, width: lw, height: lh })
+      } catch {
+        // skip
+      }
+    }
+    
+    // Header (text only if no logo)
+    if (!logoBytesScratch) {
+      page.drawText('Grovio', {
+        x: 50,
+        y: height - 50,
+        size: 24,
+        font: helveticaBold,
+        color: rgb(0.83, 0.37, 0.05),
+      })
+    }
     
     page.drawText('Invoice', {
       x: width - 150,
@@ -422,74 +629,57 @@ export class PDFInvoiceService {
       color: rgb(0, 0, 0),
     })
     
-    // Grovio address
     let yPos = height - 110
-    page.drawText('Adjuma Crescent Road', { x: 50, y: yPos, size: 9, font: helvetica })
-    yPos -= 15
-    page.drawText('South Industrial Area', { x: 50, y: yPos, size: 9, font: helvetica })
-    yPos -= 15
-    page.drawText('Accra, Ghana', { x: 50, y: yPos, size: 9, font: helvetica })
     
-    // Billed To
+    // Billed To (address: 3 words per line)
     yPos = height - 200
     page.drawText('Billed To:', { x: 50, y: yPos, size: 11, font: helveticaBold })
     yPos -= 20
     page.drawText(data.customerName, { x: 50, y: yPos, size: 10, font: helveticaBold })
     yPos -= 15
-    page.drawText(data.customerAddress, { x: 50, y: yPos, size: 9, font: helvetica })
-    yPos -= 15
+    const addressLinesScratch = wrapTextByWords(data.customerAddress, 3)
+    addressLinesScratch.forEach((line) => {
+      page.drawText(line, { x: 50, y: yPos, size: 9, font: helvetica })
+      yPos -= 20
+    })
     page.drawText(data.customerPhone, { x: 50, y: yPos, size: 9, font: helvetica })
     
-    // Table header
     yPos = height - 340
-    page.drawText('Description', { x: 50, y: yPos, size: 10, font: helveticaBold })
-    page.drawText('Qty', { x: width - 300, y: yPos, size: 10, font: helveticaBold })
-    page.drawText('Unit Price', { x: width - 220, y: yPos, size: 10, font: helveticaBold })
-    page.drawText('Total', { x: width - 120, y: yPos, size: 10, font: helveticaBold })
     
-    // Line under header
-    yPos -= 5
-    page.drawLine({
-      start: { x: 50, y: yPos },
-      end: { x: width - 50, y: yPos },
-      thickness: 1,
-      color: rgb(0.8, 0.8, 0.8),
-    })
-    
-    // Items
+    // Items (description: 4 words per line wrap)
     yPos -= 20
+    const descLineHeightScratch = 14
     data.items.forEach((item) => {
       if (yPos < 180) return
-      
-      page.drawText(item.description.substring(0, 50), {
-        x: 50,
-        y: yPos,
-        size: 9,
-        font: helvetica,
+      const descLinesScratch = wrapTextByWords(item.description, 4)
+      descLinesScratch.forEach((line, i) => {
+        page.drawText(line, {
+          x: 50,
+          y: yPos - i * descLineHeightScratch,
+          size: 9,
+          font: helvetica,
+        })
       })
-      
+      const itemFirstY = yPos
       page.drawText(item.quantity.toString(), {
         x: width - 300,
-        y: yPos,
+        y: itemFirstY,
         size: 9,
         font: helvetica,
       })
-      
       page.drawText(item.unitPrice.toFixed(2), {
         x: width - 220,
-        y: yPos,
+        y: itemFirstY,
         size: 9,
         font: helvetica,
       })
-      
       page.drawText(item.total.toFixed(2), {
         x: width - 120,
-        y: yPos,
+        y: itemFirstY,
         size: 9,
         font: helvetica,
       })
-      
-      yPos -= 22
+      yPos -= 22 + Math.max(0, (descLinesScratch.length - 1) * descLineHeightScratch)
     })
     
     // Totals section
@@ -506,32 +696,36 @@ export class PDFInvoiceService {
     
     yPos -= 25
     
-    // Discount
-    if (data.discount > 0) {
-      page.drawText('Discounts:', { x: width - 220, y: yPos, size: 9, font: helvetica })
-      page.drawText(`GHC ${data.discount.toFixed(2)}`, {
-        x: width - 120,
-        y: yPos,
-        size: 9,
-        font: helvetica,
-        color: rgb(0.83, 0.37, 0.05),
-      })
-      yPos -= 20
-    }
+    // Discount (always show)
+    page.drawText('Discounts:', { x: width - 220, y: yPos, size: 9, font: helvetica })
+    page.drawText(`GHC ${data.discount.toFixed(2)}`, {
+      x: width - 120,
+      y: yPos,
+      size: 9,
+      font: helvetica,
+      color: rgb(0.83, 0.37, 0.05),
+    })
+    yPos -= 20
     
-    // Credits
-    if (data.credits > 0) {
-      page.drawText('Credits:', { x: width - 220, y: yPos, size: 9, font: helvetica })
-      page.drawText(`GHC ${data.credits.toFixed(2)}`, {
-        x: width - 120,
-        y: yPos,
-        size: 9,
-        font: helvetica,
-      })
-      yPos -= 20
-    }
+    // Credits (always show; 0.00 when zero)
+    page.drawText('Credits:', { x: width - 220, y: yPos, size: 9, font: helvetica })
+    page.drawText(`GHC ${data.credits.toFixed(2)}`, {
+      x: width - 120,
+      y: yPos,
+      size: 9,
+      font: helvetica,
+    })
+    yPos -= 20
     
-    yPos -= 10
+    // Discount + Credits subtotal (always show)
+    page.drawText('Discounts + Credits:', { x: width - 220, y: yPos, size: 9, font: helvetica })
+    page.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, {
+      x: width - 120,
+      y: yPos,
+      size: 9,
+      font: helvetica,
+    })
+    yPos -= 25
     
     // Total Amount (bold, larger)
     page.drawText('Total Amount:', { x: width - 220, y: yPos, size: 12, font: helveticaBold })
@@ -554,21 +748,42 @@ export class PDFInvoiceService {
     // Footer
     page.drawText('Thank you for shopping with us!', {
       x: 50,
-      y: 50,
-      size: 10,
+      y: 120,
+      size: 12,
       font: helveticaBold,
       color: rgb(0, 0, 0),
     })
     
-    page.drawText('Grovio – Redefining the Way You Save.', {
-      x: 50,
-      y: 30,
-      size: 8,
-      font: helvetica,
-      color: rgb(0.4, 0.4, 0.4),
-    })
-    
     return await pdfDoc.save()
+  }
+
+  /** Format invoice number as serial display (e.g. 4474 94949 04848 5959 4848) */
+  private formatSerialForDisplay(invoiceNumber: string): string {
+    const digits = invoiceNumber.replace(/\D/g, '').padStart(24, '0').slice(0, 24)
+    const parts = [digits.slice(0, 4), digits.slice(4, 9), digits.slice(9, 14), digits.slice(14, 19), digits.slice(19, 24)]
+    return parts.filter(Boolean).join(' ')
+  }
+
+  /**
+   * Generate 1D barcode (Code128) PNG bytes for serial number
+   */
+  private async generateBarcodePng(invoiceNumber: string): Promise<Uint8Array | null> {
+    try {
+      const bwipjs = await import('bwip-js')
+      const digits = invoiceNumber.replace(/\D/g, '').padStart(20, '0').slice(0, 20)
+      if (!digits.length) return null
+      const png = await (bwipjs as { toBuffer: (opts: object) => Promise<Buffer> }).toBuffer({
+        bcid: 'code128',
+        text: digits,
+        scale: 2,
+        height: 10,
+        includetext: false,
+      })
+      return new Uint8Array(png)
+    } catch (e) {
+      console.warn('Barcode generation failed:', e)
+      return null
+    }
   }
 
   /**
@@ -579,21 +794,21 @@ export class PDFInvoiceService {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
       const invoiceUrl = `${frontendUrl}/invoice/${orderNumber}?inv=${invoiceNumber}`
       
+      // Smaller pixel size = fewer modules = chunkier squares when scaled up on PDF
       const qrCodeDataUrl = await QRCode.toDataURL(invoiceUrl, {
-        width: 200,
+        width: 170,
         margin: 2,
         color: {
           dark: '#000000',
           light: '#FFFFFF',
         },
-        errorCorrectionLevel: 'M',
+        errorCorrectionLevel: 'L',
       })
       
       return qrCodeDataUrl
     } catch (error) {
       console.error('QR code generation error:', error)
-      // Return empty QR code as fallback
-      return await QRCode.toDataURL('https://grovio.com', { width: 200 })
+      return await QRCode.toDataURL('https://grovio.com', { width: 96 })
     }
   }
 

@@ -387,20 +387,39 @@ export class ProductsService {
   }
 
   /**
-   * Bulk create products from supplier data (e.g. CSV/Excel). Uses unitPrice as both original_price and price.
+   * Bulk create/update products from supplier data (e.g. CSV/Excel).
+   * - Products that already exist (same slug from name) are updated (price, original_price, brand, category).
+   * - New products are inserted. No duplicates are created.
    */
   async createBulkProducts(
     items: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }>
-  ): Promise<{ created: number; failed: number; errors: string[] }> {
+  ): Promise<{ created: number; updated: number; failed: number; errors: string[] }> {
     let created = 0
+    let updated = 0
     const errors: string[] = []
+
+    const slugs = items.map((item) => this.generateSlug(item.name))
+    const uniqueSlugs = [...new Set(slugs)]
+
+    const { data: existingRows } = await this.supabase
+      .from('products')
+      .select('id, slug')
+      .in('slug', uniqueSlugs)
+
+    const slugToId = new Map<string, string>()
+    for (const row of existingRows ?? []) {
+      const s = (row as { slug?: string }).slug
+      if (s) slugToId.set(s, (row as { id: string }).id)
+    }
+
     for (const item of items) {
       const slug = this.generateSlug(item.name)
+      const category = item.category_name ?? 'General'
       const payload = {
         name: item.name,
         brand: item.code ?? '',
-        category_name: item.category_name ?? 'General',
-        category: item.category_name ?? 'General',
+        category_name: category,
+        category,
         original_price: item.unitPrice,
         price: item.unitPrice,
         currency: 'GHS',
@@ -411,14 +430,39 @@ export class ProductsService {
         images: [],
         slug
       }
-      const { error } = await this.supabase.from('products').insert(payload).select('id').single()
+
+      const existingId = slugToId.get(slug)
+      if (existingId) {
+        const { error } = await this.supabase
+          .from('products')
+          .update({
+            name: item.name,
+            brand: item.code ?? '',
+            category_name: category,
+            category,
+            original_price: item.unitPrice,
+            price: item.unitPrice
+          })
+          .eq('id', existingId)
+        if (error) {
+          errors.push(`${item.name}: ${error.message}`)
+          continue
+        }
+        updated++
+        continue
+      }
+
+      const { data: inserted, error } = await this.supabase.from('products').insert(payload).select('id').single()
       if (error) {
         errors.push(`${item.name}: ${error.message}`)
         continue
       }
       created++
+      if (inserted?.id) slugToId.set(slug, inserted.id) // same slug later in batch will update this row
     }
-    return { created, failed: items.length - created, errors }
+
+    const failed = items.length - created - updated
+    return { created, updated, failed, errors }
   }
 
   /**

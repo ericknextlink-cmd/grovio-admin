@@ -195,9 +195,14 @@ class ProductsController {
                     return;
                 }
                 const result = await this.productsService.createBulkProducts(items);
+                const parts = [
+                    result.created ? `${result.created} created` : '',
+                    result.updated ? `${result.updated} updated` : '',
+                    result.failed ? `${result.failed} failed` : ''
+                ].filter(Boolean);
                 res.status(201).json({
                     success: true,
-                    message: `Created ${result.created} product(s). ${result.failed} failed.`,
+                    message: parts.length ? parts.join(', ') + '.' : 'No changes.',
                     data: result
                 });
             }

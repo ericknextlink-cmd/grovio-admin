@@ -5,22 +5,31 @@ const ai_bundles_service_1 = require("../services/ai-bundles.service");
 class BundlesController {
     constructor() {
         /**
-         * Get all product bundles
+         * Get all product bundles (paginated, optional filter by category/source)
          */
         this.getBundles = async (req, res) => {
             try {
-                const { category, limit, offset } = req.query;
+                const { category, limit, offset, page, source } = req.query;
+                const pageNum = page ? parseInt(page, 10) : 1;
+                const limitNum = limit ? parseInt(limit, 10) : 20;
+                const offsetNum = offset != null ? parseInt(offset, 10) : undefined;
                 const result = await this.bundlesService.getBundles({
                     category: category,
-                    limit: limit ? parseInt(limit, 10) : 20,
-                    offset: offset ? parseInt(offset, 10) : 0,
+                    source: source,
+                    page: pageNum,
+                    limit: limitNum,
+                    offset: offsetNum,
                 });
                 if (result.success) {
-                    res.json({
+                    const payload = {
                         success: true,
                         message: 'Bundles retrieved successfully',
                         data: result.data,
-                    });
+                    };
+                    if (result.pagination) {
+                        payload.pagination = result.pagination;
+                    }
+                    res.json(payload);
                 }
                 else {
                     res.status(500).json({
@@ -151,6 +160,47 @@ class BundlesController {
                     success: false,
                     message: 'Internal server error',
                     errors: ['Failed to generate bundles'],
+                });
+            }
+        };
+        /**
+         * Create manual bundle (Admin only). Body: title, description, category, productIds.
+         */
+        this.createManualBundle = async (req, res) => {
+            try {
+                const { title, description, category, productIds } = req.body;
+                if (!title?.trim() || !Array.isArray(productIds)) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Title and productIds (array) are required',
+                    });
+                    return;
+                }
+                const result = await this.bundlesService.createManualBundle({
+                    title: title.trim(),
+                    description: typeof description === 'string' ? description.trim() : '',
+                    category: typeof category === 'string' ? category.trim() : 'General',
+                    productIds,
+                });
+                if (result.success && result.data) {
+                    res.status(201).json({
+                        success: true,
+                        message: 'Bundle created successfully',
+                        data: result.data,
+                    });
+                }
+                else {
+                    res.status(400).json({
+                        success: false,
+                        message: result.error || 'Failed to create bundle',
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Create manual bundle error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
                 });
             }
         };

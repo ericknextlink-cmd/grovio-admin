@@ -4,11 +4,13 @@ exports.OrderService = void 0;
 const supabase_1 = require("../config/supabase");
 const paystack_service_1 = require("./paystack.service");
 const pdf_invoice_service_1 = require("./pdf-invoice.service");
+const email_service_1 = require("./email.service");
 const uuid_1 = require("uuid");
 class OrderService {
     constructor() {
         this.paystack = new paystack_service_1.PaystackService();
         this.pdfService = new pdf_invoice_service_1.PDFInvoiceService();
+        this.emailService = new email_service_1.EmailService();
         this.supabase = (0, supabase_1.createAdminClient)();
     }
     /**
@@ -339,6 +341,21 @@ class OrderService {
                     invoice_qr_code: invoiceResult.qrCodeUrl,
                 })
                     .eq('id', order.id);
+                // Send invoice to customer email via Resend (non-blocking; don't fail order if email fails)
+                const customerEmail = pendingOrder.metadata?.userEmail;
+                if (customerEmail?.trim()) {
+                    this.emailService
+                        .sendInvoiceEmail(customerEmail, {
+                        customerName: `${pendingOrder.metadata?.userName ?? 'Customer'}`,
+                        orderNumber,
+                        invoicePdfUrl: invoiceResult.pdfUrl ?? '',
+                    })
+                        .then((r) => {
+                        if (!r.success)
+                            console.warn('Invoice email failed:', r.errors);
+                    })
+                        .catch((err) => console.error('Invoice email error:', err));
+                }
             }
             // 11. Record status history
             await this.supabase

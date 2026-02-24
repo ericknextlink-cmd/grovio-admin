@@ -1,6 +1,7 @@
 import { createAdminClient } from '../config/supabase'
 import { PaystackService } from './paystack.service'
 import { PDFInvoiceService, InvoiceData } from './pdf-invoice.service'
+import { EmailService } from './email.service'
 import { v4 as uuidv4 } from 'uuid'
 
 /**
@@ -53,11 +54,13 @@ export interface VerifyPaymentResult {
 export class OrderService {
   private paystack: PaystackService
   private pdfService: PDFInvoiceService
+  private emailService: EmailService
   private supabase
 
   constructor() {
     this.paystack = new PaystackService()
     this.pdfService = new PDFInvoiceService()
+    this.emailService = new EmailService()
     this.supabase = createAdminClient()
   }
 
@@ -424,6 +427,21 @@ export class OrderService {
             invoice_qr_code: invoiceResult.qrCodeUrl,
           })
           .eq('id', order.id)
+
+        // Send invoice to customer email via Resend (non-blocking; don't fail order if email fails)
+        const customerEmail = pendingOrder.metadata?.userEmail as string | undefined
+        if (customerEmail?.trim()) {
+          this.emailService
+            .sendInvoiceEmail(customerEmail, {
+              customerName: `${pendingOrder.metadata?.userName ?? 'Customer'}`,
+              orderNumber,
+              invoicePdfUrl: invoiceResult.pdfUrl ?? '',
+            })
+            .then((r) => {
+              if (!r.success) console.warn('Invoice email failed:', r.errors)
+            })
+            .catch((err) => console.error('Invoice email error:', err))
+        }
       }
 
       // 11. Record status history

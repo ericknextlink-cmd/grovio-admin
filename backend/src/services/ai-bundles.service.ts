@@ -8,6 +8,8 @@ import { v4 as uuidv4 } from 'uuid'
  * using database products and AI intelligence
  */
 
+export type BundleSource = 'ai' | 'admin'
+
 export interface ProductBundle {
   id: string
   bundleId: string
@@ -31,6 +33,7 @@ export interface ProductBundle {
   reviewsCount: number
   imageUrl?: string
   createdAt: string
+  generatedBy?: BundleSource
 }
 
 export class AIBundlesService {
@@ -382,9 +385,79 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
   }
 
   /**
-   * Save bundle to database
+   * Create and save a manual bundle (admin-selected products). Uses products from DB.
    */
-  async saveBundle(bundle: ProductBundle): Promise<{
+  async createManualBundle(input: {
+    title: string
+    description: string
+    category: string
+    productIds: string[]
+  }): Promise<{ success: boolean; data?: ProductBundle; error?: string }> {
+    try {
+      if (!input.productIds.length || input.productIds.length < 2) {
+        return { success: false, error: 'Select at least 2 products for the bundle.' }
+      }
+
+      const { data: products, error } = await this.supabase
+        .from('products')
+        .select('id, name, price')
+        .in('id', input.productIds)
+
+      if (error || !products?.length) {
+        return { success: false, error: 'Could not load products. Check that IDs exist in the database.' }
+      }
+
+      const productMap = new Map(products.map((p: { id: string; name: string; price: number }) => [p.id, p]))
+      const orderedProducts = input.productIds
+        .map(id => productMap.get(id))
+        .filter(Boolean) as Array<{ id: string; name: string; price: number }>
+
+      if (orderedProducts.length < 2) {
+        return { success: false, error: 'At least 2 valid products are required.' }
+      }
+
+      const originalPrice = orderedProducts.reduce((sum, p) => sum + p.price, 0)
+      const discountPercentage = 0
+      const currentPrice = originalPrice
+
+      const bundle: ProductBundle = {
+        id: uuidv4(),
+        bundleId: `BUNDLE-MANUAL-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        category: input.category.trim() || 'General',
+        targetAudience: 'General',
+        badge: 'Manual',
+        productIds: orderedProducts.map(p => p.id),
+        products: orderedProducts.map(p => ({ id: p.id, name: p.name, price: p.price, quantity: 1 })),
+        originalPrice: parseFloat(originalPrice.toFixed(2)),
+        currentPrice: parseFloat(currentPrice.toFixed(2)),
+        savings: 0,
+        discountPercentage,
+        rating: 0,
+        reviewsCount: 0,
+        createdAt: new Date().toISOString(),
+        generatedBy: 'admin',
+      }
+
+      const saveResult = await this.saveBundle(bundle, 'admin')
+      if (!saveResult.success) {
+        return { success: false, error: saveResult.error }
+      }
+      return { success: true, data: bundle }
+    } catch (error) {
+      console.error('Create manual bundle error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create manual bundle',
+      }
+    }
+  }
+
+  /**
+   * Save bundle to database. Use generatedBy 'ai' for AI-generated, 'admin' for manual.
+   */
+  async saveBundle(bundle: ProductBundle, generatedBy: BundleSource = 'ai'): Promise<{
     success: boolean
     error?: string
   }> {
@@ -407,7 +480,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
           rating: bundle.rating,
           reviews_count: bundle.reviewsCount,
           image_url: bundle.imageUrl,
-          generated_by: 'ai',
+          generated_by: (bundle.generatedBy ?? generatedBy) as string,
           is_active: true,
         })
 
@@ -429,34 +502,55 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
   }
 
   /**
-   * Get all active bundles
+   * Get all active bundles with pagination. Supports filter by source (ai | admin).
    */
   async getBundles(options: {
     category?: string
+    source?: BundleSource
+    page?: number
     limit?: number
     offset?: number
   } = {}): Promise<{
     success: boolean
     data?: ProductBundle[]
+    pagination?: { page: number; limit: number; total: number; totalPages: number }
     error?: string
   }> {
     try {
+      const page = Math.max(1, options.page ?? 1)
+      const limit = Math.min(100, Math.max(1, options.limit ?? 20))
+      const offset = options.offset ?? (page - 1) * limit
+
+      let countQuery = this.supabase
+        .from('ai_product_bundles')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+
+      if (options.category) {
+        countQuery = countQuery.eq('category', options.category)
+      }
+      if (options.source) {
+        countQuery = countQuery.eq('generated_by', options.source)
+      }
+
+      const { count: total, error: countError } = await countQuery
+
+      if (countError) {
+        return { success: false, error: countError.message }
+      }
+
       let query = this.supabase
         .from('ai_product_bundles')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1)
 
       if (options.category) {
         query = query.eq('category', options.category)
       }
-
-      if (options.limit) {
-        query = query.limit(options.limit)
-      }
-
-      if (options.offset) {
-        query = query.range(options.offset, options.offset + (options.limit || 20) - 1)
+      if (options.source) {
+        query = query.eq('generated_by', options.source)
       }
 
       const { data: bundles, error } = await query
@@ -468,29 +562,37 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
         }
       }
 
-      const formattedBundles = bundles?.map(b => ({
-        id: b.id,
-        bundleId: b.bundle_id,
-        title: b.title,
-        description: b.description,
-        category: b.category,
-        targetAudience: b.target_audience,
-        badge: b.badge,
-        productIds: b.product_ids,
-        products: b.products_snapshot,
-        originalPrice: parseFloat(b.original_price),
-        currentPrice: parseFloat(b.current_price),
-        savings: parseFloat(b.savings),
-        discountPercentage: parseFloat(b.discount_percentage),
-        rating: parseFloat(b.rating),
-        reviewsCount: b.reviews_count,
-        imageUrl: b.image_url,
-        createdAt: b.created_at,
-      })) || []
+      const formattedBundles: ProductBundle[] = (bundles ?? []).map((b: { generated_by?: string; [key: string]: unknown }) => ({
+        id: String(b.id),
+        bundleId: String(b.bundle_id),
+        title: String(b.title),
+        description: String(b.description ?? ''),
+        category: String(b.category ?? ''),
+        targetAudience: String(b.target_audience ?? ''),
+        badge: String(b.badge ?? ''),
+        productIds: (b.product_ids as string[]) ?? [],
+        products: (b.products_snapshot as ProductBundle['products']) ?? [],
+        originalPrice: parseFloat(String(b.original_price)),
+        currentPrice: parseFloat(String(b.current_price)),
+        savings: parseFloat(String(b.savings)),
+        discountPercentage: parseFloat(String(b.discount_percentage)),
+        rating: parseFloat(String(b.rating)),
+        reviewsCount: Number(b.reviews_count) || 0,
+        imageUrl: b.image_url as string | undefined,
+        createdAt: String(b.created_at ?? ''),
+        generatedBy: (b.generated_by === 'admin' ? 'admin' : 'ai') as BundleSource,
+      }))
 
+      const totalCount = total ?? 0
       return {
         success: true,
         data: formattedBundles,
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limit) || 1,
+        },
       }
     } catch (error) {
       console.error('Get bundles error:', error)
@@ -618,26 +720,29 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
         }
       }
 
+      const row = bundle as { generated_by?: string; [key: string]: unknown }
+      const generatedBy: BundleSource = row.generated_by === 'admin' ? 'admin' : 'ai'
       return {
         success: true,
         data: {
-          id: bundle.id,
-          bundleId: bundle.bundle_id,
-          title: bundle.title,
-          description: bundle.description,
-          category: bundle.category,
-          targetAudience: bundle.target_audience,
-          badge: bundle.badge,
-          productIds: bundle.product_ids,
-          products: bundle.products_snapshot,
-          originalPrice: parseFloat(bundle.original_price),
-          currentPrice: parseFloat(bundle.current_price),
-          savings: parseFloat(bundle.savings),
-          discountPercentage: parseFloat(bundle.discount_percentage),
-          rating: parseFloat(bundle.rating),
-          reviewsCount: bundle.reviews_count,
-          imageUrl: bundle.image_url,
-          createdAt: bundle.created_at,
+          id: row.id as string,
+          bundleId: row.bundle_id as string,
+          title: row.title as string,
+          description: row.description as string,
+          category: row.category as string,
+          targetAudience: (row.target_audience as string) ?? '',
+          badge: (row.badge as string) ?? 'Manual',
+          productIds: (row.product_ids as string[]) ?? [],
+          products: (row.products_snapshot as ProductBundle['products']) ?? [],
+          originalPrice: parseFloat(String(row.original_price)),
+          currentPrice: parseFloat(String(row.current_price)),
+          savings: parseFloat(String(row.savings)),
+          discountPercentage: parseFloat(String(row.discount_percentage)),
+          rating: parseFloat(String(row.rating)),
+          reviewsCount: (row.reviews_count as number) ?? 0,
+          imageUrl: row.image_url as string | undefined,
+          createdAt: row.created_at as string,
+          generatedBy,
         },
       }
     } catch (error) {

@@ -27,7 +27,7 @@ async function main() {
     orderNumber: service.generateOrderId(),
     date: new Date(),
     customerName: 'William Duncan Bills',
-    customerAddress: 'Adjuma Crescent Road, South Industrial Area, Accra, Ghana',
+    customerAddress: 'Adjuma Crescent Road, North Industrial Area, Accra, Ghana',
     customerPhone: '00233265713324',
     customerEmail: 'customer@example.com',
     items: Array.from({ length: 6 }, () => ({
@@ -38,7 +38,7 @@ async function main() {
       total: 650,
     })),
     subtotal: 3900,
-    discount: 200,
+    discount: 300,
     credits: 0,
     totalAmount: 3700,
     currency: 'GHC',

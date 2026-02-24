@@ -260,5 +260,101 @@ If you didn't request this email, you can safely ignore it. Your account will re
             };
         }
     }
+    /**
+     * Send invoice email after payment (Resend)
+     * Sends a link to download the invoice PDF.
+     */
+    async sendInvoiceEmail(to, options) {
+        try {
+            const resendApiKey = process.env.RESEND_API_KEY;
+            const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'orders@grovio.com';
+            if (!resendApiKey) {
+                console.warn('RESEND_API_KEY not set. Skipping invoice email.');
+                return {
+                    success: false,
+                    message: 'Email service not configured',
+                    errors: ['RESEND_API_KEY not set']
+                };
+            }
+            const { customerName, orderNumber, invoicePdfUrl } = options;
+            const displayName = customerName?.trim() || 'Customer';
+            const emailResponse = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${resendApiKey}`,
+                },
+                body: JSON.stringify({
+                    from: fromEmail,
+                    to,
+                    subject: `Your Grovio invoice – Order ${orderNumber}`,
+                    html: `
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Your Invoice</title>
+              </head>
+              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
+                  <h1 style="color: #2563eb; margin-top: 0;">Thank you for your order</h1>
+                  <p>Hi ${displayName},</p>
+                  <p>Your payment was successful. Please find your invoice for order <strong>${orderNumber}</strong> below.</p>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${invoicePdfUrl}" 
+                       style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                      Download invoice (PDF)
+                    </a>
+                  </div>
+                  <p style="font-size: 14px; color: #666;">
+                    Or copy this link: <a href="${invoicePdfUrl}" style="color: #2563eb; word-break: break-all;">${invoicePdfUrl}</a>
+                  </p>
+                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                  <p style="font-size: 12px; color: #999;">
+                    Grovio – Redefining the Way You Save.
+                  </p>
+                </div>
+              </body>
+            </html>
+          `,
+                    text: `
+Thank you for your order
+
+Hi ${displayName},
+
+Your payment was successful. Download your invoice for order ${orderNumber} here:
+
+${invoicePdfUrl}
+
+Grovio – Redefining the Way You Save.
+          `.trim(),
+                }),
+            });
+            if (!emailResponse.ok) {
+                const errorData = await emailResponse.json().catch(() => ({}));
+                console.error('Resend invoice email error:', errorData);
+                return {
+                    success: false,
+                    message: 'Failed to send invoice email',
+                    errors: [errorData.message || `Resend returned ${emailResponse.status}`]
+                };
+            }
+            const emailData = await emailResponse.json();
+            console.log('Invoice email sent via Resend:', { to, orderNumber, messageId: emailData.id });
+            return {
+                success: true,
+                message: 'Invoice email sent successfully'
+            };
+        }
+        catch (error) {
+            console.error('Send invoice email error:', error);
+            return {
+                success: false,
+                message: 'Internal server error',
+                errors: [error instanceof Error ? error.message : 'Failed to send invoice email']
+            };
+        }
+    }
 }
 exports.EmailService = EmailService;

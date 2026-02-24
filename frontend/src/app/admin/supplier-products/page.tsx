@@ -421,16 +421,48 @@ export default function SupplierProductsPage() {
       }))
       const res = await productsApi.bulkCreate(payload)
       if (res.success && res.data) {
-        const data = res.data as { created: number; failed: number; errors?: string[] }
-        toast.success(`Added ${data.created} product(s) to the database.${data.failed ? ` ${data.failed} failed.` : ''}`)
-        if (data.errors?.length) {
-          data.errors.slice(0, 3).forEach((err: string) => toast.error(err))
+        const data = res.data as { created: number; updated?: number; failed: number; errors?: string[] }
+        const parts = [
+          data.created ? `${data.created} added` : '',
+          data.updated ? `${data.updated} updated` : '',
+          data.failed ? `${data.failed} failed` : ''
+        ].filter(Boolean)
+        toast.success(parts.length ? parts.join(', ') + '.' : 'No new or changed products.')
+
+        const rawErrors = data.errors ?? []
+        const isDuplicateOrUniqueError = (msg: string) => {
+          const lower = msg.toLowerCase()
+          return (
+            lower.includes('duplicate') ||
+            lower.includes('unique constraint') ||
+            lower.includes('unique index') ||
+            lower.includes('already exists') ||
+            /violates unique constraint/i.test(msg)
+          )
+        }
+        const otherErrors = rawErrors.filter((e) => !isDuplicateOrUniqueError(e))
+        if (otherErrors.length > 0) {
+          otherErrors.slice(0, 2).forEach((err: string) => toast.error(err))
+        } else if (rawErrors.length > 0) {
+          toast.info('Some or all products were already in the database; no duplicate entries added.')
         }
       } else {
-        toast.error(res.message || 'Failed to add products to database')
+        const msg = res.message || ''
+        const isDup = /duplicate|unique constraint|unique index|already exists|violates unique/i.test(msg)
+        if (isDup) {
+          toast.info('Products are already in the database; no duplicate entries added.')
+        } else {
+          toast.error(msg || 'Failed to add products to database')
+        }
       }
     } catch (e) {
-      toast.error('Failed to add products to database')
+      const errMsg = e instanceof Error ? e.message : String(e)
+      const isDup = /duplicate|unique constraint|unique index|already exists|violates unique/i.test(errMsg)
+      if (isDup) {
+        toast.info('Products are already in the database; no duplicate entries added.')
+      } else {
+        toast.error('Failed to add products to database')
+      }
     } finally {
       setAddToDbLoading(false)
     }

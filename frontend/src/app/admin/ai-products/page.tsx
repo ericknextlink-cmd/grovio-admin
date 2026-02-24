@@ -4,9 +4,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, CheckCircle, XCircle, Archive } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, CheckCircle, XCircle, Archive, Layers } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { aiProductsApi } from '@/lib/api'
+import { aiProductsApi, bundlesApi } from '@/lib/api'
+import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'sonner'
 
@@ -52,6 +53,31 @@ export default function AIProductsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'draft' | 'published' | 'archived' | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [aiBundles, setAiBundles] = useState<Array<{ bundleId: string; title: string; category: string; originalPrice: number }>>([])
+  const [aiBundlesLoading, setAiBundlesLoading] = useState(false)
+
+  const fetchAiBundles = useCallback(async () => {
+    setAiBundlesLoading(true)
+    try {
+      const res = await bundlesApi.getAll({ source: 'ai', limit: 8 })
+      if (res.success && res.data && Array.isArray(res.data)) {
+        setAiBundles(res.data.map((b: { bundleId: string; title: string; category: string; originalPrice: number }) => ({
+          bundleId: b.bundleId,
+          title: b.title,
+          category: b.category,
+          originalPrice: b.originalPrice,
+        })))
+      }
+    } catch {
+      // non-blocking
+    } finally {
+      setAiBundlesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAiBundles()
+  }, [fetchAiBundles])
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -267,6 +293,36 @@ export default function AIProductsPage() {
               )}
             </button>
           </div>
+        </div>
+
+        {/* AI-generated bundles (from Bundles page) */}
+        <div className="mx-6 mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              AI-generated bundles
+            </h3>
+            <Link
+              href="/admin/bundles"
+              className="text-sm text-purple-600 dark:text-purple-400 hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+          {aiBundlesLoading ? (
+            <div className="flex items-center gap-2 text-gray-500 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+          ) : aiBundles.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No AI bundles yet. Create some on the Bundles page.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {aiBundles.map((b) => (
+                <li key={b.bundleId} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200">
+                  <Link href="/admin/bundles" className="hover:underline">{b.title}</Link>
+                  <span className="ml-2 text-gray-500">₵{b.originalPrice.toFixed(2)} · {b.category}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Filters and Search */}

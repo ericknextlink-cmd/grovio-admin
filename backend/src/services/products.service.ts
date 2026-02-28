@@ -391,6 +391,8 @@ export class ProductsService {
    * - Products that already exist (same slug from name) are updated (price, original_price, brand, category).
    * - New products are inserted. No duplicates are created.
    */
+  private static BULK_LOOKUP_BATCH = 400 // Supabase .in() can hit URL/query limits with huge lists
+
   async createBulkProducts(
     items: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }>
   ): Promise<{ created: number; updated: number; failed: number; errors: string[] }> {
@@ -398,22 +400,24 @@ export class ProductsService {
     let updated = 0
     const errors: string[] = []
 
-    const slugs = items.map((item) => this.generateSlug(item.name))
+    const slugs = items.map((item) => this.generateBulkSlug(item.name, item.unitPrice))
     const uniqueSlugs = [...new Set(slugs)]
 
-    const { data: existingRows } = await this.supabase
-      .from('products')
-      .select('id, slug')
-      .in('slug', uniqueSlugs)
-
     const slugToId = new Map<string, string>()
-    for (const row of existingRows ?? []) {
-      const s = (row as { slug?: string }).slug
-      if (s) slugToId.set(s, (row as { id: string }).id)
+    for (let i = 0; i < uniqueSlugs.length; i += ProductsService.BULK_LOOKUP_BATCH) {
+      const batch = uniqueSlugs.slice(i, i + ProductsService.BULK_LOOKUP_BATCH)
+      const { data: existingRows } = await this.supabase
+        .from('products')
+        .select('id, slug')
+        .in('slug', batch)
+      for (const row of existingRows ?? []) {
+        const s = (row as { slug?: string }).slug
+        if (s) slugToId.set(s, (row as { id: string }).id)
+      }
     }
 
     for (const item of items) {
-      const slug = this.generateSlug(item.name)
+      const slug = this.generateBulkSlug(item.name, item.unitPrice)
       const category = item.category_name ?? 'General'
       const payload = {
         name: item.name,
@@ -458,26 +462,37 @@ export class ProductsService {
         continue
       }
       created++
-      if (inserted?.id) slugToId.set(slug, inserted.id) // same slug later in batch will update this row
+      if (inserted?.id) slugToId.set(slug, inserted.id)
     }
 
     const failed = items.length - created - updated
     return { created, updated, failed, errors }
   }
 
+  private static PRICING_PAGE_SIZE = 1000 // Supabase default max; we paginate to get all
+
   /**
-   * Get all products for pricing (id, original_price, price). Used by pricing apply.
+   * Get all products for pricing (id, original_price, price). Paginates to exceed Supabase 1000-row default.
    */
   async getAllForPricing(): Promise<Array<{ id: string; original_price: number | null; price: number }>> {
-    const { data, error } = await this.supabase
-      .from('products')
-      .select('id, original_price, price')
-    if (error) throw error
-    return (data ?? []).map((p: { id: string; original_price?: number | null; price: number }) => ({
-      id: p.id,
-      original_price: p.original_price ?? null,
-      price: p.price
-    }))
+    const out: Array<{ id: string; original_price: number | null; price: number }> = []
+    let offset = 0
+    while (true) {
+      const { data, error } = await this.supabase
+        .from('products')
+        .select('id, original_price, price')
+        .range(offset, offset + ProductsService.PRICING_PAGE_SIZE - 1)
+      if (error) throw error
+      const page = (data ?? []).map((p: { id: string; original_price?: number | null; price: number }) => ({
+        id: p.id,
+        original_price: p.original_price ?? null,
+        price: p.price
+      }))
+      out.push(...page)
+      if (page.length < ProductsService.PRICING_PAGE_SIZE) break
+      offset += ProductsService.PRICING_PAGE_SIZE
+    }
+    return out
   }
 
   /**
@@ -489,7 +504,7 @@ export class ProductsService {
   }
 
   /**
-   * Generate slug from product name
+   * Generate slug from product name (for single-product create/update).
    */
   private generateSlug(name: string): string {
     return name
@@ -499,6 +514,16 @@ export class ProductsService {
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
+  }
+
+  /**
+   * Slug for bulk import: name + price so same name with different price = different product.
+   * Same name + same price = update existing; same name + different price = new row.
+   */
+  private generateBulkSlug(name: string, unitPrice: number): string {
+    const base = this.generateSlug(name)
+    const pricePart = String(Math.round(Number(unitPrice) * 100))
+    return base ? `${base}-${pricePart}` : pricePart
   }
 
   private mapSupabaseError(error: unknown, defaultMessage: string): { message: string; statusCode?: number } {

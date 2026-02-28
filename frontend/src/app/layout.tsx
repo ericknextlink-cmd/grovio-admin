@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "Grovio - Grocery Store Management",
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <Toaster position="top-left" richColors />
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );

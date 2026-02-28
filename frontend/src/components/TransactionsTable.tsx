@@ -34,7 +34,7 @@ export default function TransactionsTable({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<TransactionStatus | ''>('')
 
-  const filteredTransactions = transactions.filter(transaction => {
+  const filteredTransactions = (transactions ?? []).filter(transaction => {
     const matchesSearch = searchQuery === '' || 
       transaction.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       transaction.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||

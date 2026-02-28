@@ -29,9 +29,9 @@ export default function CategoriesTable({
   const [editingSubcategories, setEditingSubcategories] = useState<string | null>(null)
   const [newSubcategory, setNewSubcategory] = useState('')
 
-  const filteredCategories = categories.filter(category =>
+  const filteredCategories = (categories ?? []).filter(category =>
     category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    category.subcategories.some(sub => sub.toLowerCase().includes(searchQuery.toLowerCase()))
+    (category.subcategories ?? []).some(sub => sub.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
   const handleDelete = (category: GroceryCategory) => {
@@ -40,7 +40,7 @@ export default function CategoriesTable({
 
   const confirmDelete = () => {
     if (showDeleteConfirm) {
-      const category = categories.find(c => c.id === showDeleteConfirm)
+      const category = (categories ?? []).find(c => c.id === showDeleteConfirm)
       if (category) {
         onDelete(category)
       }
@@ -50,9 +50,9 @@ export default function CategoriesTable({
 
   const handleAddSubcategory = (categoryId: string) => {
     if (newSubcategory.trim()) {
-      const category = categories.find(c => c.id === categoryId)
+      const category = (categories ?? []).find(c => c.id === categoryId)
       if (category) {
-        const updatedSubcategories = [...category.subcategories, newSubcategory.trim()]
+        const updatedSubcategories = [...(category.subcategories ?? []), newSubcategory.trim()]
         onUpdateSubcategories(category, updatedSubcategories)
         setNewSubcategory('')
         setEditingSubcategories(null)
@@ -61,9 +61,9 @@ export default function CategoriesTable({
   }
 
   const handleRemoveSubcategory = (categoryId: string, subcategory: string) => {
-    const category = categories.find(c => c.id === categoryId)
+    const category = (categories ?? []).find(c => c.id === categoryId)
     if (category) {
-      const updatedSubcategories = category.subcategories.filter(sub => sub !== subcategory)
+      const updatedSubcategories = (category.subcategories ?? []).filter(sub => sub !== subcategory)
       onUpdateSubcategories(category, updatedSubcategories)
     }
   }
@@ -133,7 +133,7 @@ export default function CategoriesTable({
                     {category.name}
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {category.subcategories.length} subcategor{category.subcategories.length !== 1 ? 'ies' : 'y'}
+                    {(category.subcategories ?? []).length} subcategor{(category.subcategories ?? []).length !== 1 ? 'ies' : 'y'}
                   </p>
                 </div>
               </div>
@@ -190,7 +190,7 @@ export default function CategoriesTable({
 
               {/* Subcategories */}
               <div className="space-y-1">
-                {category.subcategories.map((subcategory, index) => (
+                {(category.subcategories ?? []).map((subcategory, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg"

@@ -28,11 +28,12 @@ export default function PricingPage() {
     try {
       const res = await pricingApi.getRanges()
       if (res.success && res.data) {
-        const data = res.data as { ranges: PriceRange[]; total_products: number }
-        setRanges(data.ranges)
+        const data = res.data as { ranges?: PriceRange[]; total_products?: number }
+        const rangeList = Array.isArray(data.ranges) ? data.ranges : []
+        setRanges(rangeList)
         setTotalProducts(data.total_products ?? 0)
         setPercentageInputs(
-          (data.ranges ?? []).reduce(
+          rangeList.reduce(
             (acc, r) => ({
               ...acc,
               [r.id]: r.percentage > 0 ? String(r.percentage) : ''
@@ -55,7 +56,7 @@ export default function PricingPage() {
   }, [])
 
   const handleApply = async () => {
-    const payload = ranges.map((r) => ({
+    const payload = (ranges ?? []).map((r) => ({
       min_value: r.min_value,
       max_value: r.max_value,
       percentage: parseFloat(percentageInputs[r.id] || '0') || 0
@@ -118,7 +119,7 @@ export default function PricingPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {ranges.map((r) => (
+                    {(ranges ?? []).map((r) => (
                       <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                         <td className="py-3 px-4 text-gray-900 dark:text-white">{r.label}</td>
                         <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{r.product_count ?? 0}</td>
@@ -146,7 +147,7 @@ export default function PricingPage() {
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 Total products in database: <strong>{totalProducts}</strong>
                 {totalProducts > 0 && (
-                  <> · In ranges above: <strong>{ranges.reduce((sum, r) => sum + (r.product_count ?? 0), 0)}</strong></>
+                  <> · In ranges above: <strong>{(ranges ?? []).reduce((sum, r) => sum + (r.product_count ?? 0), 0)}</strong></>
                 )}
               </p>
               <div className="mt-6 flex justify-end">

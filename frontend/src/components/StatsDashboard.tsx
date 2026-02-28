@@ -78,21 +78,47 @@ const statCards = [
   },
 ]
 
+const defaultStats: AdminStats = {
+  totalProducts: 0,
+  inStock: 0,
+  outOfStock: 0,
+  categories: 0,
+  totalOrders: 0,
+  pendingOrders: 0,
+  totalRevenue: 0,
+  totalTransactions: 0,
+  pendingTransactions: 0,
+  completedTransactions: 0,
+}
+
 export default function StatsDashboard({ stats, className }: StatsDashboardProps) {
+  const safeStats = stats && typeof stats === 'object' ? stats : defaultStats
+
   const getStatValue = (key: string) => {
-    return stats[key as keyof AdminStats] || 0
+    return safeStats[key as keyof AdminStats] ?? 0
   }
 
   const getStockPercentage = () => {
-    if (stats.totalProducts === 0) return 0
-    return Math.round((stats.inStock / stats.totalProducts) * 100)
+    const total = Number(safeStats.totalProducts) || 0
+    const inStock = Number(safeStats.inStock) || 0
+    if (total === 0) return 0
+    const pct = Math.round((inStock / total) * 100)
+    return Number.isFinite(pct) ? pct : 0
+  }
+
+  const getOutOfStockPercentage = () => {
+    const total = Number(safeStats.totalProducts) || 0
+    const out = Number(safeStats.outOfStock) || 0
+    if (total === 0) return 0
+    const pct = Math.round((out / total) * 100)
+    return Number.isFinite(pct) ? pct : 0
   }
 
   const formatStatValue = (key: string, value: any) => {
     if (key === 'totalRevenue') {
       return formatPrice(value, 'GHS')
     }
-    return value.toLocaleString()
+    return Number(value).toLocaleString()
   }
 
   return (
@@ -157,7 +183,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">In Stock</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {stats.inStock} ({getStockPercentage()}%)
+                {Number(safeStats.inStock) || 0} ({getStockPercentage()}%)
               </span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -169,7 +195,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Out of Stock</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {stats.outOfStock} ({stats.totalProducts > 0 ? Math.round((stats.outOfStock / stats.totalProducts) * 100) : 0}%)
+                {Number(safeStats.outOfStock) || 0} ({getOutOfStockPercentage()}%)
               </span>
             </div>
           </div>

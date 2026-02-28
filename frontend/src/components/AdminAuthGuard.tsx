@@ -29,7 +29,6 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
         
         if (!token) {
-          console.log('No token found, redirecting to signin')
           isRedirecting.current = true
           clearAdminCookies()
           if (typeof window !== 'undefined') {
@@ -41,9 +40,6 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
           return
         }
 
-        console.log('Checking auth with token:', token.substring(0, 20) + '...')
-        console.log('API_BASE_URL:', API_BASE_URL)
-
         const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -52,10 +48,7 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
           credentials: 'include'
         })
         
-        console.log('Auth response status:', response.status)
-        
         if (!response.ok) {
-          console.log('Auth failed, status:', response.status)
           isRedirecting.current = true
           clearAdminCookies()
           if (typeof window !== 'undefined') {
@@ -68,10 +61,8 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         }
         
         const data = await response.json()
-        console.log('Auth response data:', data)
         
         if (!data.success || !data.data) {
-          console.log('Auth response invalid:', data)
           isRedirecting.current = true
           clearAdminCookies()
           if (typeof window !== 'undefined') {
@@ -83,10 +74,8 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
           return
         }
         
-        console.log('Auth successful')
         setIsAuthenticated(true)
-      } catch (error) {
-        console.error('Auth check error:', error)
+      } catch {
         isRedirecting.current = true
         clearAdminCookies()
         if (typeof window !== 'undefined') {

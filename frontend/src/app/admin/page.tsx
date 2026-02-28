@@ -64,13 +64,11 @@ export default function AdminDashboard() {
       try {
         const response = await dashboardApi.getStats()
         
-        if (response.success && response.data) {
-          setStats(response.data)
-        } else {
-          console.error('Failed to fetch stats:', response.message)
+        if (response.success && response.data && typeof response.data === 'object') {
+          setStats((prev) => ({ ...prev, ...response.data }))
         }
-      } catch (err) {
-        console.error('Fetch stats error:', err)
+      } catch {
+        // Keep existing stats on error
       } finally {
         setStatsLoading(false)
       }
@@ -109,7 +107,7 @@ export default function AdminDashboard() {
   }, [])
 
   // Convert API products to GroceryProduct format
-  const filteredProducts: GroceryProduct[] = products
+  const filteredProducts: GroceryProduct[] = (products ?? [])
     .filter(product => {
       const matchesSearch = searchQuery === '' ||
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||

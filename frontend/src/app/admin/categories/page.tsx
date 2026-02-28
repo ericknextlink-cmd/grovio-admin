@@ -91,7 +91,8 @@ export default function CategoriesPage() {
       setSubmitting(true)
       const response = await categoriesApi.delete(category.id)
       if (!response.success) {
-        throw new Error(response.message || 'Failed to delete category')
+        toast.error(response.message || 'Failed to delete category')
+        return
       }
       toast.success('Category deleted')
       await fetchCategories()
@@ -131,7 +132,8 @@ export default function CategoriesPage() {
       }
 
       if (!response.success) {
-        throw new Error(response.message || 'Failed to save category')
+        toast.error(response.message || 'Failed to save category')
+        return
       }
 
       toast.success(editingCategory ? 'Category updated' : 'Category created')
@@ -174,7 +176,8 @@ export default function CategoriesPage() {
       setSubmitting(true)
       const response = await categoriesApi.update(category.id, { subcategories })
       if (!response.success) {
-        throw new Error(response.message || 'Failed to update subcategories')
+        toast.error(response.message || 'Failed to update subcategories')
+        return
       }
       toast.success('Subcategories updated')
       await fetchCategories()

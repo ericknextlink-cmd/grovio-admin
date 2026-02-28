@@ -128,7 +128,7 @@ export default function OrdersPage() {
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Order Items</h3>
                 <div className="space-y-3">
-                  {selectedOrder.items.map((item, index) => (
+                  {(selectedOrder?.items ?? []).map((item, index) => (
                     <div key={index} className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                       <Image
                         src={item.productImage}

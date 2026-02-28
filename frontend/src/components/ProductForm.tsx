@@ -277,7 +277,7 @@ export default function ProductForm({
                 )}
               >
                 <option value="">Select category</option>
-                {categories.map((category) => (
+                {(categories ?? []).map((category) => (
                   <option key={category.id} value={category.name}>
                     {category.name}
                   </option>
@@ -302,7 +302,7 @@ export default function ProductForm({
                 )}
               >
                 <option value="">Select subcategory</option>
-                {availableSubcategories.map((subcategory) => (
+                {(availableSubcategories ?? []).map((subcategory) => (
                   <option key={subcategory} value={subcategory}>
                     {subcategory}
                   </option>

@@ -33,9 +33,6 @@ export default function AdminSignInPage() {
         const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
         if (!token) return
 
-        console.log('Signin page: Checking existing auth token')
-        console.log('API_BASE_URL:', API_BASE_URL)
-
         // Check if admin token is valid by calling admin profile endpoint
         const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
           headers: {
@@ -45,19 +42,14 @@ export default function AdminSignInPage() {
           credentials: 'include'
         })
 
-        console.log('Signin page: Auth check response status:', response.status)
-
         if (response.ok && isMounted) {
           const data = await response.json()
-          console.log('Signin page: Auth check response data:', data)
           if (data.success && data.data) {
-            console.log('Signin page: Already authenticated, redirecting to admin')
             router.replace('/admin')
           }
         }
-      } catch (err) {
+      } catch {
         // Not authenticated, stay on signin page
-        console.error('Signin page: Auth check failed:', err)
       }
     }
     
@@ -109,8 +101,7 @@ export default function AdminSignInPage() {
         setError(data.message || data.errors?.[0] || 'Sign in failed. Please check your credentials.')
         setLoading(false)
       }
-    } catch (err) {
-      console.error('Sign in error:', err)
+    } catch {
       setError('Network error. Please try again.')
       setLoading(false)
     }

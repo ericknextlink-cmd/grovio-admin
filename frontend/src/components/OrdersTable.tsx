@@ -35,7 +35,7 @@ export default function OrdersTable({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | ''>('')
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = (orders ?? []).filter(order => {
     const matchesSearch = searchQuery === '' || 
       order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||

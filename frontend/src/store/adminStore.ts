@@ -242,7 +242,7 @@ export const useAdminStore = create<AdminState & AdminActions>((set, get) => ({
       id: generateId(),
       createdAt: new Date(),
       updatedAt: new Date(),
-      images: productData.images.map(img => validateImageUrl(img)),
+      images: (productData.images ?? []).map(img => validateImageUrl(img)),
     }
 
     set((state) => ({

@@ -127,7 +127,7 @@ export default function ProductsTable({
             className="pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white appearance-none"
           >
             <option value="">All Categories</option>
-            {categories.map((category) => (
+            {(categories ?? []).map((category) => (
               <option key={category.id} value={category.name}>
                 {category.name}
               </option>
@@ -210,13 +210,13 @@ export default function ProductsTable({
                       <div className="shrink-0 w-12 h-12">
                         <Image
                           className="w-12 h-12 rounded-lg object-cover"
-                          src={product.images[0] || '/placeholder-image.png'}
+                          src={(product.images && product.images[0]) ? product.images[0] : '/logo-black.svg'}
                           alt={product.name}
                           width={48}
                           height={48}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement
-                            target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAyNkMyMy4zMTM3IDI2IDI2IDIzLjMxMzcgMjYgMjBDMjYgMTYuNjg2MyAyMy4zMTM3IDE0IDIwIDE0QzE2LjY4NjMgMTQgMTQgMTYuNjg2MyAxNCAyMEMxNCAyMy4zMTM3IDE2LjY4NjMgMjYgMjAgMjZaIiBmaWxsPSIjOUI5QkEwIi8+CjxwYXRoIGQ9Ik0yNiAxNkMyNiAxOC4yMDkxIDI0LjIwOTEgMjAgMjIgMjBDMTkuNzkwOSAyMCAxOCAxOC4yMDkxIDE4IDE2QzE4IDEzLjc5MDkgMTkuNzkwOSAxMiAyMiAxMkMyNC4yMDkxIDEyIDI2IDEzLjc5MDkgMjYgMTZaIiBmaWxsPSIjOUI5QkEwIi8+Cjwvc3ZnPgo='
+                            if (target.src && !target.src.endsWith('/logo-black.svg')) target.src = '/logo-black.svg'
                           }}
                         />
                       </div>

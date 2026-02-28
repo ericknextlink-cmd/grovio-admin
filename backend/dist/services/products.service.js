@@ -292,29 +292,27 @@ class ProductsService {
             };
         }
     }
-    /**
-     * Bulk create/update products from supplier data (e.g. CSV/Excel).
-     * - Products that already exist (same slug from name) are updated (price, original_price, brand, category).
-     * - New products are inserted. No duplicates are created.
-     */
     async createBulkProducts(items) {
         let created = 0;
         let updated = 0;
         const errors = [];
-        const slugs = items.map((item) => this.generateSlug(item.name));
+        const slugs = items.map((item) => this.generateBulkSlug(item.name, item.unitPrice));
         const uniqueSlugs = [...new Set(slugs)];
-        const { data: existingRows } = await this.supabase
-            .from('products')
-            .select('id, slug')
-            .in('slug', uniqueSlugs);
         const slugToId = new Map();
-        for (const row of existingRows ?? []) {
-            const s = row.slug;
-            if (s)
-                slugToId.set(s, row.id);
+        for (let i = 0; i < uniqueSlugs.length; i += ProductsService.BULK_LOOKUP_BATCH) {
+            const batch = uniqueSlugs.slice(i, i + ProductsService.BULK_LOOKUP_BATCH);
+            const { data: existingRows } = await this.supabase
+                .from('products')
+                .select('id, slug')
+                .in('slug', batch);
+            for (const row of existingRows ?? []) {
+                const s = row.slug;
+                if (s)
+                    slugToId.set(s, row.id);
+            }
         }
         for (const item of items) {
-            const slug = this.generateSlug(item.name);
+            const slug = this.generateBulkSlug(item.name, item.unitPrice);
             const category = item.category_name ?? 'General';
             const payload = {
                 name: item.name,
@@ -358,25 +356,35 @@ class ProductsService {
             }
             created++;
             if (inserted?.id)
-                slugToId.set(slug, inserted.id); // same slug later in batch will update this row
+                slugToId.set(slug, inserted.id);
         }
         const failed = items.length - created - updated;
         return { created, updated, failed, errors };
     }
     /**
-     * Get all products for pricing (id, original_price, price). Used by pricing apply.
+     * Get all products for pricing (id, original_price, price). Paginates to exceed Supabase 1000-row default.
      */
     async getAllForPricing() {
-        const { data, error } = await this.supabase
-            .from('products')
-            .select('id, original_price, price');
-        if (error)
-            throw error;
-        return (data ?? []).map((p) => ({
-            id: p.id,
-            original_price: p.original_price ?? null,
-            price: p.price
-        }));
+        const out = [];
+        let offset = 0;
+        while (true) {
+            const { data, error } = await this.supabase
+                .from('products')
+                .select('id, original_price, price')
+                .range(offset, offset + ProductsService.PRICING_PAGE_SIZE - 1);
+            if (error)
+                throw error;
+            const page = (data ?? []).map((p) => ({
+                id: p.id,
+                original_price: p.original_price ?? null,
+                price: p.price
+            }));
+            out.push(...page);
+            if (page.length < ProductsService.PRICING_PAGE_SIZE)
+                break;
+            offset += ProductsService.PRICING_PAGE_SIZE;
+        }
+        return out;
     }
     /**
      * Update selling price for a product (used after pricing apply).
@@ -387,7 +395,7 @@ class ProductsService {
             throw error;
     }
     /**
-     * Generate slug from product name
+     * Generate slug from product name (for single-product create/update).
      */
     generateSlug(name) {
         return name
@@ -397,6 +405,15 @@ class ProductsService {
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
+    }
+    /**
+     * Slug for bulk import: name + price so same name with different price = different product.
+     * Same name + same price = update existing; same name + different price = new row.
+     */
+    generateBulkSlug(name, unitPrice) {
+        const base = this.generateSlug(name);
+        const pricePart = String(Math.round(Number(unitPrice) * 100));
+        return base ? `${base}-${pricePart}` : pricePart;
     }
     mapSupabaseError(error, defaultMessage) {
         if (!error) {
@@ -423,3 +440,10 @@ class ProductsService {
     }
 }
 exports.ProductsService = ProductsService;
+/**
+ * Bulk create/update products from supplier data (e.g. CSV/Excel).
+ * - Products that already exist (same slug from name) are updated (price, original_price, brand, category).
+ * - New products are inserted. No duplicates are created.
+ */
+ProductsService.BULK_LOOKUP_BATCH = 400; // Supabase .in() can hit URL/query limits with huge lists
+ProductsService.PRICING_PAGE_SIZE = 1000; // Supabase default max; we paginate to get all

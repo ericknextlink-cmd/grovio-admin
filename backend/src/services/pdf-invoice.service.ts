@@ -261,7 +261,7 @@ export class PDFInvoiceService {
       } else {
         // 3+ pages: middle = blank table-only; last = Template2 with last M2 items + totals
         const lastPageItemStart = data.items.length - M2
-        const blankItemCount = lastPageItemStart - M1
+        const _blankItemCount = lastPageItemStart - M1 // number of items drawn on blank middle pages (for clarity)
 
         for (let offset = M1; offset < lastPageItemStart; offset += ITEMS_PER_BLANK_PAGE) {
           const limit = Math.min(ITEMS_PER_BLANK_PAGE, lastPageItemStart - offset)
@@ -772,7 +772,7 @@ export class PDFInvoiceService {
           x: leftMargin + 700,
           y: yPos - 530 - i * descLineHeight,
           size: 38,
-          font: helveticaBold,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
       })
@@ -829,7 +829,7 @@ export class PDFInvoiceService {
           x: leftMargin + 700,
           y: yPos - 530 - i * descLineHeight,
           size: 38,
-          font: helveticaBold,
+          font: helvetica,
           color: rgb(0, 0, 0),
         })
       })

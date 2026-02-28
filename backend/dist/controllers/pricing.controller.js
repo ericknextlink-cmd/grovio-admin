@@ -7,11 +7,11 @@ class PricingController {
         this.pricingService = new pricing_service_1.PricingService();
         this.getRanges = async (req, res) => {
             try {
-                const ranges = await this.pricingService.getRanges();
+                const { ranges, total_products } = await this.pricingService.getRanges();
                 res.json({
                     success: true,
                     message: 'Price ranges retrieved',
-                    data: ranges
+                    data: { ranges, total_products }
                 });
             }
             catch (error) {

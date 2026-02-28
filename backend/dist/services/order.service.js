@@ -43,7 +43,7 @@ class OrderService {
                     error: 'Products not found',
                 };
             }
-            // 3. Validate stock availability
+            // 3. Validate products exist (stock/quantity check skipped for now so any quantity can be ordered)
             for (const cartItem of cartItems) {
                 const product = products.find(p => p.id === cartItem.productId);
                 if (!product) {
@@ -52,12 +52,9 @@ class OrderService {
                         error: `Product ${cartItem.productId} not found`,
                     };
                 }
-                if (!product.in_stock || product.quantity < cartItem.quantity) {
-                    return {
-                        success: false,
-                        error: `Product "${product.name}" is out of stock or insufficient quantity`,
-                    };
-                }
+                // Optional: re-enable when inventory is properly set
+                // if (product.quantity != null && product.in_stock === false) { ... }
+                // if (product.quantity != null && product.quantity < cartItem.quantity) { ... }
             }
             // 4. Calculate totals
             let subtotal = 0;

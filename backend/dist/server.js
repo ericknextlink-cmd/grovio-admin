@@ -28,6 +28,7 @@ const upload_routes_1 = require("./routes/upload.routes");
 const cart_routes_1 = require("./routes/cart.routes");
 const favorites_routes_1 = require("./routes/favorites.routes");
 const pricing_routes_1 = require("./routes/pricing.routes");
+const log_frontend_error_routes_1 = require("./routes/log-frontend-error.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
 const port_1 = require("./utils/port");
@@ -188,6 +189,7 @@ app.use('/api/upload', upload_routes_1.uploadRoutes);
 app.use('/api/cart', cart_routes_1.cartRoutes);
 app.use('/api/favorites', favorites_routes_1.favoritesRoutes);
 app.use('/api/pricing', pricing_routes_1.pricingRoutes);
+app.use('/api/log-frontend-error', log_frontend_error_routes_1.logFrontendErrorRoutes);
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', order_routes_1.orderRoutes);
 // Root endpoint

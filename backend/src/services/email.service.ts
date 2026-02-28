@@ -393,4 +393,67 @@ Grovio – Redefining the Way You Save.
       }
     }
   }
+
+  /**
+   * Send scheduled order reminder (1 day before). Uses Resend when RESEND_API_KEY is set.
+   */
+  async sendScheduledOrderReminder(
+    email: string,
+    options: { userName?: string; scheduledDate: string; bundleTitle: string; shopUrl?: string }
+  ): Promise<{ success: boolean; message: string; errors?: string[] }> {
+    try {
+      const resendApiKey = process.env.RESEND_API_KEY
+      const fromEmail = process.env.EMAIL_FROM || 'noreply@grovio.com'
+      const shopUrl = options.shopUrl || process.env.FRONTEND_URL || 'http://localhost:3000'
+
+      if (!resendApiKey) {
+        console.warn('RESEND_API_KEY not set. Scheduled order reminder not sent.', { email, ...options })
+        return {
+          success: false,
+          message: 'Email service not configured',
+          errors: ['RESEND_API_KEY not set'],
+        }
+      }
+
+      const dateStr = new Date(options.scheduledDate).toLocaleDateString()
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #D35F0E;">Your scheduled order is tomorrow</h1>
+            <p>Hi${options.userName ? ` ${options.userName}` : ''},</p>
+            <p>This is a reminder that your scheduled order for <strong>${options.bundleTitle}</strong> is due on <strong>${dateStr}</strong>.</p>
+            <p>Complete your payment so we can deliver on time:</p>
+            <p><a href="${shopUrl}/shop" style="background: #D35F0E; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px;">Go to shop</a></p>
+            <p>If you already placed this order, you can ignore this email.</p>
+          </body>
+        </html>
+      `
+
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: email,
+          subject: `Reminder: Scheduled order tomorrow – ${options.bundleTitle}`,
+          html,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error('Resend scheduled reminder error:', err)
+        return { success: false, message: 'Failed to send reminder', errors: [(err as { message?: string }).message || 'Resend error'] }
+      }
+      return { success: true, message: 'Reminder sent' }
+    } catch (error) {
+      console.error('Send scheduled order reminder error:', error)
+      return {
+        success: false,
+        message: 'Internal server error',
+        errors: [error instanceof Error ? error.message : 'Failed to send reminder'],
+      }
+    }
+  }
 }

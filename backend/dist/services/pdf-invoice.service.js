@@ -61,9 +61,30 @@ function wrapTextByWords(text, wordsPerLine) {
     }
     return lines;
 }
-/** Default template filename in storage (templates folder) and local public folder */
+/**
+ * Templates:
+ * - Template.pdf: Single-page full invoice (≤6 items). Logo, Billed To, QR, serial, date, items, totals, thank you, footer.
+ * - Template1.pdf: First page of multi-page. Logo, Billed To, QR, serial, date, items (fill page; no totals/footer).
+ * - Template2.pdf: Last page of multi-page. Has footer/thank you baked in. We draw: items (that fit above totals), then Subtotal, Discounts & Credits, Total. Used once per invoice as the last page.
+ * - Blank pages: Created in code (no file). Table only for continuation items.
+ */
 const DEFAULT_TEMPLATE_FILENAME = 'Template.pdf';
-/** Logo filename (SVG or PNG) in templates/ and public/ */
+const TEMPLATE1_FILENAME = 'Template1.pdf';
+const TEMPLATE2_FILENAME = 'Template2.pdf';
+/** Try alternate names for user's files (e.g. "Template (1).pdf") */
+const TEMPLATE1_ALT = 'Template (1).pdf';
+const TEMPLATE2_ALT = 'Template (2).pdf';
+/** Single-page threshold: items ≤ this use Template.pdf only. */
+const SINGLE_PAGE_MAX_ITEMS = 6;
+/** Don't draw items below this Y on Template1 (so we don't run into bottom). */
+const ITEM_FLOOR_Y_PAGE1 = 380;
+/** On Template2 (last page), items must stay above this Y so totals never overlap (reserve space for Subtotal/Discounts/Total block). */
+const ITEM_FLOOR_Y_LAST_PAGE = 920;
+/** Last page: items start this far from top (smaller = items/totals higher; “totals position” for ~10 items, then totals shift down when more). */
+const ITEMS_START_OFFSET_PAGE1 = 240;
+const ITEMS_START_OFFSET_LAST_PAGE = 120;
+/** Approx. items per blank continuation page (table only). */
+const ITEMS_PER_BLANK_PAGE = 10;
 const LOGO_FILENAME = 'logo-black.svg';
 const LOGO_FILENAME_PNG = 'logo-black.png';
 class PDFInvoiceService {
@@ -114,11 +135,11 @@ class PDFInvoiceService {
         return null;
     }
     /**
-     * Load template PDF bytes: first from Supabase storage (templates/Template.pdf),
-     * then fallback to local public/Template.pdf.
+     * Load template PDF bytes: first from Supabase storage (templates/<filename>),
+     * then fallback to local public/<filename>.
      */
-    async getTemplateBytes() {
-        const storagePath = `templates/${DEFAULT_TEMPLATE_FILENAME}`;
+    async getTemplateBytes(filename = DEFAULT_TEMPLATE_FILENAME) {
+        const storagePath = `templates/${filename}`;
         const { data, error } = await this.supabase.storage
             .from(this.templatesBucketName)
             .download(storagePath);
@@ -127,11 +148,29 @@ class PDFInvoiceService {
             if (bytes.length > 0)
                 return bytes;
         }
-        if ((0, fs_1.existsSync)(this.localTemplatePath)) {
-            const buf = await promises_1.default.readFile(this.localTemplatePath);
+        const localPath = path_1.default.join(process.cwd(), 'public', filename);
+        if ((0, fs_1.existsSync)(localPath)) {
+            const buf = await promises_1.default.readFile(localPath);
             return new Uint8Array(buf);
         }
-        throw new Error(`Invoice template not found. Upload templates/${DEFAULT_TEMPLATE_FILENAME} to Supabase bucket "${this.templatesBucketName}" or place Template.pdf in backend/public/`);
+        throw new Error(`Invoice template not found: ${filename}. Upload templates/${filename} to Supabase bucket "${this.templatesBucketName}" or place in backend/public/`);
+    }
+    /** Load template by primary or alternate filename. Returns null if not found. */
+    async getTemplateBytesOrNull(...filenames) {
+        for (const name of filenames) {
+            try {
+                return await this.getTemplateBytes(name);
+            }
+            catch {
+                continue;
+            }
+        }
+        return null;
+    }
+    /** Height of the first page of a template PDF (for fit calculations). */
+    async getTemplatePageHeight(templateBytes) {
+        const doc = await pdf_lib_1.PDFDocument.load(templateBytes);
+        return doc.getPages()[0].getSize().height;
     }
     /**
      * Ensure Supabase storage bucket exists
@@ -159,15 +198,60 @@ class PDFInvoiceService {
         }
     }
     /**
-     * Generate invoice PDF and return bytes only (no upload). Use for testing or custom storage.
+     * Generate invoice PDF and return bytes only (no upload).
+     * Single-page (≤6 items): Template.pdf with everything.
+     * Multi-page (7+ items): Template1 (first page, items until full) → optional blank table-only pages → Template2 (last page: remaining items + totals; footer/thank you on template).
      */
     async generateInvoiceToBuffer(data) {
         const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber);
         try {
             const templateBytes = await this.getTemplateBytes();
-            return await this.fillTemplate(data, qrCodeData, templateBytes);
+            if (data.items.length <= SINGLE_PAGE_MAX_ITEMS) {
+                return await this.fillTemplate(data, qrCodeData, templateBytes);
+            }
+            // Multi-page: need Template1 and Template2
+            const template1Bytes = await this.getTemplateBytesOrNull(TEMPLATE1_FILENAME, TEMPLATE1_ALT);
+            const template2Bytes = await this.getTemplateBytesOrNull(TEMPLATE2_FILENAME, TEMPLATE2_ALT);
+            if (!template1Bytes || !template2Bytes) {
+                console.warn('Multi-page invoice: Template1 or Template2 not found. Using single-page with Template.pdf.');
+                return await this.fillTemplate(data, qrCodeData, templateBytes);
+            }
+            const pageHeight1 = await this.getTemplatePageHeight(template1Bytes);
+            const pageHeight2 = await this.getTemplatePageHeight(template2Bytes);
+            const referencePageHeight = await this.getTemplatePageHeight(templateBytes);
+            const pageBuffers = [];
+            // Page 1: Template1 — logo, Billed To, QR, serial, date, items until page is full (barcode/QR same size as single-page)
+            const { bytes: page1Bytes, itemsDrawn: M1 } = await this.fillTemplate1FirstPage(data, qrCodeData, template1Bytes, pageHeight1, referencePageHeight);
+            pageBuffers.push(page1Bytes);
+            const remaining = data.items.length - M1;
+            const M2 = this.computeItemsThatFit(data, M1, pageHeight2, ITEM_FLOOR_Y_LAST_PAGE, ITEMS_START_OFFSET_LAST_PAGE);
+            if (remaining <= M2) {
+                // Exactly 2 pages: last page has remaining items + totals
+                const lastBytes = await this.fillTemplate2LastPage(data, qrCodeData, template2Bytes, M1);
+                pageBuffers.push(lastBytes);
+            }
+            else {
+                // 3+ pages: middle = blank table-only; last = Template2 with last M2 items + totals
+                const lastPageItemStart = data.items.length - M2;
+                const _blankItemCount = lastPageItemStart - M1; // number of items drawn on blank middle pages (for clarity)
+                for (let offset = M1; offset < lastPageItemStart; offset += ITEMS_PER_BLANK_PAGE) {
+                    const limit = Math.min(ITEMS_PER_BLANK_PAGE, lastPageItemStart - offset);
+                    const buf = await this.drawBlankTablePage(data, offset, limit);
+                    pageBuffers.push(buf);
+                }
+                const lastBytes = await this.fillTemplate2LastPage(data, qrCodeData, template2Bytes, lastPageItemStart);
+                pageBuffers.push(lastBytes);
+            }
+            const mergedDoc = await pdf_lib_1.PDFDocument.create();
+            for (const pageBuf of pageBuffers) {
+                const doc = await pdf_lib_1.PDFDocument.load(pageBuf);
+                const [copiedPage] = await mergedDoc.copyPages(doc, [0]);
+                mergedDoc.addPage(copiedPage);
+            }
+            return await mergedDoc.save();
         }
-        catch {
+        catch (e) {
+            console.warn('Template fill failed, falling back to scratch:', e);
             return await this.createInvoiceFromScratch(data, qrCodeData);
         }
     }
@@ -179,15 +263,8 @@ class PDFInvoiceService {
             await this.ensureBucketExists();
             // 1. Generate QR Code
             const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber);
-            // 2. Load or create PDF (template from Supabase templates/ or local public/)
-            let pdfBytes;
-            try {
-                const templateBytes = await this.getTemplateBytes();
-                pdfBytes = await this.fillTemplate(data, qrCodeData, templateBytes);
-            }
-            catch {
-                pdfBytes = await this.createInvoiceFromScratch(data, qrCodeData);
-            }
+            // 2. Generate PDF (single page if ≤6 items; multi-page merge if >6 items using Template / Template2 / Template3)
+            const pdfBytes = await this.generateInvoiceToBuffer(data);
             // 3. Upload PDF to Supabase storage
             const pdfFileName = `pdf/${data.invoiceNumber}.pdf`;
             const pdfUrl = await this.uploadToStorage(pdfFileName, pdfBytes, 'application/pdf');
@@ -216,24 +293,64 @@ class PDFInvoiceService {
             };
         }
     }
+    /** Row height for one item (for fit simulation). */
+    getItemRowHeight(item) {
+        const descLines = wrapTextByWords(item.description, 4);
+        return PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * PDFInvoiceService.DESC_LINE_HEIGHT);
+    }
     /**
-     * Multi-page strategy (for when items > ~6):
-     * - Page 1: Current template WITHOUT footer (logo, Billed To, barcode, QR, first ~5–6 items). No "Grovio – Redefining..." or secure check.
-     * - Page 2: Continuation of items (full page of rows), then totals, then footer (tagline, secure check, contact). If items still don't fit:
-     * - Page 2..N-1: Full pages of item listing only (same template or listing-only template).
-     * - Page N: Remaining items, then totals, then footer.
-     * Requires: TemplatePage1NoFooter.pdf (or strip footer when items > 6), optional TemplateListingOnly.pdf for continuation pages.
+     * How many items from startIndex fit on a page above the given floor Y.
+     * startYOffset: distance from top to first item (default 320). Use ITEMS_START_OFFSET_LAST_PAGE for last page so items/totals start higher.
      */
+    computeItemsThatFit(data, startIndex, pageHeight, floorY, startYOffset = 320) {
+        const items = data.items.slice(startIndex);
+        let yPos = pageHeight - startYOffset;
+        let count = 0;
+        for (const item of items) {
+            const rowHeight = this.getItemRowHeight(item);
+            const rowContentBottom = yPos - 530 - rowHeight + PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET;
+            if (rowContentBottom < floorY)
+                break;
+            count++;
+            yPos -= rowHeight;
+        }
+        return count;
+    }
+    /**
+     * First page of multi-page: Template1 with logo, Billed To, QR, serial, date, items (fill page). No totals/footer.
+     * Uses actual template page height so we don't assume A4 (842); templates may be larger.
+     */
+    async fillTemplate1FirstPage(data, qrCodeDataUrl, template1Bytes, pageHeight, referencePageHeight) {
+        const M1 = Math.min(data.items.length, this.computeItemsThatFit(data, 0, pageHeight, ITEM_FLOOR_Y_PAGE1, ITEMS_START_OFFSET_PAGE1));
+        const bytes = await this.fillTemplate(data, qrCodeDataUrl, template1Bytes, {
+            itemOffset: 0,
+            itemLimit: M1,
+            skipTotalsAndFooter: true,
+            referencePageHeight,
+        });
+        return { bytes, itemsDrawn: M1 };
+    }
     /**
      * Fill Template.pdf with invoice data.
-     * Uses consistent row height per item so multiple products don't require fixed template lines.
+     * Uses consistent row height per item. For multi-page: pass itemLimit and skipTotalsAndFooter for page 1.
      */
-    async fillTemplate(data, qrCodeDataUrl, templateBytes) {
+    async fillTemplate(data, qrCodeDataUrl, templateBytes, options) {
+        const itemOffset = options?.itemOffset ?? 0;
+        const itemLimit = options?.itemLimit;
+        const skipTotalsAndFooter = options?.skipTotalsAndFooter ?? false;
+        const referencePageHeight = options?.referencePageHeight;
+        const items = itemLimit !== undefined
+            ? data.items.slice(itemOffset, itemOffset + itemLimit)
+            : data.items;
         try {
             const pdfDoc = await pdf_lib_1.PDFDocument.load(templateBytes);
             const pages = pdfDoc.getPages();
             const firstPage = pages[0];
             const { width, height } = firstPage.getSize();
+            // When filling Template1 (multi-page first), scale barcode/QR to match single-page template size
+            const scaleBarcodeQr = referencePageHeight != null && referencePageHeight > 0 && skipTotalsAndFooter
+                ? height / referencePageHeight
+                : 1;
             // Embed fonts
             const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
             const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
@@ -319,12 +436,12 @@ class PDFInvoiceService {
                 font: helvetica,
                 color: (0, pdf_lib_1.rgb)(0.2, 0.2, 0.2),
             });
-            // Serial barcode (below Billed To)
+            // Serial barcode (below Billed To) – same visual size as single-page when referencePageHeight set
             const barcodePng = await this.generateBarcodePng(data.invoiceNumber);
             if (barcodePng) {
                 try {
                     const barcodeImage = await pdfDoc.embedPng(barcodePng);
-                    const barcodeW = 320;
+                    const barcodeW = 320 * scaleBarcodeQr;
                     const barcodeH = (barcodeImage.height / barcodeImage.width) * barcodeW;
                     const barcodeY = yPos - 80 - 120;
                     firstPage.drawImage(barcodeImage, {
@@ -347,9 +464,9 @@ class PDFInvoiceService {
                 }
             }
             // Items header – table headers only; line under each row is drawn below row content
-            yPos = height - 320;
+            yPos = height - ITEMS_START_OFFSET_PAGE1;
             // Items: description wrapped to 4 words per line; row height grows with wrap lines
-            data.items.forEach((item) => {
+            items.forEach((item) => {
                 const descLines = wrapTextByWords(item.description, 4);
                 const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight);
                 const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset;
@@ -397,119 +514,375 @@ class PDFInvoiceService {
                 }
                 yPos -= rowHeight;
             });
-            // Totals section (labels same x as items listing, values on right)
-            yPos = yPos - 620;
-            const totalsLabelX = leftMargin + 700;
-            const totalsValueX = width - 320;
-            const totalAmountGap = 18; // gap between line above Total Amount and the text (reduced so Total Amount comes up)
-            // Subtotal (label left, value right)
-            firstPage.drawText('Subtotal', {
-                x: totalsLabelX,
-                y: yPos + 40,
-                size: 48,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0)
-            });
-            firstPage.drawText(`GHC ${data.subtotal.toFixed(2)}`, {
-                x: totalsValueX - 80,
-                y: yPos + 40,
-                size: 48,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= 66;
-            // Discounts & Credits section title
-            firstPage.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
-            yPos -= 86;
-            // Discount
-            firstPage.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
-            firstPage.drawText(`GHC ${data.discount.toFixed(2)}`, {
-                x: width - 360,
-                y: yPos,
-                size: 48,
-                font: helvetica,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= 86;
-            // Credits (always show; 0.00 when zero)
-            firstPage.drawText('Credits', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
-            firstPage.drawText(`GHC ${data.credits.toFixed(2)}`, {
-                x: width - 360,
-                y: yPos,
-                size: 48,
-                font: helvetica,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= 86;
-            // Discount + Credits subtotal
-            firstPage.drawText('Subtotal', { x: totalsLabelX, y: yPos, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
-            firstPage.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, {
-                x: width - 360,
-                y: yPos,
-                size: 48,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= 38;
-            // Line above Subtotal
-            firstPage.drawLine({
-                start: { x: lineLeft, y: yPos + 92 },
-                end: { x: lineRight + 90, y: yPos + 92 },
-                thickness: lineThickness,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            // Line under Discounts & Credits section only
-            firstPage.drawLine({
-                start: { x: lineLeft, y: yPos + 188 },
-                end: { x: lineRight + 90, y: yPos + 188 },
-                thickness: lineThickness,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= totalAmountGap;
-            // Line above Total Amount (last line before total)
-            firstPage.drawLine({
-                start: { x: lineLeft, y: yPos },
-                end: { x: lineRight + 90, y: yPos },
-                thickness: lineThickness,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            yPos -= totalAmountGap;
-            // Total Amount (label left, value right) – brought up closer to the line above
-            firstPage.drawText('Total Amount', {
-                x: totalsLabelX,
-                y: yPos - 80,
-                size: 48,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0)
-            });
-            firstPage.drawText(`GHC ${data.totalAmount.toFixed(2)}`, {
-                x: width - 380,
-                y: yPos - 80,
-                size: 48,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            // Thank you – just below totals (same x-axis as items)
-            firstPage.drawText('Thank you for shopping with us!', {
-                x: totalsLabelX - 90,
-                y: yPos - 250,
-                size: 60,
-                font: helveticaBold,
-                color: (0, pdf_lib_1.rgb)(0, 0, 0),
-            });
-            // QR Code (bottom center)
-            firstPage.drawImage(qrImage, {
-                x: leftMargin - 40,
-                y: 1240,
-                width: qrDims.width,
-                height: qrDims.height,
-            });
+            if (!skipTotalsAndFooter) {
+                // Totals section (labels same x as items listing, values on right)
+                yPos = yPos - 620;
+                const totalsLabelX = leftMargin + 700;
+                const totalsValueX = width - 320;
+                const totalAmountGap = 18;
+                // Subtotal (label left, value right)
+                firstPage.drawText('Subtotal', {
+                    x: totalsLabelX,
+                    y: yPos + 40,
+                    size: 48,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                firstPage.drawText(`GHC ${data.subtotal.toFixed(2)}`, {
+                    x: totalsValueX - 80,
+                    y: yPos + 40,
+                    size: 48,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= 66;
+                // Discounts & Credits section title
+                firstPage.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+                yPos -= 86;
+                // Discount
+                firstPage.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+                firstPage.drawText(`GHC ${data.discount.toFixed(2)}`, {
+                    x: width - 360,
+                    y: yPos,
+                    size: 48,
+                    font: helvetica,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= 86;
+                // Credits (always show; 0.00 when zero)
+                firstPage.drawText('Credits', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+                firstPage.drawText(`GHC ${data.credits.toFixed(2)}`, {
+                    x: width - 360,
+                    y: yPos,
+                    size: 48,
+                    font: helvetica,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= 86;
+                // Discount + Credits subtotal
+                firstPage.drawText('Subtotal', { x: totalsLabelX, y: yPos, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+                firstPage.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, {
+                    x: width - 360,
+                    y: yPos,
+                    size: 48,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= 38;
+                // Line above Subtotal
+                firstPage.drawLine({
+                    start: { x: lineLeft, y: yPos + 92 },
+                    end: { x: lineRight + 90, y: yPos + 92 },
+                    thickness: lineThickness,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                // Line under Discounts & Credits section only
+                firstPage.drawLine({
+                    start: { x: lineLeft, y: yPos + 188 },
+                    end: { x: lineRight + 90, y: yPos + 188 },
+                    thickness: lineThickness,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= totalAmountGap;
+                // Line above Total Amount (last line before total)
+                firstPage.drawLine({
+                    start: { x: lineLeft, y: yPos },
+                    end: { x: lineRight + 90, y: yPos },
+                    thickness: lineThickness,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                yPos -= totalAmountGap;
+                // Total Amount (label left, value right)
+                firstPage.drawText('Total Amount', {
+                    x: totalsLabelX,
+                    y: yPos - 80,
+                    size: 48,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                firstPage.drawText(`GHC ${data.totalAmount.toFixed(2)}`, {
+                    x: width - 380,
+                    y: yPos - 80,
+                    size: 48,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                // Thank you
+                firstPage.drawText('Thank you for shopping with us!', {
+                    x: totalsLabelX - 90,
+                    y: yPos - 250,
+                    size: 60,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+                // QR Code (bottom center)
+                firstPage.drawImage(qrImage, {
+                    x: leftMargin - 40,
+                    y: 1240,
+                    width: qrDims.width,
+                    height: qrDims.height,
+                });
+            }
+            else {
+                // Multi-page first page (Template1): draw QR in same position and same visual size as single-page
+                firstPage.drawImage(qrImage, {
+                    x: leftMargin - 40,
+                    y: 1240,
+                    width: qrDims.width * scaleBarcodeQr,
+                    height: qrDims.height * scaleBarcodeQr,
+                });
+            }
             return await pdfDoc.save();
         }
         catch (error) {
             console.error('Template fill error:', error);
             throw error;
         }
+    }
+    /**
+     * Fill Template2 (table only, no footer/shield): draw only the items table for the given slice.
+     * Used for continuation pages in multi-page invoices.
+     */
+    async fillTemplate2TableOnly(data, template2Bytes, itemOffset, itemLimit) {
+        const items = data.items.slice(itemOffset, itemOffset + itemLimit);
+        if (items.length === 0)
+            throw new Error('fillTemplate2TableOnly: no items in slice');
+        const pdfDoc = await pdf_lib_1.PDFDocument.load(template2Bytes);
+        const page = pdfDoc.getPages()[0];
+        const { width } = page.getSize();
+        const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
+        const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
+        const leftMargin = 250;
+        const descLineHeight = 42;
+        const itemLineLeftOffset = 700;
+        const itemLineRightMargin = 200;
+        const lineLeft = leftMargin + itemLineLeftOffset;
+        const lineRight = width - itemLineRightMargin;
+        const lineThickness = 0.5;
+        const itemLineVerticalOffset = 75;
+        const pageHeight = page.getSize().height;
+        let yPos = pageHeight - ITEMS_START_OFFSET_PAGE1;
+        for (const item of items) {
+            const descLines = wrapTextByWords(item.description, 4);
+            const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight);
+            const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset;
+            descLines.forEach((line, i) => {
+                page.drawText(line, {
+                    x: leftMargin + 700,
+                    y: yPos - 530 - i * descLineHeight,
+                    size: 38,
+                    font: helvetica,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+            });
+            page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawLine({
+                start: { x: lineLeft, y: rowContentBottom },
+                end: { x: lineRight + 90, y: rowContentBottom },
+                thickness: lineThickness,
+                color: (0, pdf_lib_1.rgb)(0, 0, 0),
+            });
+            yPos -= rowHeight;
+        }
+        return await pdfDoc.save();
+    }
+    /**
+     * Create a blank A4 page and draw only the items table (continuation). No logo, Billed To, QR, footer.
+     */
+    async drawBlankTablePage(data, itemOffset, itemLimit) {
+        const items = data.items.slice(itemOffset, itemOffset + itemLimit);
+        if (items.length === 0)
+            throw new Error('drawBlankTablePage: no items in slice');
+        const pdfDoc = await pdf_lib_1.PDFDocument.create();
+        const page = pdfDoc.addPage([595, 842]);
+        const { width, height } = page.getSize();
+        const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
+        const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
+        const leftMargin = 250;
+        const descLineHeight = PDFInvoiceService.DESC_LINE_HEIGHT;
+        const itemLineLeftOffset = 700;
+        const itemLineRightMargin = 200;
+        const lineLeft = leftMargin + itemLineLeftOffset;
+        const lineRight = width - itemLineRightMargin;
+        const lineThickness = 0.5;
+        const itemLineVerticalOffset = PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET;
+        let yPos = height - ITEMS_START_OFFSET_PAGE1;
+        for (const item of items) {
+            const descLines = wrapTextByWords(item.description, 4);
+            const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight);
+            const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset;
+            descLines.forEach((line, i) => {
+                page.drawText(line, {
+                    x: leftMargin + 700,
+                    y: yPos - 530 - i * descLineHeight,
+                    size: 38,
+                    font: helvetica,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+            });
+            page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawLine({
+                start: { x: lineLeft, y: rowContentBottom },
+                end: { x: lineRight + 90, y: rowContentBottom },
+                thickness: lineThickness,
+                color: (0, pdf_lib_1.rgb)(0, 0, 0),
+            });
+            yPos -= rowHeight;
+        }
+        return await pdfDoc.save();
+    }
+    /**
+     * Last page of multi-page: Template2 (footer/thank you on template). Draw items from itemOffset (only as many as fit above totals), then Subtotal, Discounts & Credits, Total Amount.
+     */
+    async fillTemplate2LastPage(data, qrCodeDataUrl, template2Bytes, itemOffset) {
+        const pdfDoc = await pdf_lib_1.PDFDocument.load(template2Bytes);
+        const page = pdfDoc.getPages()[0];
+        const { width, height } = page.getSize();
+        const M2 = this.computeItemsThatFit(data, itemOffset, height, ITEM_FLOOR_Y_LAST_PAGE, ITEMS_START_OFFSET_LAST_PAGE);
+        const items = data.items.slice(itemOffset, itemOffset + M2);
+        const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
+        const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
+        const leftMargin = 250;
+        const descLineHeight = PDFInvoiceService.DESC_LINE_HEIGHT;
+        const itemLineLeftOffset = 700;
+        const itemLineRightMargin = 200;
+        const lineLeft = leftMargin + itemLineLeftOffset;
+        const lineRight = width - itemLineRightMargin;
+        const lineThickness = 0.5;
+        const itemLineVerticalOffset = PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET;
+        const totalsLabelX = leftMargin + 700;
+        const totalsValueX = width - 320;
+        const totalAmountGap = 18;
+        let yPos = height - ITEMS_START_OFFSET_LAST_PAGE;
+        for (const item of items) {
+            const descLines = wrapTextByWords(item.description, 4);
+            const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight);
+            const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset;
+            descLines.forEach((line, i) => {
+                page.drawText(line, {
+                    x: leftMargin + 700,
+                    y: yPos - 530 - i * descLineHeight,
+                    size: 38,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+            });
+            page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawLine({
+                start: { x: lineLeft, y: rowContentBottom },
+                end: { x: lineRight + 90, y: rowContentBottom },
+                thickness: lineThickness,
+                color: (0, pdf_lib_1.rgb)(0, 0, 0),
+            });
+            yPos -= rowHeight;
+        }
+        // Totals section: start just below last item so they sit higher when few items, and shift down when more
+        const totalsGapBelowItems = 80;
+        yPos = yPos - totalsGapBelowItems;
+        page.drawText('Subtotal', { x: totalsLabelX, y: yPos + 40, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.subtotal.toFixed(2)}`, { x: totalsValueX - 80, y: yPos + 40, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 66;
+        page.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.discount.toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Credits', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.credits.toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Subtotal', { x: totalsLabelX, y: yPos, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 38;
+        page.drawLine({ start: { x: lineLeft, y: yPos + 92 }, end: { x: lineRight + 90, y: yPos + 92 }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawLine({ start: { x: lineLeft, y: yPos + 188 }, end: { x: lineRight + 90, y: yPos + 188 }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= totalAmountGap;
+        page.drawLine({ start: { x: lineLeft, y: yPos }, end: { x: lineRight + 90, y: yPos }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= totalAmountGap;
+        page.drawText('Total Amount', { x: totalsLabelX, y: yPos - 80, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.totalAmount.toFixed(2)}`, { x: width - 380, y: yPos - 80, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        return await pdfDoc.save();
+    }
+    /**
+     * Fill Template3 (last page with footer): draw remaining items (if any) then totals, thank you, QR.
+     * @deprecated Use fillTemplate2LastPage with Template2 for multi-page last page.
+     */
+    async fillTemplate3LastPage(data, qrCodeDataUrl, template3Bytes, itemOffset) {
+        const pdfDoc = await pdf_lib_1.PDFDocument.load(template3Bytes);
+        const page = pdfDoc.getPages()[0];
+        const { width, height } = page.getSize();
+        const helvetica = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.Helvetica);
+        const helveticaBold = await pdfDoc.embedFont(pdf_lib_1.StandardFonts.HelveticaBold);
+        const qrImage = await pdfDoc.embedPng(dataUrlToPngBytes(qrCodeDataUrl));
+        const qrDims = qrImage.scale(3.2);
+        const leftMargin = 250;
+        const descLineHeight = 42;
+        const itemLineLeftOffset = 700;
+        const itemLineRightMargin = 200;
+        const lineLeft = leftMargin + itemLineLeftOffset;
+        const lineRight = width - itemLineRightMargin;
+        const lineThickness = 0.5;
+        const itemLineVerticalOffset = 75;
+        const totalsLabelX = leftMargin + 700;
+        const totalsValueX = width - 320;
+        const totalAmountGap = 18;
+        let yPos = height - 320;
+        const items = data.items.slice(itemOffset);
+        for (const item of items) {
+            const descLines = wrapTextByWords(item.description, 4);
+            const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight);
+            const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset;
+            descLines.forEach((line, i) => {
+                page.drawText(line, {
+                    x: leftMargin + 700,
+                    y: yPos - 530 - i * descLineHeight,
+                    size: 38,
+                    font: helveticaBold,
+                    color: (0, pdf_lib_1.rgb)(0, 0, 0),
+                });
+            });
+            page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+            page.drawLine({
+                start: { x: lineLeft, y: rowContentBottom },
+                end: { x: lineRight + 90, y: rowContentBottom },
+                thickness: lineThickness,
+                color: (0, pdf_lib_1.rgb)(0, 0, 0),
+            });
+            yPos -= rowHeight;
+        }
+        // Totals section
+        yPos = yPos - 620;
+        page.drawText('Subtotal', { x: totalsLabelX, y: yPos + 40, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.subtotal.toFixed(2)}`, { x: totalsValueX - 80, y: yPos + 40, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 66;
+        page.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.discount.toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Credits', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.credits.toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helvetica, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 86;
+        page.drawText('Subtotal', { x: totalsLabelX, y: yPos, size: 38, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${(data.discount + data.credits).toFixed(2)}`, { x: width - 360, y: yPos, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= 38;
+        page.drawLine({ start: { x: lineLeft, y: yPos + 92 }, end: { x: lineRight + 90, y: yPos + 92 }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawLine({ start: { x: lineLeft, y: yPos + 188 }, end: { x: lineRight + 90, y: yPos + 188 }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= totalAmountGap;
+        page.drawLine({ start: { x: lineLeft, y: yPos }, end: { x: lineRight + 90, y: yPos }, thickness: lineThickness, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        yPos -= totalAmountGap;
+        page.drawText('Total Amount', { x: totalsLabelX, y: yPos - 80, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText(`GHC ${data.totalAmount.toFixed(2)}`, { x: width - 380, y: yPos - 80, size: 48, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawText('Thank you for shopping with us!', { x: totalsLabelX - 90, y: yPos - 250, size: 60, font: helveticaBold, color: (0, pdf_lib_1.rgb)(0, 0, 0) });
+        page.drawImage(qrImage, { x: leftMargin - 40, y: 1240, width: qrDims.width, height: qrDims.height });
+        return await pdfDoc.save();
     }
     /**
      * Create invoice PDF from scratch (if no template)
@@ -843,3 +1216,5 @@ class PDFInvoiceService {
 exports.PDFInvoiceService = PDFInvoiceService;
 /** Fixed row height for each item line (same spacing for any number of products) */
 PDFInvoiceService.ITEM_ROW_HEIGHT = 28;
+PDFInvoiceService.DESC_LINE_HEIGHT = 42;
+PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET = 75;

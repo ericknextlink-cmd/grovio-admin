@@ -17,6 +17,7 @@ interface PriceRange {
 
 export default function PricingPage() {
   const [ranges, setRanges] = useState<PriceRange[]>([])
+  const [totalProducts, setTotalProducts] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -27,10 +28,15 @@ export default function PricingPage() {
     try {
       const res = await pricingApi.getRanges()
       if (res.success && res.data) {
-        setRanges(res.data)
+        const data = res.data as { ranges: PriceRange[]; total_products: number }
+        setRanges(data.ranges)
+        setTotalProducts(data.total_products ?? 0)
         setPercentageInputs(
-          (res.data as PriceRange[]).reduce(
-            (acc, r) => ({ ...acc, [r.id]: r.percentage > 0 ? String(r.percentage) : '' }),
+          (data.ranges ?? []).reduce(
+            (acc, r) => ({
+              ...acc,
+              [r.id]: r.percentage > 0 ? String(r.percentage) : ''
+            }),
             {} as Record<string, string>
           )
         )
@@ -137,6 +143,12 @@ export default function PricingPage() {
                   </tbody>
                 </table>
               </div>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Total products in database: <strong>{totalProducts}</strong>
+                {totalProducts > 0 && (
+                  <> · In ranges above: <strong>{ranges.reduce((sum, r) => sum + (r.product_count ?? 0), 0)}</strong></>
+                )}
+              </p>
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={handleApply}

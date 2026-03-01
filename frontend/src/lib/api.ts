@@ -378,7 +378,7 @@ export const bundlesApi = {
   getById: (bundleId: string) => apiClient.get<any>(`/api/bundles/${bundleId}`),
   createManual: (body: { title: string; description?: string; category?: string; productIds: string[] }) =>
     apiClient.post<any>('/api/bundles', body),
-  generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number }) =>
+  generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number; productsPerBundle?: number }) =>
     apiClient.post<any>('/api/bundles/generate', body),
   refresh: () => apiClient.post<any>('/api/bundles/refresh'),
 }

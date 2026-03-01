@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { bundlesApi, productsApi } from '@/lib/api'
+import { bundlesApi, productsApi, categoriesApi } from '@/lib/api'
 import { toast } from 'sonner'
-import { Layers, Loader2, ChevronDown, ChevronUp, Sparkles, Package, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Layers, Loader2, ChevronDown, ChevronUp, Sparkles, Package, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 
 interface BundleProduct {
   id: string
@@ -47,6 +47,7 @@ export default function AdminBundlesPage() {
   const [budgetMin, setBudgetMin] = useState<string>('')
   const [budgetMax, setBudgetMax] = useState<string>('')
   const [count, setCount] = useState<string>('5')
+  const [productsPerBundle, setProductsPerBundle] = useState<string>('')
 
   const [showManualForm, setShowManualForm] = useState(false)
   const [manualTitle, setManualTitle] = useState('')
@@ -56,6 +57,10 @@ export default function AdminBundlesPage() {
   const [products, setProducts] = useState<Array<{ id: string; name: string; price: number }>>([])
   const [productsLoading, setProductsLoading] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(false)
+  const [productModalOpen, setProductModalOpen] = useState(false)
+  const [productSearch, setProductSearch] = useState('')
 
   const fetchBundles = useCallback(async (pageNum: number = page) => {
     setLoading(true)
@@ -82,7 +87,7 @@ export default function AdminBundlesPage() {
   const handleGenerate = async () => {
     setGenerating(true)
     try {
-      const body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number } = {
+      const body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number; productsPerBundle?: number } = {
         count: parseInt(count, 10) || 5,
       }
       if (prompt.trim()) body.prompt = prompt.trim()
@@ -90,6 +95,8 @@ export default function AdminBundlesPage() {
       const max = parseFloat(budgetMax)
       if (!isNaN(min)) body.budgetMin = min
       if (!isNaN(max)) body.budgetMax = max
+      const ppb = parseInt(productsPerBundle, 10)
+      if (!isNaN(ppb) && ppb >= 2 && ppb <= 20) body.productsPerBundle = ppb
 
       const res = await bundlesApi.generate(body)
       if (res.success && res.data) {
@@ -110,7 +117,7 @@ export default function AdminBundlesPage() {
   const loadProductsForManual = useCallback(async () => {
     setProductsLoading(true)
     try {
-      const res = await productsApi.getAll({ page: 1, limit: 200 })
+      const res = await productsApi.getAll({ page: 1, limit: 500 })
       if (res.success && res.data && Array.isArray(res.data)) {
         setProducts(res.data.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
       }
@@ -121,11 +128,39 @@ export default function AdminBundlesPage() {
     }
   }, [])
 
+  const loadCategories = useCallback(async () => {
+    setCategoriesLoading(true)
+    try {
+      const res = await categoriesApi.getAll()
+      if (res.success && res.data && Array.isArray(res.data)) {
+        const list = (res.data as Array<{ id: string; name: string }>).map((c) => ({ id: c.id, name: c.name }))
+        setCategories(list)
+      }
+    } catch {
+      toast.error('Failed to load categories')
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (showManualForm && products.length === 0) {
       loadProductsForManual()
     }
   }, [showManualForm, products.length, loadProductsForManual])
+
+  useEffect(() => {
+    if (showManualForm && categories.length === 0) {
+      loadCategories()
+    }
+  }, [showManualForm, categories.length, loadCategories])
+
+  const filteredProductsForModal = productSearch.trim()
+    ? products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(productSearch.trim().toLowerCase())
+      )
+    : products
 
   const toggleProductForManual = (id: string) => {
     setManualProductIds((prev) =>
@@ -233,10 +268,23 @@ export default function AdminBundlesPage() {
                     <input
                       type="number"
                       min="1"
-                      max="20"
+                      max="50"
                       value={count}
                       onChange={(e) => setCount(e.target.value)}
                       className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Products per bundle</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="20"
+                      placeholder="AI decides"
+                      value={productsPerBundle}
+                      onChange={(e) => setProductsPerBundle(e.target.value)}
+                      className="w-20 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+                      title="Optional. Leave empty for AI to decide (3–20). Max 20."
                     />
                   </div>
                 </div>
@@ -280,33 +328,89 @@ export default function AdminBundlesPage() {
                     rows={2}
                     className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
                   />
-                  <input
-                    type="text"
-                    value={manualCategory}
-                    onChange={(e) => setManualCategory(e.target.value)}
-                    placeholder="Category (optional)"
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
-                  />
                   <div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select products (min 2)</p>
-                    {productsLoading ? (
-                      <div className="flex items-center gap-2 text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading products...</div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                    {categoriesLoading ? (
+                      <div className="text-sm text-gray-500">Loading categories...</div>
                     ) : (
-                      <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2 space-y-1">
-                        {products.slice(0, 100).map((p) => (
-                          <label key={p.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={manualProductIds.includes(p.id)}
-                              onChange={() => toggleProductForManual(p.id)}
-                            />
-                            <span className="text-gray-900 dark:text-white">{p.name}</span>
-                            <span className="text-gray-500">₵{p.price.toFixed(2)}</span>
-                          </label>
+                      <select
+                        value={manualCategory}
+                        onChange={(e) => setManualCategory(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+                      >
+                        <option value="">Select category (optional)</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
                         ))}
-                      </div>
+                      </select>
                     )}
                   </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Products ({manualProductIds.length} selected, min 2)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setProductModalOpen(true); if (products.length === 0) loadProductsForManual(); }}
+                      className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      <Package className="h-4 w-4" />
+                      {manualProductIds.length ? `Change selection (${manualProductIds.length})` : 'Select products'}
+                    </button>
+                  </div>
+                  {productModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select products</h3>
+                          <button type="button" onClick={() => setProductModalOpen(false)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <input
+                              type="search"
+                              placeholder="Search products..."
+                              value={productSearch}
+                              onChange={(e) => setProductSearch(e.target.value)}
+                              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
+                          {productsLoading ? (
+                            <div className="flex items-center gap-2 text-gray-500 py-4"><Loader2 className="h-5 w-5 animate-spin" /> Loading products...</div>
+                          ) : filteredProductsForModal.length === 0 ? (
+                            <p className="text-gray-500 py-4">No products match.</p>
+                          ) : (
+                            filteredProductsForModal.map((p) => (
+                              <label key={p.id} className="flex items-center gap-3 cursor-pointer py-2 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={manualProductIds.includes(p.id)}
+                                  onChange={() => toggleProductForManual(p.id)}
+                                />
+                                <span className="flex-1 text-gray-900 dark:text-white truncate">{p.name}</span>
+                                <span className="text-gray-500 shrink-0">₵{p.price.toFixed(2)}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">{manualProductIds.length} selected</span>
+                          <button
+                            type="button"
+                            onClick={() => setProductModalOpen(false)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={handleCreateManual}

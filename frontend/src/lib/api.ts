@@ -388,6 +388,10 @@ export const pricingApi = {
   getRanges: () => apiClient.get<any>('/api/pricing/ranges'),
   applyPricing: (ranges: Array<{ min_value: number; max_value: number; percentage: number }>) =>
     apiClient.post<any>('/api/pricing/apply', { ranges }),
+  applyDiscounts: (ranges: Array<{ min_value: number; max_value: number; percentage: number }>) =>
+    apiClient.post<any>('/api/pricing/apply-discounts', { ranges }),
+  applyBundleMarkup: (percentage: number) =>
+    apiClient.post<any>('/api/pricing/apply-bundle-markup', { percentage }),
 }
 
 // AI API

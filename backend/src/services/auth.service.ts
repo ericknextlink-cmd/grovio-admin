@@ -55,20 +55,28 @@ export class AuthService {
 
     try {
       const supabase = createClient()
+      const adminSupabase = createAdminClient()
 
-      // Check if user already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id, email, phone_number')
-        .or(`email.eq.${email},phone_number.eq.${phoneNumber}`)
-        .single()
+      // Check if user already exists (use admin so RLS doesn't hide existing rows)
+      const emailNorm = email.toLowerCase().trim()
+      const phoneNorm = phoneNumber.trim()
+      const [emailCheck, phoneCheck] = await Promise.all([
+        adminSupabase.from('users').select('id').eq('email', emailNorm).maybeSingle(),
+        adminSupabase.from('users').select('id').eq('phone_number', phoneNorm).maybeSingle()
+      ])
 
-      if (existingUser) {
-        const conflictField = existingUser.email === email ? 'email' : 'phone number'
+      if (emailCheck.data) {
         return {
           success: false,
-          message: `User with this ${conflictField} already exists`,
-          errors: [`${conflictField} already registered`]
+          message: 'User with this email already exists',
+          errors: ['email already registered']
+        }
+      }
+      if (phoneCheck.data) {
+        return {
+          success: false,
+          message: 'User with this phone number already exists',
+          errors: ['phone number already registered']
         }
       }
 
@@ -120,31 +128,39 @@ export class AuthService {
 
       console.log('Auth user created:', authData.user.id)
 
-      // Insert user data into our custom users table using admin client to bypass RLS
-      const adminSupabase = createAdminClient()
-      
-      const { error: dbError } = await adminSupabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: email.toLowerCase().trim(),
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          phone_number: phoneNumber.trim(),
-          country_code: countryCode,
-          password_hash: passwordHash,
-          role: 'customer',
-          preferences: {
-            language: 'en',
-            currency: 'GHS'
-          }
-        })
+      // Insert user data into our custom users table (retry once on FK sync delay)
+      const userRow = {
+        id: authData.user.id,
+        email: emailNorm,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone_number: phoneNorm,
+        country_code: countryCode,
+        password_hash: passwordHash,
+        role: 'customer' as const,
+        preferences: {
+          language: 'en',
+          currency: 'GHS'
+        }
+      }
+
+      let dbError: { code?: string; message?: string } | null = null
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const result = await adminSupabase.from('users').insert(userRow)
+        dbError = result.error as { code?: string; message?: string } | null
+        if (!dbError) break
+        // Retry once on FK violation (auth user not yet visible to DB)
+        if (dbError.code === '23503' && attempt === 1) {
+          await new Promise((r) => setTimeout(r, 400))
+          continue
+        }
+        break
+      }
 
       if (dbError) {
         console.error('Database insert error:', dbError)
-        // Try to clean up the auth user if database insert fails
         try {
-          await supabase.auth.admin.deleteUser(authData.user.id)
+          await adminSupabase.auth.admin.deleteUser(authData.user.id)
         } catch (cleanupError) {
           console.error('Failed to cleanup auth user:', cleanupError)
         }
@@ -1049,7 +1065,8 @@ export class AuthService {
         const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User'
         const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || ''
 
-        const phoneNumber = userMetadata.phone || ''
+        // Use unique placeholder if no phone to avoid duplicate key on empty string
+        const phoneNumber = (userMetadata.phone && String(userMetadata.phone).trim()) || `google-${googleUser.id}`
         const countryCode = '+233'
         const adminSupabase = createAdminClient()
 
@@ -1079,8 +1096,8 @@ export class AuthService {
           console.error('Database insert error:', insertError)
           return {
             success: false,
-            message: 'Failed to create user profile',
-            errors: [insertError.message]
+            message: 'Google sign-in failed',
+            errors: [sanitizeDatabaseError(insertError)]
           }
         }
 

@@ -50,18 +50,26 @@ class AuthService {
         }
         try {
             const supabase = (0, supabase_1.createClient)();
-            // Check if user already exists
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('id, email, phone_number')
-                .or(`email.eq.${email},phone_number.eq.${phoneNumber}`)
-                .single();
-            if (existingUser) {
-                const conflictField = existingUser.email === email ? 'email' : 'phone number';
+            const adminSupabase = (0, supabase_1.createAdminClient)();
+            // Check if user already exists (use admin so RLS doesn't hide existing rows)
+            const emailNorm = email.toLowerCase().trim();
+            const phoneNorm = phoneNumber.trim();
+            const [emailCheck, phoneCheck] = await Promise.all([
+                adminSupabase.from('users').select('id').eq('email', emailNorm).maybeSingle(),
+                adminSupabase.from('users').select('id').eq('phone_number', phoneNorm).maybeSingle()
+            ]);
+            if (emailCheck.data) {
                 return {
                     success: false,
-                    message: `User with this ${conflictField} already exists`,
-                    errors: [`${conflictField} already registered`]
+                    message: 'User with this email already exists',
+                    errors: ['email already registered']
+                };
+            }
+            if (phoneCheck.data) {
+                return {
+                    success: false,
+                    message: 'User with this phone number already exists',
+                    errors: ['phone number already registered']
                 };
             }
             // Extract country code from phone number
@@ -105,16 +113,13 @@ class AuthService {
                 };
             }
             console.log('Auth user created:', authData.user.id);
-            // Insert user data into our custom users table using admin client to bypass RLS
-            const adminSupabase = (0, supabase_1.createAdminClient)();
-            const { error: dbError } = await adminSupabase
-                .from('users')
-                .insert({
+            // Insert user data into our custom users table (retry once on FK sync delay)
+            const userRow = {
                 id: authData.user.id,
-                email: email.toLowerCase().trim(),
+                email: emailNorm,
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
-                phone_number: phoneNumber.trim(),
+                phone_number: phoneNorm,
                 country_code: countryCode,
                 password_hash: passwordHash,
                 role: 'customer',
@@ -122,12 +127,24 @@ class AuthService {
                     language: 'en',
                     currency: 'GHS'
                 }
-            });
+            };
+            let dbError = null;
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                const result = await adminSupabase.from('users').insert(userRow);
+                dbError = result.error;
+                if (!dbError)
+                    break;
+                // Retry once on FK violation (auth user not yet visible to DB)
+                if (dbError.code === '23503' && attempt === 1) {
+                    await new Promise((r) => setTimeout(r, 400));
+                    continue;
+                }
+                break;
+            }
             if (dbError) {
                 console.error('Database insert error:', dbError);
-                // Try to clean up the auth user if database insert fails
                 try {
-                    await supabase.auth.admin.deleteUser(authData.user.id);
+                    await adminSupabase.auth.admin.deleteUser(authData.user.id);
                 }
                 catch (cleanupError) {
                     console.error('Failed to cleanup auth user:', cleanupError);
@@ -914,24 +931,7 @@ class AuthService {
         }
     }
     /**
-     * Decode JWT payload without verifying (Supabase will verify the token).
-     * Returns the payload object or null if invalid.
-     */
-    decodeIdTokenPayload(idToken) {
-        try {
-            const parts = idToken.split('.');
-            if (parts.length !== 3)
-                return null;
-            const payload = parts[1];
-            const decoded = Buffer.from(payload, 'base64url').toString('utf8');
-            return JSON.parse(decoded);
-        }
-        catch {
-            return null;
-        }
-    }
-    /**
-     * Google OAuth authentication (ID token method - legacy)
+     * Google OAuth authentication (ID token method - works with GSI button and One Tap)
      */
     async googleAuth(googleData) {
         const { idToken } = googleData;
@@ -944,17 +944,12 @@ class AuthService {
         }
         try {
             const supabase = (0, supabase_1.createClient)();
-            // Supabase requires: if the id_token has a nonce claim, we must pass the same nonce.
-            // Google/GSI often includes nonce (e.g. "not_provided"). Decode and pass it when present.
-            const payload = this.decodeIdTokenPayload(idToken);
-            const nonceFromToken = payload?.nonce && typeof payload.nonce === 'string' ? payload.nonce : undefined;
-            const signInOptions = {
+            // Do not pass nonce: Google ID tokens (especially from One Tap) use a nonce format that
+            // Supabase hashes and compares, causing "Nonces mismatch". Omitting nonce avoids this.
+            const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
                 provider: 'google',
                 token: idToken,
-            };
-            if (nonceFromToken)
-                signInOptions.nonce = nonceFromToken;
-            const { data: authData, error: authError } = await supabase.auth.signInWithIdToken(signInOptions);
+            });
             if (authError) {
                 console.error('Google auth error:', authError);
                 return {
@@ -983,7 +978,8 @@ class AuthService {
                 // New user - create profile using admin client to bypass RLS
                 const firstName = userMetadata.given_name || userMetadata.full_name?.split(' ')[0] || 'User';
                 const lastName = userMetadata.family_name || userMetadata.full_name?.split(' ').slice(1).join(' ') || '';
-                const phoneNumber = userMetadata.phone || '';
+                // Use unique placeholder if no phone to avoid duplicate key on empty string
+                const phoneNumber = (userMetadata.phone && String(userMetadata.phone).trim()) || `google-${googleUser.id}`;
                 const countryCode = '+233';
                 const adminSupabase = (0, supabase_1.createAdminClient)();
                 const { data: newUser, error: insertError } = await adminSupabase
@@ -1011,8 +1007,8 @@ class AuthService {
                     console.error('Database insert error:', insertError);
                     return {
                         success: false,
-                        message: 'Failed to create user profile',
-                        errors: [insertError.message]
+                        message: 'Google sign-in failed',
+                        errors: [(0, error_sanitizer_1.sanitizeDatabaseError)(insertError)]
                     };
                 }
                 // Create initial user preferences

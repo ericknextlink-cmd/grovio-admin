@@ -34,10 +34,7 @@ export default function PricingPage() {
         setTotalProducts(data.total_products ?? 0)
         setPercentageInputs(
           rangeList.reduce(
-            (acc, r) => ({
-              ...acc,
-              [r.id]: r.percentage > 0 ? String(r.percentage) : ''
-            }),
+            (acc, r) => ({ ...acc, [r.id]: String(r.percentage ?? 0) }),
             {} as Record<string, string>
           )
         )

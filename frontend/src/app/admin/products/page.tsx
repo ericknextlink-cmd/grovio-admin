@@ -132,18 +132,11 @@ export default function ProductsPage() {
     fetchCategories()
   }, [fetchCategories])
 
-  // Debounce search
+  // When search query changes, reset to page 1 (pagination stays on current page otherwise)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (page === 1) {
-        fetchProducts()
-      } else {
-        setPage(1)
-      }
-    }, 500)
-
+    const timer = setTimeout(() => setPage(1), 500)
     return () => clearTimeout(timer)
-  }, [searchQuery, fetchProducts, page])
+  }, [searchQuery])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) {

@@ -5,6 +5,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 import { FileText, Loader2, Package, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Percent, DollarSign, ChevronsDown, ChevronsUp, Sparkles, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { aiApi, productsApi } from '@/lib/api'
+import { inferCategoryFromProductName } from '@/lib/category-inference'
 import { toast } from 'sonner'
 
 interface SupplierProduct {
@@ -406,6 +407,8 @@ export default function SupplierProductsPage() {
       : <ArrowDown className="h-4 w-4 text-blue-600" />
   }
 
+  const BULK_CHUNK_SIZE = 100
+
   const handleAddAllToDatabase = async () => {
     if (products.length === 0) {
       toast.error('Load products from a file first')
@@ -417,43 +420,40 @@ export default function SupplierProductsPage() {
         name: p.name,
         code: p.code,
         unitPrice: p.unitPrice,
-        category_name: selectedCategory || CATEGORIES[0]
+        category_name: selectedCategory || inferCategoryFromProductName(p.name) || CATEGORIES[0]
       }))
-      const res = await productsApi.bulkCreate(payload)
-      if (res.success && res.data) {
-        const data = res.data as { created: number; updated?: number; failed: number; errors?: string[] }
-        const parts = [
-          data.created ? `${data.created} added` : '',
-          data.updated ? `${data.updated} updated` : '',
-          data.failed ? `${data.failed} failed` : ''
-        ].filter(Boolean)
-        toast.success(parts.length ? parts.join(', ') + '.' : 'No new or changed products.')
-
-        const rawErrors = data.errors ?? []
-        const isDuplicateOrUniqueError = (msg: string) => {
-          const lower = msg.toLowerCase()
-          return (
-            lower.includes('duplicate') ||
-            lower.includes('unique constraint') ||
-            lower.includes('unique index') ||
-            lower.includes('already exists') ||
-            /violates unique constraint/i.test(msg)
-          )
-        }
-        const otherErrors = rawErrors.filter((e) => !isDuplicateOrUniqueError(e))
-        if (otherErrors.length > 0) {
-          otherErrors.slice(0, 2).forEach((err: string) => toast.error(err))
-        } else if (rawErrors.length > 0) {
-          toast.info('Some or all products were already in the database; no duplicate entries added.')
-        }
-      } else {
-        const msg = res.message || ''
-        const isDup = /duplicate|unique constraint|unique index|already exists|violates unique/i.test(msg)
-        if (isDup) {
-          toast.info('Products are already in the database; no duplicate entries added.')
+      let totalCreated = 0
+      let totalSkipped = 0
+      let totalFailed = 0
+      const allErrors: string[] = []
+      for (let i = 0; i < payload.length; i += BULK_CHUNK_SIZE) {
+        const chunk = payload.slice(i, i + BULK_CHUNK_SIZE)
+        const res = await productsApi.bulkCreate(chunk)
+        if (res.success && res.data) {
+          const data = res.data as { created: number; skipped?: number; updated?: number; failed: number; errors?: string[] }
+          totalCreated += data.created ?? 0
+          totalSkipped += data.skipped ?? data.updated ?? 0
+          totalFailed += data.failed ?? 0
+          if (Array.isArray(data.errors)) allErrors.push(...data.errors)
         } else {
-          toast.error(msg || 'Failed to add products to database')
+          totalFailed += chunk.length
+          if (res.message) allErrors.push(res.message)
         }
+      }
+      const parts = [
+        totalCreated ? `${totalCreated} added` : '',
+        totalSkipped ? `${totalSkipped} skipped (already in DB)` : '',
+        totalFailed ? `${totalFailed} failed` : ''
+      ].filter(Boolean)
+      toast.success(parts.length ? parts.join(', ') + '.' : 'No new products.')
+
+      const isDuplicateOrUniqueError = (msg: string) => {
+        const lower = msg.toLowerCase()
+        return lower.includes('duplicate') || lower.includes('unique constraint') || lower.includes('already exists') || /violates unique constraint/i.test(msg)
+      }
+      const otherErrors = allErrors.filter((e) => !isDuplicateOrUniqueError(e))
+      if (otherErrors.length > 0) {
+        otherErrors.slice(0, 3).forEach((err: string) => toast.error(err))
       }
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)

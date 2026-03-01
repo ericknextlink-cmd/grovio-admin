@@ -137,13 +137,14 @@ export class BundlesController {
    */
   generateBundles = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { count = 20, prompt, budgetMin, budgetMax } = req.body
+      const { count = 20, prompt, budgetMin, budgetMax, productsPerBundle } = req.body
 
       const result = await this.bundlesService.generateBundles({
         count: typeof count === 'number' ? count : parseInt(String(count), 10) || 20,
         prompt: typeof prompt === 'string' ? prompt.trim() || undefined : undefined,
         budgetMin: typeof budgetMin === 'number' ? budgetMin : budgetMin != null ? parseFloat(String(budgetMin)) : undefined,
         budgetMax: typeof budgetMax === 'number' ? budgetMax : budgetMax != null ? parseFloat(String(budgetMax)) : undefined,
+        productsPerBundle: typeof productsPerBundle === 'number' ? productsPerBundle : productsPerBundle != null ? parseInt(String(productsPerBundle), 10) : undefined,
       })
 
       if (result.success && result.bundles) {

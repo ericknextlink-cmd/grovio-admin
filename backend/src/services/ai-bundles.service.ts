@@ -32,6 +32,8 @@ export interface ProductBundle {
   rating: number
   reviewsCount: number
   imageUrl?: string
+  /** First image per product (up to 5) for shop card/detail carousel */
+  productImages?: string[]
   createdAt: string
   generatedBy?: BundleSource
 }
@@ -53,6 +55,33 @@ export class AIBundlesService {
     this.supabase = createAdminClient()
   }
 
+  /** Fetch first image per product for given IDs; return up to 5 URLs (for shop card/carousel). */
+  private async getProductImagesForBundle(productIds: string[]): Promise<string[]> {
+    if (!productIds.length) return []
+    const maxImages = 5
+    const ids = productIds.slice(0, maxImages)
+    const { data: rows } = await this.supabase
+      .from('products')
+      .select('id, images')
+      .in('id', ids)
+    const order = ids
+    const urlById = new Map<string, string>()
+    for (const row of rows ?? []) {
+      const imgs = row.images as string[] | null | undefined
+      const first = Array.isArray(imgs) && imgs.length > 0
+        ? imgs.find((u: string) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('/')))
+        : null
+      if (first) urlById.set(row.id, first)
+    }
+    const out: string[] = []
+    for (const id of order) {
+      const u = urlById.get(id)
+      if (u) out.push(u)
+      if (out.length >= maxImages) break
+    }
+    return out
+  }
+
   /**
    * Generate product bundles using AI.
    * Optional prompt + budget range: bundles will match the description and have total (sum of items) within [budgetMin, budgetMax] GHS.
@@ -62,13 +91,18 @@ export class AIBundlesService {
     prompt?: string
     budgetMin?: number
     budgetMax?: number
+    /** Products per bundle: if set, each bundle has this many; if not set, AI decides (3–20). Max 20. */
+    productsPerBundle?: number
   } = {}): Promise<{
     success: boolean
     bundles?: ProductBundle[]
     error?: string
   }> {
     const count = options.count ?? 20
-    const { prompt: customPrompt, budgetMin, budgetMax } = options
+    const { prompt: customPrompt, budgetMin, budgetMax, productsPerBundle } = options
+    const productsPerBundleCap = productsPerBundle != null
+      ? Math.min(20, Math.max(2, Math.floor(productsPerBundle)))
+      : null
 
     try {
       if (!process.env.OPENAI_API_KEY) {
@@ -105,9 +139,13 @@ export class AIBundlesService {
           ? `**CRITICAL - Budget:** Each bundle's total (sum of selected product prices) MUST be between ${budgetMin} and ${budgetMax} GHS. Choose productIds so that the sum of their prices falls in this range.`
           : 'Each bundle should have a sensible total price (sum of product prices).'
 
+      const productCountRule = productsPerBundleCap != null
+      ? `Each bundle must have exactly ${productsPerBundleCap} products.`
+      : 'Each bundle must have between 3 and 20 products (you decide how many).'
+
       const taskInstruction = customPrompt?.trim()
-        ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. Each bundle = 3-6 products from the list below.`
-        : `Create ${count} diverse product bundles that combine 3-6 products each. Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`
+        ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. ${productCountRule}`
+        : `Create ${count} diverse product bundles. ${productCountRule} Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`
 
       const prompt = `You are a grocery shopping expert creating curated product bundles for Ghanaian shoppers.
 
@@ -117,7 +155,7 @@ ${JSON.stringify(productCatalog, null, 2)}
 **Task:** ${taskInstruction}
 
 **Requirements:**
-1. Each bundle must have 3-6 products. Use ONLY product "id" values from the Available Products list above.
+1. ${productCountRule} Use ONLY product "id" values from the Available Products list above.
 2. Products should complement each other (make sense together).
 3. ${budgetConstraint}
 4. Include products from different categories for balance.
@@ -584,6 +622,10 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
         generatedBy: (b.generated_by === 'admin' ? 'admin' : 'ai') as BundleSource,
       }))
 
+      for (const bundle of formattedBundles) {
+        bundle.productImages = await this.getProductImagesForBundle(bundle.productIds)
+      }
+
       const totalCount = total ?? 0
       return {
         success: true,
@@ -723,6 +765,8 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
 
       const row = bundle as { generated_by?: string; [key: string]: unknown }
       const generatedBy: BundleSource = row.generated_by === 'admin' ? 'admin' : 'ai'
+      const productIds = (row.product_ids as string[]) ?? []
+      const productImages = await this.getProductImagesForBundle(productIds)
       return {
         success: true,
         data: {
@@ -733,7 +777,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
           category: row.category as string,
           targetAudience: (row.target_audience as string) ?? '',
           badge: (row.badge as string) ?? 'Manual',
-          productIds: (row.product_ids as string[]) ?? [],
+          productIds,
           products: (row.products_snapshot as ProductBundle['products']) ?? [],
           originalPrice: parseFloat(String(row.original_price)),
           currentPrice: parseFloat(String(row.current_price)),
@@ -742,6 +786,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
           rating: parseFloat(String(row.rating)),
           reviewsCount: (row.reviews_count as number) ?? 0,
           imageUrl: row.image_url as string | undefined,
+          productImages,
           createdAt: row.created_at as string,
           generatedBy,
         },

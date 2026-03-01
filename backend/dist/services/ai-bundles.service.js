@@ -15,13 +15,46 @@ class AIBundlesService {
         });
         this.supabase = (0, supabase_1.createAdminClient)();
     }
+    /** Fetch first image per product for given IDs; return up to 5 URLs (for shop card/carousel). */
+    async getProductImagesForBundle(productIds) {
+        if (!productIds.length)
+            return [];
+        const maxImages = 5;
+        const ids = productIds.slice(0, maxImages);
+        const { data: rows } = await this.supabase
+            .from('products')
+            .select('id, images')
+            .in('id', ids);
+        const order = ids;
+        const urlById = new Map();
+        for (const row of rows ?? []) {
+            const imgs = row.images;
+            const first = Array.isArray(imgs) && imgs.length > 0
+                ? imgs.find((u) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('/')))
+                : null;
+            if (first)
+                urlById.set(row.id, first);
+        }
+        const out = [];
+        for (const id of order) {
+            const u = urlById.get(id);
+            if (u)
+                out.push(u);
+            if (out.length >= maxImages)
+                break;
+        }
+        return out;
+    }
     /**
      * Generate product bundles using AI.
      * Optional prompt + budget range: bundles will match the description and have total (sum of items) within [budgetMin, budgetMax] GHS.
      */
     async generateBundles(options = {}) {
         const count = options.count ?? 20;
-        const { prompt: customPrompt, budgetMin, budgetMax } = options;
+        const { prompt: customPrompt, budgetMin, budgetMax, productsPerBundle } = options;
+        const productsPerBundleCap = productsPerBundle != null
+            ? Math.min(20, Math.max(2, Math.floor(productsPerBundle)))
+            : null;
         try {
             if (!process.env.OPENAI_API_KEY) {
                 return await this.generateDeterministicBundles(count);
@@ -51,9 +84,12 @@ class AIBundlesService {
             const budgetConstraint = budgetMin != null && budgetMax != null
                 ? `**CRITICAL - Budget:** Each bundle's total (sum of selected product prices) MUST be between ${budgetMin} and ${budgetMax} GHS. Choose productIds so that the sum of their prices falls in this range.`
                 : 'Each bundle should have a sensible total price (sum of product prices).';
+            const productCountRule = productsPerBundleCap != null
+                ? `Each bundle must have exactly ${productsPerBundleCap} products.`
+                : 'Each bundle must have between 3 and 20 products (you decide how many).';
             const taskInstruction = customPrompt?.trim()
-                ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. Each bundle = 3-6 products from the list below.`
-                : `Create ${count} diverse product bundles that combine 3-6 products each. Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`;
+                ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. ${productCountRule}`
+                : `Create ${count} diverse product bundles. ${productCountRule} Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`;
             const prompt = `You are a grocery shopping expert creating curated product bundles for Ghanaian shoppers.
 
 **Available Products (use ONLY these id and price values):**
@@ -62,7 +98,7 @@ ${JSON.stringify(productCatalog, null, 2)}
 **Task:** ${taskInstruction}
 
 **Requirements:**
-1. Each bundle must have 3-6 products. Use ONLY product "id" values from the Available Products list above.
+1. ${productCountRule} Use ONLY product "id" values from the Available Products list above.
 2. Products should complement each other (make sense together).
 3. ${budgetConstraint}
 4. Include products from different categories for balance.
@@ -464,6 +500,9 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
                 createdAt: String(b.created_at ?? ''),
                 generatedBy: (b.generated_by === 'admin' ? 'admin' : 'ai'),
             }));
+            for (const bundle of formattedBundles) {
+                bundle.productImages = await this.getProductImagesForBundle(bundle.productIds);
+            }
             const totalCount = total ?? 0;
             return {
                 success: true,
@@ -585,6 +624,8 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
             }
             const row = bundle;
             const generatedBy = row.generated_by === 'admin' ? 'admin' : 'ai';
+            const productIds = row.product_ids ?? [];
+            const productImages = await this.getProductImagesForBundle(productIds);
             return {
                 success: true,
                 data: {
@@ -595,7 +636,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
                     category: row.category,
                     targetAudience: row.target_audience ?? '',
                     badge: row.badge ?? 'Manual',
-                    productIds: row.product_ids ?? [],
+                    productIds,
                     products: row.products_snapshot ?? [],
                     originalPrice: parseFloat(String(row.original_price)),
                     currentPrice: parseFloat(String(row.current_price)),
@@ -604,6 +645,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
                     rating: parseFloat(String(row.rating)),
                     reviewsCount: row.reviews_count ?? 0,
                     imageUrl: row.image_url,
+                    productImages,
                     createdAt: row.created_at,
                     generatedBy,
                 },

@@ -85,6 +85,10 @@ const generateBundlesValidation = [
         .optional()
         .isFloat({ min: 0 })
         .withMessage('Budget max must be a non-negative number'),
+    (0, express_validator_1.body)('productsPerBundle')
+        .optional()
+        .isInt({ min: 2, max: 20 })
+        .withMessage('Products per bundle must be between 2 and 20'),
     validation_middleware_1.handleValidationErrors,
 ];
 // Public routes (optional auth for personalization)

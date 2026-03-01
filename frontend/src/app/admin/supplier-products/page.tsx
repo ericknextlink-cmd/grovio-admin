@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { FileText, Loader2, Package, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Percent, DollarSign, ChevronsDown, ChevronsUp, Sparkles, X } from 'lucide-react'
+import { FileText, Loader2, Package, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Percent, DollarSign, ChevronsDown, ChevronsUp, Sparkles, X, CopyMinus } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { aiApi, productsApi } from '@/lib/api'
 import { inferCategoryFromProductName } from '@/lib/category-inference'
@@ -70,6 +70,7 @@ export default function SupplierProductsPage() {
   const [aiLoading, setAiLoading] = useState<boolean>(false)
   const [aiResponse, setAiResponse] = useState<string>('')
   const [addToDbLoading, setAddToDbLoading] = useState<boolean>(false)
+  const [hideDuplicates, setHideDuplicates] = useState<boolean>(false)
 
   const parseCSV = async (filePath: string): Promise<SupplierProduct[]> => {
     try {
@@ -295,6 +296,20 @@ export default function SupplierProductsPage() {
     })
   }, [filteredAndSortedProducts, bulkMarkupPercentage, individualMarkupInputs, usePriceRange, priceRangeMarkupPercentage, priceRangeMin, priceRangeMax])
 
+  /** Duplicate = same name + same unitPrice. Keeps first occurrence. */
+  const displayProducts = useMemo(() => {
+    if (!hideDuplicates) return productsWithMarkup
+    const seen = new Set<string>()
+    return productsWithMarkup.filter((p) => {
+      const key = `${(p.name || '').trim()}|${Number(p.unitPrice)}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [productsWithMarkup, hideDuplicates])
+
+  const duplicateCount = productsWithMarkup.length - displayProducts.length
+
   const toggleRowExpansion = (productKey: string) => {
     const newExpanded = new Set(expandedRows)
     if (newExpanded.has(productKey)) {
@@ -306,7 +321,7 @@ export default function SupplierProductsPage() {
   }
 
   const expandAll = () => {
-    const allKeys = new Set(productsWithMarkup.map(product => `${product.code}-${product.rowNumber}`))
+    const allKeys = new Set(displayProducts.map(product => `${product.code}-${product.rowNumber}`))
     setExpandedRows(allKeys)
   }
 
@@ -591,9 +606,31 @@ export default function SupplierProductsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                       <Package className="h-5 w-5" />
-                      Products ({productsWithMarkup.length} of {products.length})
+                      Products
+                      {hideDuplicates ? (
+                        <span className="text-base font-normal text-gray-600 dark:text-gray-400">
+                          — {displayProducts.length} unique, {duplicateCount} duplicates hidden ({productsWithMarkup.length} total)
+                        </span>
+                      ) : (
+                        <span className="text-base font-normal text-gray-600 dark:text-gray-400">
+                          ({productsWithMarkup.length} of {products.length} from file)
+                        </span>
+                      )}
                     </h2>
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setHideDuplicates((prev) => !prev)}
+                        className={`px-3 py-2 text-sm border rounded-lg transition-colors flex items-center gap-2 ${
+                          hideDuplicates
+                            ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200'
+                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                        }`}
+                        title="Duplicate = same name + same price"
+                      >
+                        <CopyMinus className="h-4 w-4" />
+                        {hideDuplicates ? 'Show all (include duplicates)' : 'Hide duplicates (name + price)'}
+                      </button>
                       <button
                         onClick={expandAll}
                         className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
@@ -798,8 +835,8 @@ export default function SupplierProductsPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {productsWithMarkup.length > 0 ? (
-                        productsWithMarkup.map((product, index) => {
+                      {displayProducts.length > 0 ? (
+                        displayProducts.map((product, index) => {
                           const productKey = `${product.code}-${product.rowNumber}`
                           const isExpanded = expandedRows.has(productKey)
                           const currentMarkupInput = individualMarkupInputs[productKey] ?? (product.markupPercentage?.toString() ?? '')
@@ -909,9 +946,11 @@ export default function SupplierProductsPage() {
                           <td colSpan={6} className="px-6 py-12 text-center">
                             <Package className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
                             <p className="text-gray-500 dark:text-gray-400">
-                              {searchQuery || selectedCategory
-                                ? 'No products match your search or filter criteria'
-                                : 'No products found'}
+                              {hideDuplicates && productsWithMarkup.length > 0
+                                ? "All rows are duplicates (name + price). Click 'Show all' to see them."
+                                : searchQuery || selectedCategory
+                                  ? 'No products match your search or filter criteria'
+                                  : 'No products found'}
                             </p>
                           </td>
                         </tr>

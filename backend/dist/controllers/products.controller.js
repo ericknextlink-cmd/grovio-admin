@@ -21,10 +21,14 @@ class ProductsController {
                     sortOrder: sortOrder
                 };
                 const result = await this.productsService.getAllProducts(filters);
+                const data = (result.data ?? []).map((p) => {
+                    const { original_price: _, ...rest } = p;
+                    return rest;
+                });
                 res.json({
                     success: true,
                     message: 'Products retrieved successfully',
-                    data: result.data,
+                    data,
                     pagination: result.pagination
                 });
             }
@@ -51,10 +55,11 @@ class ProductsController {
                     });
                     return;
                 }
+                const { original_price: _, ...productWithoutOriginalPrice } = product;
                 res.json({
                     success: true,
                     message: 'Product retrieved successfully',
-                    data: product
+                    data: productWithoutOriginalPrice
                 });
             }
             catch (error) {
@@ -182,7 +187,8 @@ class ProductsController {
             }
         };
         /**
-         * Bulk create products from supplier import (Admin only). Uses original_price and price from unitPrice.
+         * Bulk create products from supplier import (Admin only). Match by name + original_price; only insert if not exists.
+         * Recommended: send up to 100 products per request; frontend chunks and calls multiple times.
          */
         this.createBulkProducts = async (req, res) => {
             try {
@@ -197,7 +203,7 @@ class ProductsController {
                 const result = await this.productsService.createBulkProducts(items);
                 const parts = [
                     result.created ? `${result.created} created` : '',
-                    result.updated ? `${result.updated} updated` : '',
+                    result.skipped ? `${result.skipped} skipped (already in DB)` : '',
                     result.failed ? `${result.failed} failed` : ''
                 ].filter(Boolean);
                 res.status(201).json({

@@ -1,4 +1,5 @@
 import { createAdminClient } from '../config/supabase'
+import { CategoriesService } from './categories.service'
 
 interface ServiceResult<T> {
   success: boolean
@@ -387,37 +388,52 @@ export class ProductsService {
   }
 
   /**
-   * Bulk create/update products from supplier data (e.g. CSV/Excel).
-   * - Products that already exist (same slug from name) are updated (price, original_price, brand, category).
-   * - New products are inserted. No duplicates are created.
+   * Bulk create products from supplier data (e.g. CSV/Excel). Intended to be called with batches of 100.
+   * - Match by name + original_price (supplier price): if product exists with same name and same original_price, skip (no duplicate).
+   * - If not found, insert. We never "update" from Excel; only insert new. Same name but different supplier price = different product (inserted).
    */
-  private static BULK_LOOKUP_BATCH = 400 // Supabase .in() can hit URL/query limits with huge lists
+  private static BULK_LOOKUP_BATCH = 200
 
   async createBulkProducts(
     items: Array<{ name: string; code?: string; unitPrice: number; category_name?: string }>
-  ): Promise<{ created: number; updated: number; failed: number; errors: string[] }> {
+  ): Promise<{ created: number; skipped: number; failed: number; errors: string[] }> {
     let created = 0
-    let updated = 0
+    let skipped = 0
     const errors: string[] = []
+
+    const categoryNames = new Set<string>()
+    for (const item of items) {
+      const name = item.category_name?.trim() || 'General'
+      categoryNames.add(name)
+    }
+    const categoriesService = new CategoriesService()
+    for (const catName of categoryNames) {
+      await categoriesService.ensureCategoryExists(catName)
+    }
 
     const slugs = items.map((item) => this.generateBulkSlug(item.name, item.unitPrice))
     const uniqueSlugs = [...new Set(slugs)]
 
-    const slugToId = new Map<string, string>()
+    const existingSlugs = new Set<string>()
     for (let i = 0; i < uniqueSlugs.length; i += ProductsService.BULK_LOOKUP_BATCH) {
       const batch = uniqueSlugs.slice(i, i + ProductsService.BULK_LOOKUP_BATCH)
       const { data: existingRows } = await this.supabase
         .from('products')
-        .select('id, slug')
+        .select('slug')
         .in('slug', batch)
       for (const row of existingRows ?? []) {
         const s = (row as { slug?: string }).slug
-        if (s) slugToId.set(s, (row as { id: string }).id)
+        if (s) existingSlugs.add(s)
       }
     }
 
     for (const item of items) {
       const slug = this.generateBulkSlug(item.name, item.unitPrice)
+      if (existingSlugs.has(slug)) {
+        skipped++
+        continue
+      }
+
       const category = item.category_name ?? 'General'
       const payload = {
         name: item.name,
@@ -435,38 +451,17 @@ export class ProductsService {
         slug
       }
 
-      const existingId = slugToId.get(slug)
-      if (existingId) {
-        const { error } = await this.supabase
-          .from('products')
-          .update({
-            name: item.name,
-            brand: item.code ?? '',
-            category_name: category,
-            category,
-            original_price: item.unitPrice,
-            price: item.unitPrice
-          })
-          .eq('id', existingId)
-        if (error) {
-          errors.push(`${item.name}: ${error.message}`)
-          continue
-        }
-        updated++
-        continue
-      }
-
       const { data: inserted, error } = await this.supabase.from('products').insert(payload).select('id').single()
       if (error) {
         errors.push(`${item.name}: ${error.message}`)
         continue
       }
       created++
-      if (inserted?.id) slugToId.set(slug, inserted.id)
+      if (inserted?.id) existingSlugs.add(slug)
     }
 
-    const failed = items.length - created - updated
-    return { created, updated, failed, errors }
+    const failed = items.length - created - skipped
+    return { created, skipped, failed, errors }
   }
 
   private static PRICING_PAGE_SIZE = 1000 // Supabase default max; we paginate to get all

@@ -30,6 +30,48 @@ class CategoriesService {
         }
     }
     /**
+     * Get category by name (case-insensitive match)
+     */
+    async getCategoryByName(name) {
+        if (!name?.trim())
+            return null;
+        try {
+            const { data: category, error } = await this.supabase
+                .from('categories')
+                .select('*')
+                .ilike('name', name.trim())
+                .limit(1)
+                .maybeSingle();
+            if (error)
+                return null;
+            return category;
+        }
+        catch {
+            return null;
+        }
+    }
+    /**
+     * Ensure a category exists by name: return existing or create. No duplicates.
+     */
+    async ensureCategoryExists(name) {
+        const trimmed = name?.trim() || 'General';
+        const existing = await this.getCategoryByName(trimmed);
+        if (existing)
+            return existing;
+        const result = await this.createCategory({
+            name: trimmed,
+            slug: this.generateSlug(trimmed),
+            images: [],
+            subcategories: []
+        });
+        if (result.data)
+            return result.data;
+        if (result.message?.toLowerCase().includes('already exists')) {
+            return this.getCategoryByName(trimmed);
+        }
+        return null;
+    }
+    /**
      * Get category by ID
      */
     async getCategoryById(id) {

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { ProductsService } from '../services/products.service'
+import { ProductsService, Product } from '../services/products.service'
 import { ApiResponse } from '../types/api.types'
 
 export class ProductsController {
@@ -37,13 +37,16 @@ export class ProductsController {
       }
 
       const result = await this.productsService.getAllProducts(filters)
-
+      const data = (result.data ?? []).map((p: Product) => {
+        const { original_price: _, ...rest } = p
+        return rest
+      })
       res.json({
         success: true,
         message: 'Products retrieved successfully',
-        data: result.data,
+        data,
         pagination: result.pagination
-      } as ApiResponse<typeof result.data>)
+      } as ApiResponse<typeof data>)
     } catch (error) {
       console.error('Get all products error:', error)
       res.status(500).json({
@@ -70,12 +73,12 @@ export class ProductsController {
         } as ApiResponse<null>)
         return
       }
-
+      const { original_price: _, ...productWithoutOriginalPrice } = product
       res.json({
         success: true,
         message: 'Product retrieved successfully',
-        data: product
-      } as ApiResponse<typeof product>)
+        data: productWithoutOriginalPrice
+      } as ApiResponse<typeof productWithoutOriginalPrice>)
     } catch (error) {
       console.error('Get product by ID error:', error)
       res.status(500).json({
@@ -214,7 +217,8 @@ export class ProductsController {
   }
 
   /**
-   * Bulk create products from supplier import (Admin only). Uses original_price and price from unitPrice.
+   * Bulk create products from supplier import (Admin only). Match by name + original_price; only insert if not exists.
+   * Recommended: send up to 100 products per request; frontend chunks and calls multiple times.
    */
   createBulkProducts = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -229,7 +233,7 @@ export class ProductsController {
       const result = await this.productsService.createBulkProducts(items)
       const parts = [
         result.created ? `${result.created} created` : '',
-        result.updated ? `${result.updated} updated` : '',
+        result.skipped ? `${result.skipped} skipped (already in DB)` : '',
         result.failed ? `${result.failed} failed` : ''
       ].filter(Boolean)
       res.status(201).json({

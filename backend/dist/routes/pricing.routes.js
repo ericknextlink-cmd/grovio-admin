@@ -24,6 +24,14 @@ const applyPricingValidation = [
         .withMessage('percentage must be a non-negative number'),
     validation_middleware_1.handleValidationErrors
 ];
+const applyBundleMarkupValidation = [
+    (0, express_validator_1.body)('percentage')
+        .isFloat({ min: 0 })
+        .withMessage('percentage must be a non-negative number'),
+    validation_middleware_1.handleValidationErrors
+];
 router.use(adminAuth_middleware_1.authenticateAdmin);
 router.get('/ranges', pricingController.getRanges);
 router.post('/apply', applyPricingValidation, pricingController.applyPricing);
+router.post('/apply-discounts', applyPricingValidation, pricingController.applyDiscounts);
+router.post('/apply-bundle-markup', applyBundleMarkupValidation, pricingController.applyBundleMarkup);

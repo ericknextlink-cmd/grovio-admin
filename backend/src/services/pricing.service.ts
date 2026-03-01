@@ -110,4 +110,73 @@ export class PricingService {
     }
     return { updated }
   }
+
+  /**
+   * Apply discount by range: for products whose original_price falls in each range,
+   * set selling price = current price * (1 - discountPercentage/100).
+   * Same ranges as markup; discount percentage is 0–100 (e.g. 10 = 10% off).
+   */
+  async applyDiscounts(ranges: ApplyRangeInput[]): Promise<{ updated: number }> {
+    const products = await this.productsService.getAllForPricing()
+    let updated = 0
+    for (const product of products) {
+      const cost = getCost(product)
+      if (cost === null) continue
+      const range = ranges.find((r) => cost >= r.min_value && cost < r.max_value)
+      if (!range || range.percentage === 0) continue
+      const currentPrice = Number(product.price) || 0
+      if (currentPrice <= 0) continue
+      const newPrice = Math.round(currentPrice * (1 - range.percentage / 100) * 100) / 100
+      await this.productsService.updateProductPrice(product.id, newPrice)
+      updated++
+    }
+    return { updated }
+  }
+
+  /**
+   * Apply a single markup % to all bundles. For each bundle: sum products' original_price (supplier),
+   * then bundle current_price = sum * (1 + percentage/100). No per-product markup; one markup on bundle total.
+   */
+  async applyBundleMarkup(percentage: number): Promise<{ updated: number }> {
+    const pct = Number(percentage)
+    if (Number.isNaN(pct) || pct < 0) return { updated: 0 }
+    const { data: bundles } = await this.supabase
+      .from('ai_product_bundles')
+      .select('id, bundle_id, product_ids')
+      .eq('is_active', true)
+    if (!bundles?.length) return { updated: 0 }
+    const productIds = new Set<string>()
+    for (const b of bundles) {
+      const ids = (b.product_ids as string[]) ?? []
+      ids.forEach((id: string) => productIds.add(id))
+    }
+    const { data: productRows } = await this.supabase
+      .from('products')
+      .select('id, original_price, price')
+      .in('id', Array.from(productIds))
+    const priceByProductId = new Map<string, number>()
+    for (const row of productRows ?? []) {
+      const cost = row.original_price ?? row.price
+      const n = Number(cost)
+      priceByProductId.set(row.id, Number.isNaN(n) || n < 0 ? 0 : n)
+    }
+    let updated = 0
+    for (const bundle of bundles) {
+      const ids = (bundle.product_ids as string[]) ?? []
+      const totalOriginal = ids.reduce((sum, id) => sum + (priceByProductId.get(id) ?? 0), 0)
+      const newCurrentPrice = Math.round(totalOriginal * (1 + pct / 100) * 100) / 100
+      const { error } = await this.supabase
+        .from('ai_product_bundles')
+        .update({
+          original_price: totalOriginal,
+          current_price: newCurrentPrice,
+          savings: 0,
+          discount_percentage: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bundle.id)
+      if (!error) updated++
+    }
+    return { updated }
+  }
 }

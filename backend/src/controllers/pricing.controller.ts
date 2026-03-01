@@ -46,4 +46,55 @@ export class PricingController {
       } as ApiResponse<null>)
     }
   }
+
+  applyDiscounts = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { ranges } = req.body as { ranges: Array<{ min_value: number; max_value: number; percentage: number }> }
+      if (!Array.isArray(ranges) || ranges.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Request body must include ranges array with min_value, max_value, percentage'
+        } as ApiResponse<null>)
+        return
+      }
+      const result = await this.pricingService.applyDiscounts(ranges)
+      res.json({
+        success: true,
+        message: `Discounts applied. ${result.updated} product(s) updated.`,
+        data: result
+      } as ApiResponse<typeof result>)
+    } catch (error) {
+      console.error('Apply discounts error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Failed to apply discounts'
+      } as ApiResponse<null>)
+    }
+  }
+
+  applyBundleMarkup = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { percentage } = req.body as { percentage: number }
+      const pct = Number(percentage)
+      if (Number.isNaN(pct) || pct < 0) {
+        res.status(400).json({
+          success: false,
+          message: 'percentage must be a non-negative number'
+        } as ApiResponse<null>)
+        return
+      }
+      const result = await this.pricingService.applyBundleMarkup(pct)
+      res.json({
+        success: true,
+        message: `Bundle markup applied. ${result.updated} bundle(s) updated.`,
+        data: result
+      } as ApiResponse<typeof result>)
+    } catch (error) {
+      console.error('Apply bundle markup error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Failed to apply bundle markup'
+      } as ApiResponse<null>)
+    }
+  }
 }

@@ -3,6 +3,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsService = void 0;
 const supabase_1 = require("../config/supabase");
 const categories_service_1 = require("./categories.service");
+/** Sanitize search query: trim, limit length, remove LIKE wildcards to avoid abuse. */
+function sanitizeSearch(search) {
+    if (search == null || typeof search !== 'string')
+        return undefined;
+    const t = search.trim().slice(0, 200);
+    if (!t)
+        return undefined;
+    // Remove % and _ so user cannot inject LIKE wildcards; keeps query safe
+    return t.replace(/%|_/g, ' ');
+}
 class ProductsService {
     constructor() {
         this.supabase = (0, supabase_1.createAdminClient)();
@@ -22,8 +32,9 @@ class ProductsService {
             if (filters.subcategory) {
                 query = query.eq('subcategory', filters.subcategory);
             }
-            if (filters.search) {
-                query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+            const searchTerm = sanitizeSearch(filters.search);
+            if (searchTerm) {
+                query = query.or(`name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
             }
             if (filters.inStock !== undefined) {
                 query = query.eq('in_stock', filters.inStock);

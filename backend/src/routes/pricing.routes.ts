@@ -23,8 +23,17 @@ const applyPricingValidation = [
   handleValidationErrors
 ]
 
+const applyBundleMarkupValidation = [
+  body('percentage')
+    .isFloat({ min: 0 })
+    .withMessage('percentage must be a non-negative number'),
+  handleValidationErrors
+]
+
 router.use(authenticateAdmin)
 router.get('/ranges', pricingController.getRanges)
 router.post('/apply', applyPricingValidation, pricingController.applyPricing)
+router.post('/apply-discounts', applyPricingValidation, pricingController.applyDiscounts)
+router.post('/apply-bundle-markup', applyBundleMarkupValidation, pricingController.applyBundleMarkup)
 
 export { router as pricingRoutes }

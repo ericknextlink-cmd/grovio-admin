@@ -57,6 +57,15 @@ export interface ProductStats {
   lowStockProducts: number
 }
 
+/** Sanitize search query: trim, limit length, remove LIKE wildcards to avoid abuse. */
+function sanitizeSearch(search: string | undefined): string | undefined {
+  if (search == null || typeof search !== 'string') return undefined
+  const t = search.trim().slice(0, 200)
+  if (!t) return undefined
+  // Remove % and _ so user cannot inject LIKE wildcards; keeps query safe
+  return t.replace(/%|_/g, ' ')
+}
+
 export class ProductsService {
   private supabase = createAdminClient()
 
@@ -86,8 +95,9 @@ export class ProductsService {
         query = query.eq('subcategory', filters.subcategory)
       }
 
-      if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
+      const searchTerm = sanitizeSearch(filters.search)
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
       }
 
       if (filters.inStock !== undefined) {

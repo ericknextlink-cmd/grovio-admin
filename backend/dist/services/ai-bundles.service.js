@@ -26,12 +26,13 @@ class AIBundlesService {
             if (!process.env.OPENAI_API_KEY) {
                 return await this.generateDeterministicBundles(count);
             }
+            // Fetch as many in-stock products as practical so AI can create bundles from full catalog (~3000+)
             const { data: products, error: productsError } = await this.supabase
                 .from('products')
                 .select('*')
                 .eq('in_stock', true)
                 .order('rating', { ascending: false })
-                .limit(150);
+                .limit(3500);
             if (productsError || !products || products.length === 0) {
                 return {
                     success: false,

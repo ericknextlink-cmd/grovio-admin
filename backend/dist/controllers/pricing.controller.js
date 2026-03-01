@@ -47,6 +47,57 @@ class PricingController {
                 });
             }
         };
+        this.applyDiscounts = async (req, res) => {
+            try {
+                const { ranges } = req.body;
+                if (!Array.isArray(ranges) || ranges.length === 0) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Request body must include ranges array with min_value, max_value, percentage'
+                    });
+                    return;
+                }
+                const result = await this.pricingService.applyDiscounts(ranges);
+                res.json({
+                    success: true,
+                    message: `Discounts applied. ${result.updated} product(s) updated.`,
+                    data: result
+                });
+            }
+            catch (error) {
+                console.error('Apply discounts error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to apply discounts'
+                });
+            }
+        };
+        this.applyBundleMarkup = async (req, res) => {
+            try {
+                const { percentage } = req.body;
+                const pct = Number(percentage);
+                if (Number.isNaN(pct) || pct < 0) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'percentage must be a non-negative number'
+                    });
+                    return;
+                }
+                const result = await this.pricingService.applyBundleMarkup(pct);
+                res.json({
+                    success: true,
+                    message: `Bundle markup applied. ${result.updated} bundle(s) updated.`,
+                    data: result
+                });
+            }
+            catch (error) {
+                console.error('Apply bundle markup error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to apply bundle markup'
+                });
+            }
+        };
     }
 }
 exports.PricingController = PricingController;

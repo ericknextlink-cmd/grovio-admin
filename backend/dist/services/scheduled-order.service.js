@@ -80,50 +80,95 @@ class ScheduledOrderService {
             return { success: false, error: e instanceof Error ? e.message : 'Failed to update' };
         }
     }
-    /** Find active scheduled orders due tomorrow and send reminder email; set reminder_sent_at. */
+    /** Acquire cron lock; returns true if we got it. Only one instance can run at a time. If table is missing, proceeds without lock. */
+    async acquireLock() {
+        try {
+            const now = new Date().toISOString();
+            const lockedUntil = new Date(Date.now() + ScheduledOrderService.LOCK_TTL_MINUTES * 60 * 1000).toISOString();
+            const { data: existing } = await this.supabase
+                .from('cron_locks')
+                .select('locked_until')
+                .eq('job_name', ScheduledOrderService.REMINDER_LOCK_JOB)
+                .maybeSingle();
+            const canAcquire = !existing || !existing.locked_until || existing.locked_until <= now;
+            if (!canAcquire)
+                return false;
+            const { error } = await this.supabase
+                .from('cron_locks')
+                .upsert({ job_name: ScheduledOrderService.REMINDER_LOCK_JOB, locked_until: lockedUntil }, { onConflict: 'job_name' });
+            return !error;
+        }
+        catch {
+            return true;
+        }
+    }
+    /** Release cron lock so the next run can acquire. */
+    async releaseLock() {
+        try {
+            await this.supabase
+                .from('cron_locks')
+                .update({ locked_until: new Date(0).toISOString() })
+                .eq('job_name', ScheduledOrderService.REMINDER_LOCK_JOB);
+        }
+        catch {
+            // ignore
+        }
+    }
+    /** Find active scheduled orders due tomorrow and send reminder email; set reminder_sent_at. Uses lock to avoid concurrent runs; idempotent update. */
     async sendDueReminders() {
         const errors = [];
         let sent = 0;
         try {
-            const tomorrowStart = new Date();
-            tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-            tomorrowStart.setHours(0, 0, 0, 0);
-            const tomorrowEnd = new Date(tomorrowStart);
-            tomorrowEnd.setHours(23, 59, 59, 999);
-            const { data: rows, error } = await this.supabase
-                .from('scheduled_orders')
-                .select('*')
-                .eq('status', 'active')
-                .is('reminder_sent_at', null)
-                .gte('scheduled_at', tomorrowStart.toISOString())
-                .lte('scheduled_at', tomorrowEnd.toISOString());
-            if (error) {
-                return { sent: 0, errors: [error.message] };
+            const acquired = await this.acquireLock();
+            if (!acquired) {
+                return { sent: 0, errors: [], skipped: 'Lock held by another instance' };
             }
-            const toSend = (rows ?? []);
-            const { data: users } = await this.supabase.from('users').select('id, email, first_name').in('id', toSend.map((r) => r.user_id));
-            for (const row of toSend) {
-                const user = (users ?? []).find((u) => u.id === row.user_id);
-                const email = user?.email;
-                if (!email) {
-                    errors.push(`No email for user ${row.user_id}`);
-                    continue;
+            try {
+                const tomorrowStart = new Date();
+                tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+                tomorrowStart.setHours(0, 0, 0, 0);
+                const tomorrowEnd = new Date(tomorrowStart);
+                tomorrowEnd.setHours(23, 59, 59, 999);
+                const { data: rows, error } = await this.supabase
+                    .from('scheduled_orders')
+                    .select('*')
+                    .eq('status', 'active')
+                    .is('reminder_sent_at', null)
+                    .gte('scheduled_at', tomorrowStart.toISOString())
+                    .lte('scheduled_at', tomorrowEnd.toISOString());
+                if (error) {
+                    return { sent: 0, errors: [error.message] };
                 }
-                const result = await this.emailService.sendScheduledOrderReminder(email, {
-                    userName: user?.first_name,
-                    scheduledDate: row.scheduled_at,
-                    bundleTitle: row.bundle_title ?? row.bundle_id,
-                });
-                if (result.success) {
-                    await this.supabase
-                        .from('scheduled_orders')
-                        .update({ reminder_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-                        .eq('id', row.id);
-                    sent++;
+                const toSend = (rows ?? []);
+                const { data: users } = await this.supabase.from('users').select('id, email, first_name').in('id', toSend.map((r) => r.user_id));
+                for (const row of toSend) {
+                    const user = (users ?? []).find((u) => u.id === row.user_id);
+                    const email = user?.email;
+                    if (!email) {
+                        errors.push(`No email for user ${row.user_id}`);
+                        continue;
+                    }
+                    const result = await this.emailService.sendScheduledOrderReminder(email, {
+                        userName: user?.first_name,
+                        scheduledDate: row.scheduled_at,
+                        bundleTitle: row.bundle_title ?? row.bundle_id,
+                    });
+                    if (result.success) {
+                        const { error: updateErr } = await this.supabase
+                            .from('scheduled_orders')
+                            .update({ reminder_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                            .eq('id', row.id)
+                            .is('reminder_sent_at', null);
+                        if (!updateErr)
+                            sent++;
+                    }
+                    else {
+                        errors.push(...(result.errors ?? [result.message]));
+                    }
                 }
-                else {
-                    errors.push(...(result.errors ?? [result.message]));
-                }
+            }
+            finally {
+                await this.releaseLock();
             }
         }
         catch (e) {
@@ -133,3 +178,5 @@ class ScheduledOrderService {
     }
 }
 exports.ScheduledOrderService = ScheduledOrderService;
+ScheduledOrderService.REMINDER_LOCK_JOB = 'scheduled_order_reminders';
+ScheduledOrderService.LOCK_TTL_MINUTES = 15;

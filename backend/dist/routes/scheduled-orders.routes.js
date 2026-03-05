@@ -39,9 +39,10 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const scheduledOrderController = __importStar(require("../controllers/scheduled-order.controller"));
 const router = (0, express_1.Router)();
 exports.scheduledOrdersRoutes = router;
+// Cron-only: run reminders (no user auth; require CRON_SECRET so only cron can call)
+router.post('/run-reminders', scheduledOrderController.runReminders);
 router.use(auth_middleware_1.authenticateToken);
 router.post('/', scheduledOrderController.createScheduledOrder);
 router.get('/', scheduledOrderController.listMyScheduledOrders);
 router.post('/:id/cancel', scheduledOrderController.cancelScheduledOrder);
 router.post('/:id/order-now', scheduledOrderController.markOrderedNow);
-router.post('/run-reminders', scheduledOrderController.runReminders);

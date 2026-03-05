@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import { v4 as uuidv4 } from 'uuid'
 import { AIEnhancedService } from '../services/ai-enhanced.service'
 import { ApiResponse } from '../types/api.types'
 import { createAdminClient } from '../config/supabase'
@@ -23,7 +24,7 @@ export class AIController {
    */
   getChatResponse = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { message, role, familySize, budget, threadId } = req.body
+      const { message, role, familySize, budget, threadId, guestId } = req.body
       const userId = req.user?.id
 
       if (!message || typeof message !== 'string') {
@@ -35,8 +36,8 @@ export class AIController {
         return
       }
 
-      // User ID is optional - anonymous users can also use AI
-      const effectiveUserId = userId || 'anonymous'
+      // Guests use a stable UUID (from client) or a new one; never store literal 'anonymous'
+      const effectiveUserId = userId || guestId || uuidv4()
 
       // Extract user token from Authorization header for RLS compliance
       const authHeader = req.headers.authorization
@@ -88,9 +89,10 @@ export class AIController {
         familySize = 1, 
         role,
         preferences = [],
-        categories = []
+        categories = [],
+        guestId: bodyGuestId
       } = req.body
-      const userId = req.user?.id || 'anonymous'
+      const userId = req.user?.id || bodyGuestId || uuidv4()
 
       if (!budget || typeof budget !== 'number' || budget <= 0) {
         res.status(400).json({
@@ -144,8 +146,8 @@ export class AIController {
    */
   searchProducts = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { query, limit = 10 } = req.query
-      const userId = req.user?.id || 'anonymous'
+      const { query, limit = 10, guestId: queryGuestId } = req.query
+      const userId = req.user?.id || (typeof queryGuestId === 'string' ? queryGuestId : undefined) || uuidv4()
 
       if (!query || typeof query !== 'string') {
         res.status(400).json({
@@ -264,9 +266,10 @@ export class AIController {
         ingredients = [], 
         mealType = 'any',
         dietaryRestrictions = [],
-        familySize = 1
+        familySize = 1,
+        guestId: mealGuestId
       } = req.body
-      const userId = req.user?.id || 'anonymous'
+      const userId = req.user?.id || mealGuestId || uuidv4()
 
       // Extract user token from Authorization header for RLS compliance
       const authHeader = req.headers.authorization

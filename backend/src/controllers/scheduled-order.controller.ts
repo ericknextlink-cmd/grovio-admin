@@ -93,11 +93,17 @@ export async function markOrderedNow(req: AuthRequest, res: Response): Promise<v
   }
 }
 
-/** Run reminder job (call from cron daily). Optional: protect with CRON_SECRET. */
-export async function runReminders(_req: AuthRequest, res: Response): Promise<void> {
+/** Run reminder job (call from cron daily). Requires CRON_SECRET in header or body. */
+export async function runReminders(req: AuthRequest, res: Response): Promise<void> {
+  const secret = process.env.CRON_SECRET
+  const provided = (req.headers['x-cron-secret'] as string) || req.body?.cron_secret
+  if (secret && provided !== secret) {
+    res.status(403).json({ success: false, message: 'Forbidden', errors: ['Invalid or missing CRON_SECRET'] } as ApiResponse)
+    return
+  }
   try {
-    const { sent, errors } = await service.sendDueReminders()
-    res.json({ success: true, sent, errors })
+    const result = await service.sendDueReminders()
+    res.json({ success: true, sent: result.sent, errors: result.errors, skipped: result.skipped })
   } catch {
     res.status(500).json({ success: false, message: 'Internal server error', errors: ['Run reminders failed'] } as ApiResponse)
   }

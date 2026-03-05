@@ -30,9 +30,13 @@ const chatValidation = [
     .isFloat({ min: 0 })
     .withMessage('Budget must be a positive number'),
   body('threadId')
-    .optional()
+    .optional({ values: 'null' })
     .isUUID()
     .withMessage('Thread ID must be a valid UUID'),
+  body('guestId')
+    .optional()
+    .isUUID()
+    .withMessage('Guest ID must be a valid UUID'),
   handleValidationErrors
 ]
 

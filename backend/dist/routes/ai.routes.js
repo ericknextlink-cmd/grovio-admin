@@ -32,9 +32,13 @@ const chatValidation = [
         .isFloat({ min: 0 })
         .withMessage('Budget must be a positive number'),
     (0, express_validator_1.body)('threadId')
-        .optional()
+        .optional({ values: 'null' })
         .isUUID()
         .withMessage('Thread ID must be a valid UUID'),
+    (0, express_validator_1.body)('guestId')
+        .optional()
+        .isUUID()
+        .withMessage('Guest ID must be a valid UUID'),
     validation_middleware_1.handleValidationErrors
 ];
 const recommendationsValidation = [

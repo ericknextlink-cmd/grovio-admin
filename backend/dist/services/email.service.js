@@ -412,5 +412,104 @@ Grovio – Redefining the Way You Save.
             };
         }
     }
+    /**
+     * Send contact form submission to admin/support (Resend). Matches Grovio style: #f8f9fa, #D35F0E, same footer as invoice.
+     */
+    async sendContactToAdmin(options) {
+        try {
+            const resendApiKey = process.env.RESEND_API_KEY;
+            const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'noreply@grovio.com';
+            if (!resendApiKey) {
+                return { success: false, message: 'Email not configured', errors: ['RESEND_API_KEY not set'] };
+            }
+            const phoneLine = options.phone ? `<p><strong>Phone:</strong> ${options.phone}</p>` : '';
+            const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
+              <h1 style="color: #D35F0E; margin-top: 0;">New contact form submission</h1>
+              <p><strong>Name:</strong> ${options.name}</p>
+              <p><strong>Email:</strong> ${options.email}</p>
+              ${phoneLine}
+              <p><strong>Message:</strong></p>
+              <p style="white-space: pre-wrap;">${(options.message || '').replace(/</g, '&lt;')}</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+              <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
+            </div>
+          </body>
+        </html>
+      `;
+            const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
+                body: JSON.stringify({
+                    from: fromEmail,
+                    to: options.toEmail,
+                    reply_to: options.email,
+                    subject: `Contact form: ${options.name}`,
+                    html,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                return { success: false, message: 'Failed to send', errors: [err.message || `Resend ${res.status}`] };
+            }
+            return { success: true, message: 'Contact email sent' };
+        }
+        catch (error) {
+            console.error('Send contact to admin error:', error);
+            return { success: false, message: 'Internal server error', errors: [error instanceof Error ? error.message : 'Failed to send'] };
+        }
+    }
+    /**
+     * Send auto-reply to user: we received your message and will get back to you. Same style as invoice/scheduled.
+     */
+    async sendContactConfirmationToUser(email, name) {
+        try {
+            const resendApiKey = process.env.RESEND_API_KEY;
+            const fromEmail = process.env.EMAIL_FROM || 'noreply@grovio.com';
+            if (!resendApiKey) {
+                return { success: false, message: 'Email not configured', errors: ['RESEND_API_KEY not set'] };
+            }
+            const displayName = (name || 'there').trim() || 'there';
+            const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
+              <h1 style="color: #D35F0E; margin-top: 0;">We received your message</h1>
+              <p>Hi ${displayName},</p>
+              <p>Thank you for getting in touch. We have received your message and will get back to you as soon as we can.</p>
+              <p>If your matter is urgent, you can also reach us at the contact details on our website.</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+              <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
+            </div>
+          </body>
+        </html>
+      `;
+            const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
+                body: JSON.stringify({
+                    from: fromEmail,
+                    to: email,
+                    subject: 'We received your message – Grovio',
+                    html,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                return { success: false, message: 'Failed to send', errors: [err.message || `Resend ${res.status}`] };
+            }
+            return { success: true, message: 'Confirmation email sent' };
+        }
+        catch (error) {
+            console.error('Send contact confirmation error:', error);
+            return { success: false, message: 'Internal server error', errors: [error instanceof Error ? error.message : 'Failed to send'] };
+        }
+    }
 }
 exports.EmailService = EmailService;

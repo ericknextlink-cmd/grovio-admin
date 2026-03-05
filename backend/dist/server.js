@@ -28,6 +28,8 @@ const upload_routes_1 = require("./routes/upload.routes");
 const cart_routes_1 = require("./routes/cart.routes");
 const favorites_routes_1 = require("./routes/favorites.routes");
 const pricing_routes_1 = require("./routes/pricing.routes");
+const scheduled_orders_routes_1 = require("./routes/scheduled-orders.routes");
+const contact_routes_1 = require("./routes/contact.routes");
 const log_frontend_error_routes_1 = require("./routes/log-frontend-error.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
@@ -189,6 +191,8 @@ app.use('/api/upload', upload_routes_1.uploadRoutes);
 app.use('/api/cart', cart_routes_1.cartRoutes);
 app.use('/api/favorites', favorites_routes_1.favoritesRoutes);
 app.use('/api/pricing', pricing_routes_1.pricingRoutes);
+app.use('/api/scheduled-orders', scheduled_orders_routes_1.scheduledOrdersRoutes);
+app.use('/api/contact', contact_routes_1.contactRoutes);
 app.use('/api/log-frontend-error', log_frontend_error_routes_1.logFrontendErrorRoutes);
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', order_routes_1.orderRoutes);
@@ -213,6 +217,8 @@ app.get('/', (req, res) => {
             users: '/api/users',
             bundles: '/api/bundles',
             aiProducts: '/api/ai-products',
+            scheduledOrders: '/api/scheduled-orders',
+            contact: '/api/contact',
             webhook: '/api/webhook'
         }
     });

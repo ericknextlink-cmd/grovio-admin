@@ -24,6 +24,8 @@ import { uploadRoutes } from './routes/upload.routes'
 import { cartRoutes } from './routes/cart.routes'
 import { favoritesRoutes } from './routes/favorites.routes'
 import { pricingRoutes } from './routes/pricing.routes'
+import { scheduledOrdersRoutes } from './routes/scheduled-orders.routes'
+import { contactRoutes } from './routes/contact.routes'
 import { logFrontendErrorRoutes } from './routes/log-frontend-error.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
@@ -202,6 +204,8 @@ app.use('/api/upload', uploadRoutes)
 app.use('/api/cart', cartRoutes)
 app.use('/api/favorites', favoritesRoutes)
 app.use('/api/pricing', pricingRoutes)
+app.use('/api/scheduled-orders', scheduledOrdersRoutes)
+app.use('/api/contact', contactRoutes)
 app.use('/api/log-frontend-error', logFrontendErrorRoutes)
 
 // Webhook endpoint (before general routes)
@@ -229,6 +233,8 @@ app.get('/', (req: Request, res: Response) => {
       users: '/api/users',
       bundles: '/api/bundles',
       aiProducts: '/api/ai-products',
+      scheduledOrders: '/api/scheduled-orders',
+      contact: '/api/contact',
       webhook: '/api/webhook'
     }
   })

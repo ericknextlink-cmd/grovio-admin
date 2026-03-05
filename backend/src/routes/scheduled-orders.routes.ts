@@ -4,13 +4,14 @@ import * as scheduledOrderController from '../controllers/scheduled-order.contro
 
 const router = Router()
 
+// Cron-only: run reminders (no user auth; require CRON_SECRET so only cron can call)
+router.post('/run-reminders', scheduledOrderController.runReminders)
+
 router.use(authenticateToken)
 
 router.post('/', scheduledOrderController.createScheduledOrder)
 router.get('/', scheduledOrderController.listMyScheduledOrders)
 router.post('/:id/cancel', scheduledOrderController.cancelScheduledOrder)
 router.post('/:id/order-now', scheduledOrderController.markOrderedNow)
-
-router.post('/run-reminders', scheduledOrderController.runReminders)
 
 export { router as scheduledOrdersRoutes }

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIController = void 0;
+const uuid_1 = require("uuid");
 const ai_enhanced_service_1 = require("../services/ai-enhanced.service");
 const supabase_1 = require("../config/supabase");
 class AIController {
@@ -10,7 +11,7 @@ class AIController {
          */
         this.getChatResponse = async (req, res) => {
             try {
-                const { message, role, familySize, budget, threadId } = req.body;
+                const { message, role, familySize, budget, threadId, guestId } = req.body;
                 const userId = req.user?.id;
                 if (!message || typeof message !== 'string') {
                     res.status(400).json({
@@ -20,8 +21,8 @@ class AIController {
                     });
                     return;
                 }
-                // User ID is optional - anonymous users can also use AI
-                const effectiveUserId = userId || 'anonymous';
+                // Guests use a stable UUID (from client) or a new one; never store literal 'anonymous'
+                const effectiveUserId = userId || guestId || (0, uuid_1.v4)();
                 // Extract user token from Authorization header for RLS compliance
                 const authHeader = req.headers.authorization;
                 const userToken = authHeader && authHeader.startsWith('Bearer ')
@@ -66,8 +67,8 @@ class AIController {
          */
         this.getRecommendations = async (req, res) => {
             try {
-                const { budget, familySize = 1, role, preferences = [], categories = [] } = req.body;
-                const userId = req.user?.id || 'anonymous';
+                const { budget, familySize = 1, role, preferences = [], categories = [], guestId: bodyGuestId } = req.body;
+                const userId = req.user?.id || bodyGuestId || (0, uuid_1.v4)();
                 if (!budget || typeof budget !== 'number' || budget <= 0) {
                     res.status(400).json({
                         success: false,
@@ -118,8 +119,8 @@ class AIController {
          */
         this.searchProducts = async (req, res) => {
             try {
-                const { query, limit = 10 } = req.query;
-                const userId = req.user?.id || 'anonymous';
+                const { query, limit = 10, guestId: queryGuestId } = req.query;
+                const userId = req.user?.id || (typeof queryGuestId === 'string' ? queryGuestId : undefined) || (0, uuid_1.v4)();
                 if (!query || typeof query !== 'string') {
                     res.status(400).json({
                         success: false,
@@ -218,8 +219,8 @@ class AIController {
          */
         this.getMealSuggestions = async (req, res) => {
             try {
-                const { ingredients = [], mealType = 'any', dietaryRestrictions = [], familySize = 1 } = req.body;
-                const userId = req.user?.id || 'anonymous';
+                const { ingredients = [], mealType = 'any', dietaryRestrictions = [], familySize = 1, guestId: mealGuestId } = req.body;
+                const userId = req.user?.id || mealGuestId || (0, uuid_1.v4)();
                 // Extract user token from Authorization header for RLS compliance
                 const authHeader = req.headers.authorization;
                 const userToken = authHeader && authHeader.startsWith('Bearer ')

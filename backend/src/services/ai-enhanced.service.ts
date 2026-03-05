@@ -139,9 +139,9 @@ export class AIEnhancedService {
 
   private async getUserContext(userId: string, userToken?: string): Promise<RecommendationContext> {
     try {
-      if (!userToken || userId === 'anonymous') {
+      if (!userToken) {
         return {
-          userId: 'anon_anonymous',
+          userId,
           familySize: 1,
         }
       }
@@ -1782,10 +1782,10 @@ Format as JSON array:
 export async function _getUserContext(userId: string, userToken?: string): Promise<RecommendationContext> {
   try {
     // SECURITY: Use user token if available to respect RLS
-    // If no token or anonymous user, return minimal context
-    if (!userToken || userId === 'anonymous') {
+    // If no token (guest), return minimal context; userId is the guest UUID from controller
+    if (!userToken) {
       return {
-        userId: 'anon_anonymous',
+        userId,
         familySize: 1,
       }
     }

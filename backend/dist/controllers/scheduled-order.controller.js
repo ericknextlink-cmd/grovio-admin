@@ -95,11 +95,17 @@ async function markOrderedNow(req, res) {
         res.status(500).json({ success: false, message: 'Internal server error', errors: ['Failed to update'] });
     }
 }
-/** Run reminder job (call from cron daily). Optional: protect with CRON_SECRET. */
-async function runReminders(_req, res) {
+/** Run reminder job (call from cron daily). Requires CRON_SECRET in header or body. */
+async function runReminders(req, res) {
+    const secret = process.env.CRON_SECRET;
+    const provided = req.headers['x-cron-secret'] || req.body?.cron_secret;
+    if (secret && provided !== secret) {
+        res.status(403).json({ success: false, message: 'Forbidden', errors: ['Invalid or missing CRON_SECRET'] });
+        return;
+    }
     try {
-        const { sent, errors } = await service.sendDueReminders();
-        res.json({ success: true, sent, errors });
+        const result = await service.sendDueReminders();
+        res.json({ success: true, sent: result.sent, errors: result.errors, skipped: result.skipped });
     }
     catch {
         res.status(500).json({ success: false, message: 'Internal server error', errors: ['Run reminders failed'] });

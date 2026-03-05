@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Next.js middleware (not used in Express backend)
 middleware.ts
+
+# Test files
+test-enhanced-ai.js

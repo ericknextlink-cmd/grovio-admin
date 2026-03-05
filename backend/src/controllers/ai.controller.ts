@@ -469,10 +469,11 @@ export class AIController {
 
   /**
    * AI recommendations for supplier products
+   * Fetches ALL products from database for complete catalog access
    */
   getSupplierProductRecommendations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { message, products } = req.body
+      const { message } = req.body
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({
@@ -483,19 +484,46 @@ export class AIController {
         return
       }
 
-      if (!products || !Array.isArray(products) || products.length === 0) {
-        res.status(400).json({
+      // Fetch ALL products from database directly (not just frontend's paginated subset)
+      const adminSupabase = createAdminClient()
+      const { data: allProducts, error } = await adminSupabase
+        .from('products')
+        .select('id, name, price, category_name, in_stock')
+        .order('category_name')
+
+      console.log('DEBUG: Raw products from DB:', allProducts?.length || 0, 'products')
+      console.log('DEBUG: First few products:', allProducts?.slice(0, 3))
+
+      if (error) {
+        console.error('Error fetching products:', error)
+        res.status(500).json({
           success: false,
-          message: 'Products array is required and must not be empty',
-          errors: ['Invalid products data']
+          message: 'Failed to fetch products from database',
+          errors: [error.message]
         } as ApiResponse<null>)
         return
       }
 
-      const supplierProducts = products.map((p: { code?: string; name: string; unitPrice: number }) => ({
-        code: p.code || '',
+      // Use ALL products (ignoring in_stock for now since products were created without quantity)
+      const availableProducts = allProducts || []
+      console.log('DEBUG: Available products:', availableProducts.length)
+
+      if (!availableProducts || availableProducts.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'No products available in catalog',
+          errors: ['Empty product catalog']
+        } as ApiResponse<null>)
+        return
+      }
+
+      // Map to supplier product format
+      const supplierProducts = availableProducts.map((p) => ({
+        code: p.id,
         name: p.name,
-        unitPrice: p.unitPrice
+        unitPrice: p.price,
+        category: p.category_name,
+        inStock: p.in_stock
       }))
 
       const userId = req.user?.id || 'admin'
@@ -512,8 +540,22 @@ export class AIController {
           message: 'AI recommendations generated successfully',
           data: {
             response: result.message,
+            recommendedProducts: result.recommendedProducts || [],
+            allRecommendedProducts: result.recommendedProducts || [],
           },
-        } as ApiResponse<{ response: string }>)
+        } as ApiResponse<{ 
+          response: string; 
+          recommendedProducts: Array<{id: string, name: string, price: number, quantity: number}>;
+          allRecommendedProducts?: Array<{
+            id: string;
+            name: string;
+            price: number;
+            quantity: number;
+            isInFinalList?: boolean;
+            deliberationReason?: string;
+            category?: string;
+          }>;
+        }>)
       } else {
         res.status(500).json({
           success: false,

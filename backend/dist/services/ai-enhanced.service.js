@@ -7,19 +7,40 @@ const prompts_1 = require("@langchain/core/prompts");
 const output_parsers_1 = require("@langchain/core/output_parsers");
 const messages_1 = require("@langchain/core/messages");
 const supabase_1 = require("../config/supabase");
+const ai_prompts_1 = require("../config/ai-prompts");
+const cultural_food_matching_1 = require("../config/cultural-food-matching");
 const uuid_1 = require("uuid");
 class AIEnhancedService {
     constructor() {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
+        const openAIKey = process.env.OPENAI_API_KEY;
+        const xaiKey = process.env.XAI_API_KEY;
+        if (!openAIKey) {
             console.warn('OPENAI_API_KEY not set. AI features will be disabled.');
         }
-        this.model = new openai_1.ChatOpenAI({
-            apiKey: apiKey || 'dummy',
+        // Initialize OpenAI (Primary model - product recommendations)
+        this.openAIModel = new openai_1.ChatOpenAI({
+            apiKey: openAIKey || 'dummy',
             modelName: 'gpt-4o-mini',
             temperature: 0.3,
             maxTokens: 1500,
         });
+        // Initialize xAI/Grok (Secondary model - cultural analysis & web search)
+        if (xaiKey) {
+            this.xaiModel = new openai_1.ChatOpenAI({
+                apiKey: xaiKey,
+                modelName: 'grok-2-1212',
+                temperature: 0.4,
+                maxTokens: 1500,
+                configuration: {
+                    baseURL: 'https://api.x.ai/v1',
+                }
+            });
+            console.log('✅ xAI (Grok) model initialized for cultural analysis');
+        }
+        else {
+            this.xaiModel = null;
+            console.warn('XAI_API_KEY not set. Cultural analysis features will use OpenAI only.');
+        }
         this.adminSupabase = (0, supabase_1.createAdminClient)();
     }
     getUserSupabaseClient(userToken) {
@@ -408,6 +429,158 @@ class AIEnhancedService {
             return 'Breakfast Cereals';
         return 'Other';
     }
+    /**
+     * Categorize a product based on its name
+     */
+    categorizeProduct(productName) {
+        const lowerName = productName.toLowerCase();
+        if (lowerName.includes('milk') || lowerName.includes('dairy'))
+            return 'Dairy';
+        if (lowerName.includes('rice'))
+            return 'Grains & Rice';
+        if (lowerName.includes('corn') && lowerName.includes('flake'))
+            return 'Breakfast Cereals';
+        if (lowerName.includes('sardine') || lowerName.includes('mackerel') || lowerName.includes('fish'))
+            return 'Canned Fish';
+        if (lowerName.includes('oil') || lowerName.includes('palm'))
+            return 'Oils & Fats';
+        if (lowerName.includes('spaghetti') || lowerName.includes('pasta'))
+            return 'Pasta & Noodles';
+        if (lowerName.includes('sugar'))
+            return 'Sweeteners';
+        if (lowerName.includes('biscuit') || lowerName.includes('cracker'))
+            return 'Snacks';
+        if (lowerName.includes('seasoning') || lowerName.includes('cube') || lowerName.includes('spice'))
+            return 'Seasonings';
+        return 'Other';
+    }
+    /**
+     * Extract recommended products from AI response text
+     * Parses the numbered list format and matches against available products
+     * Returns ALL deliberated products with isInFinalList flag
+     */
+    extractRecommendedProducts(aiResponse, availableProducts) {
+        const allRecommended = [];
+        // Extract final list products (numbered items in the main recommendation)
+        const finalListPattern = /^(?:\d+[\.\)]?|[\*\-])\s*\*?\*?([^\*\n]+?)\*?\*?\s*(?:-\s*)?[₵$]?(\d+(?:\.\d{2})?)/gim;
+        // Extract alternatives (items marked as "Alternative:")
+        const alternativePattern = /Alternative:\s*([^\n-]+?)\s*-\s*[₵$]?(\d+(?:\.\d{2})?)/gi;
+        // Extract deliberation reasons (text in parentheses or after dashes)
+        const reasonPattern = /\(([^)]+)\)|-\s*([^\n]+?)(?=\n|$)/g;
+        // Use reasonPattern to extract reasons from AI response
+        const extractedReasons = [];
+        let reasonMatch;
+        while ((reasonMatch = reasonPattern.exec(aiResponse)) !== null) {
+            const reason = reasonMatch[1] || reasonMatch[2];
+            if (reason && reason.trim().length > 5) {
+                extractedReasons.push(reason.trim());
+            }
+        }
+        if (extractedReasons.length > 0) {
+            console.log(`Extracted ${extractedReasons.length} deliberation reasons`);
+        }
+        let match;
+        const finalListItems = new Set();
+        // Extract final list products
+        while ((match = finalListPattern.exec(aiResponse)) !== null) {
+            const cleanName = match[1].trim()
+                .replace(/\*\*/g, '')
+                .replace(/\*/g, '')
+                .replace(/\[|\]/g, '')
+                .trim();
+            const matchedProduct = this.findMatchingProduct(cleanName, availableProducts);
+            if (matchedProduct && !finalListItems.has(matchedProduct.code)) {
+                finalListItems.add(matchedProduct.code);
+                // Try to extract reason from nearby text
+                const nearbyText = aiResponse.substring(Math.max(0, match.index - 200), Math.min(aiResponse.length, match.index + 200));
+                const reasonMatch = nearbyText.match(/\(([^)]+)\)/);
+                allRecommended.push({
+                    id: matchedProduct.code,
+                    name: matchedProduct.name,
+                    price: matchedProduct.unitPrice,
+                    quantity: 1,
+                    isInFinalList: true,
+                    deliberationReason: reasonMatch ? reasonMatch[1] : 'Selected for final recommendation',
+                    category: this.categorizeProduct(matchedProduct.name)
+                });
+            }
+        }
+        // Extract alternatives (products AI considered but didn't pick)
+        while ((match = alternativePattern.exec(aiResponse)) !== null) {
+            const cleanName = match[1].trim()
+                .replace(/\*\*/g, '')
+                .replace(/\*/g, '')
+                .trim();
+            const matchedProduct = this.findMatchingProduct(cleanName, availableProducts);
+            if (matchedProduct && !finalListItems.has(matchedProduct.code)) {
+                allRecommended.push({
+                    id: matchedProduct.code,
+                    name: matchedProduct.name,
+                    price: matchedProduct.unitPrice,
+                    quantity: 1,
+                    isInFinalList: false,
+                    deliberationReason: 'Alternative option - lower price or different brand',
+                    category: this.categorizeProduct(matchedProduct.name)
+                });
+            }
+        }
+        // Also scan for any product names from available products that appear in the text
+        // This captures products the AI mentioned but didn't formally list
+        for (const product of availableProducts) {
+            if (!finalListItems.has(product.code)) {
+                // Check if product name appears in response
+                const productNamePattern = new RegExp(`\\b${product.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                if (productNamePattern.test(aiResponse) && allRecommended.length < 50) {
+                    // Check if already added
+                    const alreadyAdded = allRecommended.some(p => p.id === product.code);
+                    if (!alreadyAdded) {
+                        allRecommended.push({
+                            id: product.code,
+                            name: product.name,
+                            price: product.unitPrice,
+                            quantity: 1,
+                            isInFinalList: false,
+                            deliberationReason: 'Considered during AI deliberation',
+                            category: this.categorizeProduct(product.name)
+                        });
+                    }
+                }
+            }
+        }
+        console.log(`✅ Extracted ${allRecommended.filter(p => p.isInFinalList).length} final products and ${allRecommended.filter(p => !p.isInFinalList).length} alternatives`);
+        return allRecommended;
+    }
+    /**
+     * Find a matching product from available products using fuzzy matching
+     */
+    findMatchingProduct(aiProductName, availableProducts) {
+        const aiLower = aiProductName.toLowerCase();
+        // First try exact match
+        let bestMatch = availableProducts.find(p => p.name.toLowerCase() === aiLower);
+        if (bestMatch)
+            return bestMatch;
+        // Try includes match
+        bestMatch = availableProducts.find(p => p.name.toLowerCase().includes(aiLower) ||
+            aiLower.includes(p.name.toLowerCase()));
+        if (bestMatch)
+            return bestMatch;
+        // Try word-by-word matching (at least 2 words should match)
+        const aiWords = aiLower.split(/\s+/).filter(w => w.length > 2);
+        for (const product of availableProducts) {
+            const productWords = product.name.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+            const matchingWords = aiWords.filter(aiw => productWords.some(pw => pw.includes(aiw) || aiw.includes(pw)));
+            if (matchingWords.length >= Math.min(2, aiWords.length)) {
+                return product;
+            }
+        }
+        // Last resort: check if any significant word matches
+        for (const word of aiWords) {
+            const match = availableProducts.find(p => p.name.toLowerCase().includes(word));
+            if (match)
+                return match;
+        }
+        return null;
+    }
     async chatWithSupplierProducts(message, supplierProducts, _userId = 'admin') {
         try {
             if (!process.env.OPENAI_API_KEY) {
@@ -428,64 +601,71 @@ class AIEnhancedService {
             while (attempts < maxAttempts) {
                 try {
                     const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts);
-                    const systemPrompt = `You are Grovio AI, an intelligent grocery shopping assistant for supplier product recommendations. All prices are in Ghanaian Cedis (₵).
-
-**Your Capabilities:**
-- Provide personalized product recommendations with specific quantities
-- Calculate how long products will last based on family size and usage patterns
-- Create complete shopping lists with quantities, prices, and totals
-- Suggest meal combinations and practical usage estimates
-
-**CRITICAL RULES - READ CAREFULLY:**
-1. **ONLY use products from the supplier catalog below** - You MUST NOT invent, suggest, or mention products that are not in the catalog
-2. **Use exact product names** as they appear in the catalog
-3. **All products are available** - assume all listed products are in stock
-4. **ALWAYS specify quantities** - Every recommended product MUST include a quantity (e.g., "2 units", "3 packs", "1 bag")
-5. **Calculate duration estimates** - If user mentions duration (e.g., "last for a week/month") or family size, estimate how long products will last
-6. **Provide final shopping list** - Always end with a clear shopping list showing: Product Name, Quantity, Unit Price, Subtotal, and Grand Total
-7. **Use ₵ symbol** for all prices
-8. **Format important text** with **bold** for emphasis
-
-**Quantity Guidelines:**
-- For staples (rice, flour, oil): Consider family size and typical consumption (e.g., 5kg rice for family of 4 = ~2-3 weeks)
-- For canned goods: Consider meal frequency (e.g., 1 can per meal for family of 4)
-- For condiments/seasonings: Estimate based on typical usage (e.g., 1-2 units for a month)
-- Always provide practical quantities that make sense for the budget and family size
-
-**Duration Estimation Guidelines:**
-- Rice: ~200-250g per person per day (5kg = ~20-25 days for 1 person, ~5-6 days for family of 4)
-- Pasta/Spaghetti: ~100-150g per person per meal (500g = ~3-4 meals for family of 4)
-- Canned fish: 1 can typically serves 2-3 people
-- Oil: ~50ml per person per day for cooking (1L = ~20 days for 1 person, ~5 days for family of 4)
-- Use these estimates to calculate how long products will last
-
-**Supplier Product Catalog:**
-${productContext}
-
-**Response Format Requirements:**
-1. Start with a brief summary of recommendations
-2. List recommended products with quantities and reasoning
-3. Provide duration estimates if applicable (e.g., "This selection will last approximately X days/weeks for a family of Y")
-4. **MUST end with a final shopping list in this exact format:**
-
-### Final Shopping List:
-| Product Name | Quantity | Unit Price | Subtotal |
-|-------------|----------|------------|----------|
-| Product 1 | 2 units | ₵50.00 | ₵100.00 |
-| Product 2 | 1 unit | ₵75.00 | ₵75.00 |
-| **Total** | | | **₵175.00** |
-
-5. Include budget utilization (e.g., "Total: ₵175.00 out of ₵500.00 budget (35% utilized)")
-6. Mention remaining budget if applicable`;
+                    // Extract family size and budget from message
+                    const familySizeMatch = message.match(/family of (\d+)|family size (\d+)|(\d+) people|(\d+) person/i);
+                    const budgetMatch = message.match(/[₵$]?(\d+)|under [₵$]?(\d+)|budget of [₵$]?(\d+)/i);
+                    const familySize = familySizeMatch
+                        ? parseInt(familySizeMatch[1] || familySizeMatch[2] || familySizeMatch[3] || familySizeMatch[4] || '1')
+                        : 1;
+                    const budget = budgetMatch
+                        ? parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3] || '0')
+                        : 0;
+                    const context = {
+                        userId: _userId,
+                        familySize,
+                        budget,
+                    };
+                    const queryIntent = {
+                        keywords: message.toLowerCase().split(/\s+/).filter(word => word.length > 2)
+                    };
+                    // Detect meal type from message
+                    const mealType = message.toLowerCase().includes('breakfast') ? 'breakfast'
+                        : message.toLowerCase().includes('lunch') ? 'lunch'
+                            : message.toLowerCase().includes('dinner') ? 'dinner'
+                                : 'all';
+                    // Multi-Agent Step 1: xAI Cultural Analysis (runs in parallel with OpenAI prep)
+                    console.log('🤖 Starting Multi-Agent Deliberation...');
+                    const culturalAnalysis = await this.performCulturalDeliberation(message, productContext, familySize, budget, mealType);
+                    console.log('✅ Cultural Analysis:', culturalAnalysis.mealPatterns.join(', '));
+                    if (culturalAnalysis.warnings.length > 0) {
+                        console.log('⚠️ Cultural Warnings:', culturalAnalysis.warnings);
+                    }
+                    // Multi-Agent Step 2: Build enhanced prompt with cultural context
+                    let systemPrompt = (0, ai_prompts_1.buildSupplierRecommendationPrompt)(context, queryIntent, productContext);
+                    // Append cultural context from deliberation
+                    systemPrompt += `\n\n**CULTURAL CONTEXT ANALYSIS:**\n`;
+                    systemPrompt += `- Traditional meal patterns: ${culturalAnalysis.mealPatterns.join(', ') || 'General Ghanaian cuisine'}\n`;
+                    if (culturalAnalysis.warnings.length > 0) {
+                        systemPrompt += `- Cultural validation warnings: ${culturalAnalysis.warnings.join('; ')}\n`;
+                    }
+                    systemPrompt += `- Focus on culturally appropriate pairings and authentic meal structures\n`;
+                    systemPrompt += `- Avoid inappropriate combinations (e.g., spreads as main meals, milk for dinner)\n`;
+                    // Add specific pairing guidance based on meal type
+                    if (mealType === 'breakfast') {
+                        systemPrompt += `- BREAKFAST ONLY ITEMS: Cereals, milk, bread, porridge (koko), tea, milo\n`;
+                        systemPrompt += `- NEVER suggest soups, stews, or heavy proteins for breakfast\n`;
+                    }
+                    else if (mealType === 'lunch') {
+                        systemPrompt += `- LUNCH PRIORITIES: Rice dishes (jollof, waakye), banku with pepper, light proteins\n`;
+                        systemPrompt += `- INCLUDE fresh vegetables or salad when possible\n`;
+                    }
+                    else if (mealType === 'dinner') {
+                        systemPrompt += `- DINNER PRIORITIES: Fufu with soup, kenkey with pepper, ampesi with stew\n`;
+                        systemPrompt += `- Heavier meals acceptable for evening\n`;
+                        systemPrompt += `- NEVER suggest milk or breakfast cereals for dinner\n`;
+                    }
                     const systemMessage = new messages_1.SystemMessage(systemPrompt);
                     const humanMessage = new messages_1.HumanMessage(message);
-                    const response = await this.model.invoke([systemMessage, humanMessage]);
+                    const response = await this.openAIModel.invoke([systemMessage, humanMessage]);
                     const responseText = typeof response.content === 'string'
                         ? response.content
                         : JSON.stringify(response.content);
+                    // Extract recommended products from AI response for cart functionality
+                    const recommendedProducts = this.extractRecommendedProducts(responseText, supplierProducts.slice(0, maxProducts));
                     return {
                         success: true,
                         message: responseText,
+                        recommendedProducts,
                     };
                 }
                 catch (error) {
@@ -548,17 +728,115 @@ ${productContext}
             return (0, uuid_1.v4)();
         }
     }
-    async getConversationHistory(threadId, userId) {
+    /**
+     * Smart Product Filter for Large Catalogs (4000+ products)
+     * Uses cultural context to filter relevant products before sending to AI
+     * Reduces token usage and improves recommendation quality
+     */
+    smartFilterProducts(allProducts, mealType, budget, familySize) {
+        console.log(`🔍 Smart filtering ${allProducts.length} products for ${mealType}...`);
+        // Define priority keywords based on meal type and culture
+        const priorityPatterns = {
+            breakfast: [
+                'milk', 'cornflakes', 'cereal', 'oats', 'bread', 'egg', 'tea', 'milo', 'sugar',
+                'margarine', 'butter', 'jam', 'honey', 'biscuit', 'cracker', 'coffee'
+            ],
+            lunch: [
+                'rice', 'jollof', 'waakye', 'beans', 'plantain', 'sardine', 'mackerel', 'fish',
+                'chicken', 'meat', 'stew', 'sauce', 'oil', 'spaghetti', 'pasta', 'salad',
+                'vegetable', 'onion', 'tomato', 'pepper', 'spice'
+            ],
+            dinner: [
+                'rice', 'fufu', 'banku', 'kenkey', 'yam', 'plantain', 'cassava', 'soup',
+                'stew', 'fish', 'chicken', 'meat', 'goat', 'palm oil', 'groundnut', 'peanut',
+                'kontomire', 'spinach', 'vegetable', 'onion', 'tomato', 'pepper'
+            ],
+            staples: [
+                'rice', 'beans', 'oil', 'flour', 'sugar', 'salt', 'spaghetti', 'pasta',
+                'plantain', 'yam', 'cassava', 'maize', 'corn'
+            ],
+            proteins: [
+                'sardine', 'mackerel', 'fish', 'chicken', 'meat', 'beef', 'goat', 'egg',
+                'beans', 'groundnut', 'peanut', 'soy', 'milk', 'dairy'
+            ]
+        };
+        // Combine patterns based on meal type
+        let relevantPatterns = [];
+        if (mealType === 'breakfast') {
+            relevantPatterns = [...priorityPatterns.breakfast, ...priorityPatterns.staples.slice(0, 5)];
+        }
+        else if (mealType === 'lunch') {
+            relevantPatterns = [...priorityPatterns.lunch, ...priorityPatterns.proteins];
+        }
+        else if (mealType === 'dinner') {
+            relevantPatterns = [...priorityPatterns.dinner, ...priorityPatterns.proteins, ...priorityPatterns.staples];
+        }
+        else {
+            // All meals - include all patterns
+            relevantPatterns = [
+                ...priorityPatterns.breakfast,
+                ...priorityPatterns.lunch,
+                ...priorityPatterns.dinner
+            ];
+        }
+        // Score and filter products
+        const scoredProducts = allProducts.map(product => {
+            const nameLower = product.name.toLowerCase();
+            const categoryLower = (product.category || '').toLowerCase();
+            let score = 0;
+            // Category matching bonus
+            if (categoryLower && relevantPatterns.some(p => categoryLower.includes(p))) {
+                score += 5;
+            }
+            // Check for priority pattern matches
+            for (const pattern of relevantPatterns) {
+                if (nameLower.includes(pattern)) {
+                    score += 10;
+                    // Extra points for exact matches
+                    if (nameLower.includes(' ' + pattern + ' ') || nameLower.startsWith(pattern + ' ')) {
+                        score += 5;
+                    }
+                }
+            }
+            // Budget-appropriate scoring
+            const maxItemBudget = budget / familySize / 3; // Approximate per-item budget
+            if (product.unitPrice <= maxItemBudget) {
+                score += 5; // Within budget
+            }
+            else if (product.unitPrice <= maxItemBudget * 1.5) {
+                score += 2; // Slightly over but acceptable
+            }
+            // Prefer in-stock items (if stock info available)
+            if (product.unitPrice > 0) {
+                score += 1;
+            }
+            return { ...product, score };
+        });
+        // Sort by score and take top products
+        const sortedProducts = scoredProducts
+            .sort((a, b) => b.score - a.score)
+            .filter(p => p.score > 0); // Only include relevant products
+        // Limit based on budget constraints
+        const maxProducts = Math.min(300, sortedProducts.length);
+        const filteredProducts = sortedProducts.slice(0, maxProducts);
+        console.log(`✅ Filtered to ${filteredProducts.length} relevant products (top scored)`);
+        // Return without score field
+        return filteredProducts.map(({ score: _score, ...product }) => product);
+    }
+    /**
+     * Get conversation history for a thread
+     */
+    async getConversationHistory(threadId, _userId) {
         try {
-            let query = this.adminSupabase
+            const { data, error } = await this.adminSupabase
                 .from('ai_conversation_threads')
                 .select('messages')
-                .eq('thread_id', threadId);
-            if (userId) {
-                query = query.eq('user_id', userId);
+                .eq('thread_id', threadId)
+                .single();
+            if (error || !data) {
+                return [];
             }
-            const { data: thread } = await query.single();
-            return (thread?.messages || []);
+            return data.messages || [];
         }
         catch (error) {
             console.error('Error getting conversation history:', error);
@@ -585,6 +863,88 @@ ${productContext}
             console.error('Error saving message:', error);
         }
     }
+    /**
+     * Multi-Agent Cultural Analysis & Deliberation
+     * Uses xAI (Grok) for cultural context analysis and OpenAI for product recommendations
+     * Both models correlate to finalize culturally appropriate meal recommendations
+     */
+    async performCulturalDeliberation(userRequest, productContext, familySize, budget, mealType) {
+        const result = {
+            culturalContext: '',
+            mealPatterns: [],
+            validatedProducts: [],
+            warnings: []
+        };
+        // Step 1: xAI Cultural Analysis (if available)
+        if (this.xaiModel) {
+            try {
+                const xaiPrompt = `You are a Ghanaian cuisine and cultural food expert. Analyze this meal request:
+
+**User Request**: "${userRequest}"
+**Family Size**: ${familySize}
+**Budget**: ₵${budget}
+**Meal Type**: ${mealType}
+
+**AVAILABLE PRODUCTS IN OUR CATALOG** (ONLY suggest from these - DO NOT suggest items not listed):
+${productContext.slice(0, 4000)}  
+[Product list truncated if too long - focus on available items only]
+
+**CRITICAL CONSTRAINT**: 
+- You MUST ONLY suggest meal combinations using products from the AVAILABLE PRODUCTS list above
+- DO NOT recommend items that are not in our catalog (e.g., if "goat meat" is not listed, don't suggest it)
+- If a traditional meal requires an item we don't have, suggest an alternative from our catalog
+
+**Task**: 
+1. Review the AVAILABLE PRODUCTS and identify what Ghanaian meal patterns we can create
+2. What are the traditional Ghanaian meal patterns for ${mealType} using ONLY our available products?
+3. What food pairings are culturally appropriate from our catalog?
+4. Suggest 3 specific Ghanaian meal combinations using ONLY available products for ${familySize} people.
+5. If traditional items are missing, note what substitutions we should suggest.
+
+Format your response as:
+CULTURAL_CONTEXT: [brief context based on available products]
+MEAL_PATTERNS: [pattern1], [pattern2], [pattern3]
+AVAILABLE_FOR_RECOMMENDATION: [products from catalog that work]
+MISSING_TRADITIONAL_ITEMS: [items we'd ideally want but don't have]
+SUGGESTIONS: [3 meal ideas using ONLY available products]`;
+                const xaiResponse = await this.xaiModel.invoke([
+                    new messages_1.SystemMessage('You are an expert in Ghanaian cuisine and West African food culture.'),
+                    new messages_1.HumanMessage(xaiPrompt)
+                ]);
+                const xaiContent = typeof xaiResponse.content === 'string'
+                    ? xaiResponse.content
+                    : JSON.stringify(xaiResponse.content);
+                result.culturalContext = xaiContent;
+                console.log('🧠 xAI Cultural Analysis completed');
+            }
+            catch (error) {
+                console.warn('xAI cultural analysis failed, using local knowledge base:', error);
+                // Fall back to local knowledge base
+                const patterns = (0, cultural_food_matching_1.getMealPatternsForCulture)('ghanaian')
+                    .filter(p => p.mealType === mealType.toLowerCase() || p.mealType === 'any')
+                    .slice(0, 3)
+                    .map(p => p.name);
+                result.mealPatterns = patterns;
+                result.culturalContext = 'Using local Ghanaian meal knowledge base';
+            }
+        }
+        else {
+            // Use local cultural knowledge base
+            const patterns = (0, cultural_food_matching_1.getMealPatternsForCulture)('ghanaian')
+                .filter(p => p.mealType === mealType.toLowerCase() || p.mealType === 'any')
+                .slice(0, 3)
+                .map(p => p.name);
+            result.mealPatterns = patterns;
+            result.culturalContext = 'Using local Ghanaian meal knowledge base (xAI not configured)';
+        }
+        // Step 2: Validate against local knowledge base
+        const validation = (0, cultural_food_matching_1.validateGhanaianMeal)(userRequest.toLowerCase().split(/\s+/), mealType.toLowerCase());
+        if (!validation.isComplete) {
+            result.warnings.push(...validation.warnings);
+            result.warnings.push(`Missing: ${validation.missingComponents.join(', ')}`);
+        }
+        return result;
+    }
     async chat(message, userId, options = {}) {
         try {
             if (!process.env.OPENAI_API_KEY) {
@@ -609,53 +969,13 @@ ${productContext}
             const historyMessages = history.slice(-6).map(h => h.role === 'user'
                 ? new messages_1.HumanMessage(h.content)
                 : new messages_1.AIMessage(h.content));
-            const systemPrompt = `You are Grovio AI, an intelligent grocery shopping assistant for Ghanaian shoppers. All prices are in Ghanaian Cedis (₵).
-
-**Your Capabilities:**
-- Provide personalized grocery recommendations based on budget, family size, and preferences
-- Suggest meal plans and recipes using ONLY products from the database catalog
-- Help users maximize value within their budget
-- Understand Ghanaian cuisine and shopping patterns
-
-**User Context:**
-- User Profile: ${context.role || 'customer'} | Family Size: ${context.familySize || 1}
-- Budget: ${context.budget ? `₵${context.budget}` : 'Not specified'}
-- Dietary Restrictions: ${context.dietary_restrictions?.join(', ') || 'None'}
-- Preferred Categories: ${context.preferred_categories?.join(', ') || 'None'}
-- Query Intent: ${queryIntent.keywords.length > 0 ? `Looking for: ${queryIntent.keywords.join(', ')}` : 'General inquiry'}
-
-**CRITICAL RULES - READ CAREFULLY:**
-1. **ONLY use products from the catalog below** - You MUST NOT invent, suggest, or mention products that are not in the catalog
-2. **Use exact product names** as they appear in the catalog (e.g., if catalog shows "Royal Rice", use "Royal Rice", not "rice" or "Royal White Basmati Rice")
-3. **Check product availability** - Only recommend products marked with ✓ (in stock)
-4. **Respect budget constraints** - Stay within budget if specified (±5% tolerance is acceptable)
-5. **Prioritize by category**: Staples (rice, flour, oil) → Proteins → Vegetables → Others
-6. **Consider family size** when suggesting quantities
-7. **Respect dietary restrictions** - Do not suggest products from restricted categories
-8. **Use ₵ symbol** for all prices
-9. **Format important text** with **bold** for emphasis
-10. **Be culturally appropriate** - Suggest Ghanaian/African meal ideas when relevant
-11. **If a product is not in the catalog**, say "I don't see that product in our current catalog" - DO NOT make up product names or prices
-
-**Product Catalog (Database):**
-${productContext}
-
-**Example Response Format:**
-When recommending products, format like this:
-- **Product Name** (from catalog) - ₵X.XX
-- Quantity: X units
-- Category: [Category Name]
-- Why: [Brief reason]
-
-**Security Note:**
-- You're working with user ID: ${context.userId} (anonymized)
-- NEVER mention or expose real user identities, emails, or personal information`;
+            const systemPrompt = (0, ai_prompts_1.buildProductRecommendationPrompt)(context, productContext);
             const prompt = prompts_1.ChatPromptTemplate.fromMessages([
                 ['system', systemPrompt],
                 new prompts_1.MessagesPlaceholder('history'),
                 ['human', '{message}'],
             ]);
-            const chain = prompt.pipe(this.model).pipe(new output_parsers_1.StringOutputParser());
+            const chain = prompt.pipe(this.openAIModel).pipe(new output_parsers_1.StringOutputParser());
             const response = await chain.invoke({
                 message,
                 history: historyMessages,
@@ -886,7 +1206,7 @@ Format as JSON with this structure:
   "warnings": string[],
   "budgetAdequacy": "excellent" | "good" | "tight" | "insufficient"
 }`;
-            const response = await this.model.invoke(prompt);
+            const response = await this.openAIModel.invoke(prompt);
             const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
             // Try to parse JSON response
             let analysisData;
@@ -987,7 +1307,7 @@ Format as JSON array:
   "cookingTime": 45,
   "cuisine": "Ghanaian"
 }]`;
-            const response = await this.model.invoke(prompt);
+            const response = await this.openAIModel.invoke(prompt);
             const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
             let meals;
             try {

@@ -9,6 +9,12 @@ export interface User {
   isEmailVerified: boolean
   isPhoneVerified: boolean
   role: 'customer' | 'admin'
+  addressLine1?: string
+  addressLine2?: string
+  addressArea?: string
+  addressRegion?: string
+  addressLat?: number
+  addressLng?: number
   preferences: UserPreferences
   createdAt: string
   updatedAt: string

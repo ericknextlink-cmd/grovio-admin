@@ -41,6 +41,12 @@ router.put('/', [
         .optional()
         .matches(/^\+[1-9]\d{1,14}$/)
         .withMessage('Phone number must be in international format (e.g., +233241234567)'),
+    (0, express_validator_1.body)('addressLine1').optional().trim().isLength({ max: 255 }).withMessage('Address line 1 max 255 characters'),
+    (0, express_validator_1.body)('addressLine2').optional().trim().isLength({ max: 255 }).withMessage('Address line 2 max 255 characters'),
+    (0, express_validator_1.body)('addressArea').optional().trim().isLength({ max: 120 }).withMessage('Area/City max 120 characters'),
+    (0, express_validator_1.body)('addressRegion').optional().trim().isLength({ max: 120 }).withMessage('Region max 120 characters'),
+    (0, express_validator_1.body)('addressLat').optional().isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90'),
+    (0, express_validator_1.body)('addressLng').optional().isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180'),
     (0, express_validator_1.body)('preferences')
         .optional()
         .isObject()

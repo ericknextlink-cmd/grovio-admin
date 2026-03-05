@@ -1,4 +1,4 @@
-import { createClient } from '../config/supabase'
+import { createClient, createAdminClient } from '../config/supabase'
 import { AuthResponse } from '../types/auth'
 
 export class ProfileService {
@@ -147,14 +147,21 @@ export class ProfileService {
     firstName?: string
     lastName?: string
     phoneNumber?: string
+    addressLine1?: string
+    addressLine2?: string
+    addressArea?: string
+    addressRegion?: string
+    addressLat?: number
+    addressLng?: number
     preferences?: Record<string, unknown>
   }): Promise<AuthResponse> {
     try {
-      const supabase = createClient()
+      // Use admin client so RLS does not block update/select on users (userId is already validated by auth middleware)
+      const supabase = createAdminClient()
 
-      const { firstName, lastName, phoneNumber, preferences } = profileData
+      const { firstName, lastName, phoneNumber, addressLine1, addressLine2, addressArea, addressRegion, addressLat, addressLng, preferences } = profileData
 
-      // Prepare update data
+      // Prepare update data for users table
       const updateData: Record<string, unknown> = {
         updated_at: new Date().toISOString()
       }
@@ -186,24 +193,42 @@ export class ProfileService {
         }
       }
 
-      // Update preferences if provided
-      if (preferences) {
-        await supabase
-          .from('user_preferences')
-          .upsert({
-            user_id: userId,
-            ...preferences,
-            updated_at: new Date().toISOString()
-          })
+      if (!updatedUser) {
+        return {
+          success: false,
+          message: 'Failed to update profile',
+          errors: ['User not found after update']
+        }
       }
 
-      // Get updated preferences
+      // Build preferences/address update for user_preferences
+      const prefsPayload: Record<string, unknown> = {
+        user_id: userId,
+        updated_at: new Date().toISOString()
+      }
+      if (addressLine1 !== undefined) prefsPayload.address_line1 = addressLine1.trim() || null
+      if (addressLine2 !== undefined) prefsPayload.address_line2 = addressLine2?.trim() || null
+      if (addressArea !== undefined) prefsPayload.address_area = addressArea?.trim() || null
+      if (addressRegion !== undefined) prefsPayload.address_region = addressRegion?.trim() || null
+      if (addressLat !== undefined) prefsPayload.address_lat = addressLat
+      if (addressLng !== undefined) prefsPayload.address_lng = addressLng
+      if (preferences && Object.keys(preferences).length > 0) {
+        Object.assign(prefsPayload, preferences)
+      }
+      if (Object.keys(prefsPayload).length > 2) {
+        await supabase
+          .from('user_preferences')
+          .upsert(prefsPayload, { onConflict: 'user_id' })
+      }
+
+      // Get updated preferences (including address)
       const { data: updatedPreferences } = await supabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userId)
         .single()
 
+      const prefs = updatedPreferences as Record<string, unknown> | null
       return {
         success: true,
         message: 'Profile updated successfully',
@@ -218,6 +243,12 @@ export class ProfileService {
           isEmailVerified: updatedUser.is_email_verified,
           isPhoneVerified: updatedUser.is_phone_verified,
           role: updatedUser.role,
+          addressLine1: (prefs?.address_line1 as string) ?? undefined,
+          addressLine2: (prefs?.address_line2 as string) ?? undefined,
+          addressArea: (prefs?.address_area as string) ?? undefined,
+          addressRegion: (prefs?.address_region as string) ?? undefined,
+          addressLat: prefs?.address_lat != null ? Number(prefs.address_lat) : undefined,
+          addressLng: prefs?.address_lng != null ? Number(prefs.address_lng) : undefined,
           preferences: updatedPreferences || {
             language: 'en',
             currency: 'GHS'
@@ -241,7 +272,7 @@ export class ProfileService {
    */
   async getProfile(userId: string): Promise<AuthResponse> {
     try {
-      const supabase = createClient()
+      const supabase = createAdminClient()
 
       // Get user data
       const { data: userData, error: userError } = await supabase
@@ -266,6 +297,7 @@ export class ProfileService {
         .eq('user_id', userId)
         .single()
 
+      const prefsRow = preferences as Record<string, unknown> | null
       return {
         success: true,
         message: 'Profile retrieved successfully',
@@ -280,6 +312,12 @@ export class ProfileService {
           isEmailVerified: userData.is_email_verified,
           isPhoneVerified: userData.is_phone_verified,
           role: userData.role,
+          addressLine1: (prefsRow?.address_line1 as string) ?? undefined,
+          addressLine2: (prefsRow?.address_line2 as string) ?? undefined,
+          addressArea: (prefsRow?.address_area as string) ?? undefined,
+          addressRegion: (prefsRow?.address_region as string) ?? undefined,
+          addressLat: prefsRow?.address_lat != null ? Number(prefsRow.address_lat) : undefined,
+          addressLng: prefsRow?.address_lng != null ? Number(prefsRow.address_lng) : undefined,
           preferences: preferences || {
             language: 'en',
             currency: 'GHS'

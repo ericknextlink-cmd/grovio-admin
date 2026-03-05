@@ -133,19 +133,6 @@ const supplierProductRecommendationsValidation = [
         .withMessage('Message is required')
         .isLength({ min: 1, max: 2000 })
         .withMessage('Message must be between 1 and 2000 characters'),
-    (0, express_validator_1.body)('products')
-        .isArray({ min: 1 })
-        .withMessage('Products array is required and must not be empty'),
-    (0, express_validator_1.body)('products.*.name')
-        .trim()
-        .notEmpty()
-        .withMessage('Product name is required'),
-    (0, express_validator_1.body)('products.*.unitPrice')
-        .isFloat({ min: 0 })
-        .withMessage('Product unit price must be a positive number'),
-    (0, express_validator_1.body)('products.*.code')
-        .optional()
-        .trim(),
     validation_middleware_1.handleValidationErrors
 ];
 // Public AI routes (work for both authenticated and anonymous users)

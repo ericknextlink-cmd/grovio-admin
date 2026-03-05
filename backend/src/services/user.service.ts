@@ -27,13 +27,14 @@ export class UserService {
         }
       }
 
-      // Get user preferences
+      // Get user preferences (includes address fields)
       const { data: preferences } = await adminSupabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userData.id)
         .single()
 
+      const prefs = preferences as Record<string, unknown> | null
       return {
         success: true,
         message: 'User profile retrieved successfully',
@@ -48,6 +49,12 @@ export class UserService {
           isEmailVerified: userData.is_email_verified,
           isPhoneVerified: userData.is_phone_verified,
           role: userData.role,
+          addressLine1: (prefs?.address_line1 as string) ?? undefined,
+          addressLine2: (prefs?.address_line2 as string) ?? undefined,
+          addressArea: (prefs?.address_area as string) ?? undefined,
+          addressRegion: (prefs?.address_region as string) ?? undefined,
+          addressLat: prefs?.address_lat != null ? Number(prefs.address_lat) : undefined,
+          addressLng: prefs?.address_lng != null ? Number(prefs.address_lng) : undefined,
           preferences: preferences || {
             language: 'en',
             currency: 'GHS'

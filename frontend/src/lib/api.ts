@@ -28,8 +28,8 @@ const getBackendUrl = () => {
 }
 
 // export const API_BASE_URL = getBackendUrl()
-export const API_BASE_URL = 'https://grovio-backend.onrender.com'
-// export const API_BASE_URL = 'http://localhost:3001'
+// export const API_BASE_URL = 'https://grovio-backend.onrender.com'
+export const API_BASE_URL = 'http://localhost:3001'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -394,8 +394,21 @@ export const pricingApi = {
     apiClient.post<any>('/api/pricing/apply-bundle-markup', { percentage }),
 }
 
-// AI API
+// AI API - Uses local proxy route to mask backend and handle auth
 export const aiApi = {
-  getSupplierRecommendations: (message: string, products: Array<{ code: string; name: string; unitPrice: number }>) =>
-    apiClient.post<any>('/api/ai/supplier-recommendations', { message, products }),
+  getSupplierRecommendations: (message: string) =>
+    apiClient.post<{
+      response: string
+      recommendedProducts: Array<{id: string, name: string, price: number, quantity: number}>
+      allRecommendedProducts?: Array<{
+        id: string
+        name: string
+        price: number
+        quantity: number
+        image?: string
+        category?: string
+        deliberationReason?: string
+        isInFinalList?: boolean
+      }>
+    }>('/api/ai/recommendations', { message }),
 }

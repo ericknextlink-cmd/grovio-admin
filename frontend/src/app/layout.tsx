@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AICartProvider } from "@/contexts/AICartContext";
 
 export const metadata: Metadata = {
   title: "Grovio - Grocery Store Management",
@@ -23,10 +24,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <Toaster position="top-left" richColors />
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+        <AICartProvider>
+          <Toaster position="top-left" richColors />
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+        </AICartProvider>
       </body>
     </html>
   );

@@ -11,7 +11,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     const url =
-      process.env.NEXT_PUBLIC_BACKEND_URL || 'https://grovio-backend.onrender.com'
+      process.env.NEXT_PUBLIC_BACKEND_URL || ''
     const payload = {
       message: error?.message ?? 'Unknown error',
       name: error?.name ?? 'Error',

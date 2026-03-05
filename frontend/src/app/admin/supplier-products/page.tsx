@@ -498,13 +498,8 @@ export default function SupplierProductsPage() {
     setAiResponse('')
 
     try {
-      const supplierProducts = products.map(p => ({
-        code: p.code,
-        name: p.name,
-        unitPrice: p.unitPrice
-      }))
-
-      const result = await aiApi.getSupplierRecommendations(aiPrompt, supplierProducts)
+      // Backend now fetches products directly - just send the prompt
+      const result = await aiApi.getSupplierRecommendations(aiPrompt)
 
       if (result.success && result.data?.response) {
         setAiResponse(result.data.response)

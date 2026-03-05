@@ -4,12 +4,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit, Trash2, Package, Loader2 } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, X } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
 import ProductForm from '@/components/ProductForm'
-import { productsApi, categoriesApi } from '@/lib/api'
+import AIProductRecommendationsBar, { AIRecommendedProduct } from '@/components/AIProductRecommendationsBar'
+import { productsApi, categoriesApi, aiApi } from '@/lib/api'
 import { uploadLocalImages } from '@/lib/upload'
 import { GroceryCategory, GroceryProduct } from '@/types/grocery'
+import { useAICart } from '@/contexts/AICartContext'
 import Image from 'next/image'
 import { toast } from 'sonner'
 
@@ -37,6 +39,8 @@ interface Product {
 
 export default function ProductsPage() {
   const router = useRouter()
+  const { aiCart, addToAICart, removeFromAICart, clearAICart, getAICartTotal, isInAICart } = useAICart()
+  
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +63,13 @@ export default function ProductsPage() {
   // Modal state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  
+  // AI Recommendation state
+  const [showAIRecommendationModal, setShowAIRecommendationModal] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResponse, setAiResponse] = useState('')
+  const [aiRecommendedProducts, setAiRecommendedProducts] = useState<AIRecommendedProduct[]>([])
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -187,6 +198,54 @@ export default function ProductsPage() {
     setEditingProduct(null)
   }
 
+  const handleAIRecommendation = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error('Please enter a prompt for AI recommendations')
+      return
+    }
+
+    setAiLoading(true)
+    setAiResponse('')
+
+    try {
+      // Send prompt as-is - AI will extract budget and family size from natural language
+      const result = await aiApi.getSupplierRecommendations(aiPrompt.trim())
+
+      if (result.success && result.data) {
+        setAiResponse(result.data.response || '')
+        // Store all recommended products (final list + alternatives) for cart functionality
+        const allProducts = result.data.allRecommendedProducts || result.data.recommendedProducts || []
+        setAiRecommendedProducts(allProducts)
+      } else {
+        toast.error(result.message || 'Failed to get AI recommendations')
+      }
+    } catch (error) {
+      console.error('AI recommendation error:', error)
+      toast.error('Failed to get AI recommendations. Please try again.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleAddToMainCart = () => {
+    // Add items from AI cart to main shopping cart
+    if (aiCart.length === 0) {
+      toast.error('Please add items to AI cart first')
+      return
+    }
+    
+    // TODO: Integrate with main cart system
+    toast.success(`Added ${aiCart.length} items to cart (₵${getAICartTotal().toFixed(2)})`)
+    clearAICart()
+  }
+
+  const handleCloseAIModal = () => {
+    setShowAIRecommendationModal(false)
+    setAiResponse('')
+    setAiRecommendedProducts([])
+    clearAICart()
+  }
+
   const mapProductToFormProduct = (product: Product): GroceryProduct => ({
     id: product.id,
     name: product.name,
@@ -278,6 +337,14 @@ export default function ProductsPage() {
             >
               <Plus className="h-4 w-4" />
               Add Product
+            </button>
+            <button
+              onClick={() => setShowAIRecommendationModal(true)}
+              disabled={products.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Sparkles className="h-4 w-4" />
+              AI Recommendations
             </button>
           </div>
         </div>
@@ -527,6 +594,67 @@ export default function ProductsPage() {
         onSubmit={handleProductFormSubmit}
         onCancel={closeProductModal}
       />
+      
+      {/* AI Recommendation Modal */}
+      {showAIRecommendationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Product Recommendations</h3>
+              <button
+                onClick={() => setShowAIRecommendationModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="ai-prompt" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  What kind of products are you looking for? (e.g., "breakfast items for family of 4 under ₵500")
+                </label>
+                <textarea
+                  id="ai-prompt"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Describe your needs..."
+                  className="w-full h-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white resize-none"
+                  rows={3}
+                />
+              </div>
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAIRecommendation}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Getting Recommendations...
+                    </>
+                  ) : (
+                    <>
+                      Get AI Recommendations
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {aiResponse && (
+                <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <h4 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">AI Recommendations:</h4>
+                  <div className="whitespace-pre-wrap bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 text-sm text-gray-800 dark:text-gray-200">
+                    {aiResponse}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

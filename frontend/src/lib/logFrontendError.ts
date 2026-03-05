@@ -6,7 +6,7 @@ const getBackendUrl = (): string => {
   if (typeof window === 'undefined') return ''
   return (
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    'https://grovio-backend.onrender.com'
+    ''
   )
 }
 

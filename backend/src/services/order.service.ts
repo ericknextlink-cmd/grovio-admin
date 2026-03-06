@@ -2,6 +2,7 @@ import { createAdminClient } from '../config/supabase'
 import { PaystackService } from './paystack.service'
 import { PDFInvoiceService, InvoiceData } from './pdf-invoice.service'
 import { EmailService } from './email.service'
+import { VoucherService } from './voucher.service'
 import { v4 as uuidv4 } from 'uuid'
 
 /**
@@ -26,6 +27,8 @@ export interface CreatePendingOrderParams {
   userId: string
   cartItems: CartItem[]
   deliveryAddress: DeliveryAddress
+  /** Server validates and applies; client must not send discount amount. */
+  voucherCode?: string
   discount?: number
   credits?: number
   deliveryNotes?: string
@@ -55,12 +58,14 @@ export class OrderService {
   private paystack: PaystackService
   private pdfService: PDFInvoiceService
   private emailService: EmailService
+  private voucherService: VoucherService
   private supabase
 
   constructor() {
     this.paystack = new PaystackService()
     this.pdfService = new PDFInvoiceService()
     this.emailService = new EmailService()
+    this.voucherService = new VoucherService()
     this.supabase = createAdminClient()
   }
 
@@ -69,7 +74,7 @@ export class OrderService {
    */
   async createPendingOrder(params: CreatePendingOrderParams): Promise<InitializePaymentResult> {
     try {
-      const { userId, cartItems, deliveryAddress, discount = 0, credits = 0, deliveryNotes } = params
+      const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes } = params
 
       // 1. Get user details
       const { data: user, error: userError } = await this.supabase
@@ -131,6 +136,24 @@ export class OrderService {
           image: product.images?.[0] || null,
         }
       })
+
+      // Validate voucher server-side only; never trust client-supplied discount amount
+      let discount = 0
+      if (voucherCode && voucherCode.trim()) {
+        const validation = await this.voucherService.validateVoucher(
+          voucherCode.trim(),
+          userId,
+          subtotal
+        )
+        if (validation.valid && validation.discountAmount != null) {
+          discount = validation.discountAmount
+        } else if (voucherCode.trim()) {
+          return {
+            success: false,
+            error: validation.error || 'Invalid voucher code',
+          }
+        }
+      }
 
       const totalAmount = subtotal - discount - credits
 
@@ -330,9 +353,10 @@ export class OrderService {
 
       if (orderError) {
         console.error('Failed to create order:', orderError)
+        const msg = orderError.message || 'Failed to create order'
         return {
           success: false,
-          error: 'Failed to create order',
+          error: process.env.NODE_ENV === 'development' ? msg : 'Failed to create order',
         }
       }
 
@@ -353,13 +377,17 @@ export class OrderService {
         .from('order_items')
         .insert(orderItems)
 
-      // 7. Update product stock
+      // 7. Update product stock (non-fatal if RPC missing or fails)
       for (const item of pendingOrder.cart_items) {
-        await this.supabase
-          .rpc('decrement_product_stock', {
-            product_id: item.productId,
-            quantity: item.quantity,
-          })
+        try {
+          await this.supabase
+            .rpc('decrement_product_stock', {
+              product_id: item.productId,
+              quantity: item.quantity,
+            })
+        } catch (stockErr) {
+          console.warn('Stock decrement skipped:', stockErr)
+        }
       }
 
       // 8. Update payment transaction
@@ -379,7 +407,7 @@ export class OrderService {
         })
         .eq('provider_reference', paymentReference)
 
-      // 9. Mark pending order as converted
+      // 9. Mark pending order as converted (match by payment_reference in case table has no id column)
       await this.supabase
         .from('pending_orders')
         .update({
@@ -387,17 +415,18 @@ export class OrderService {
           converted_to_order_id: order.id,
           converted_at: new Date().toISOString(),
         })
-        .eq('id', pendingOrder.id)
+        .eq('payment_reference', paymentReference)
 
       // 10. Generate invoice PDF
+      const meta = (pendingOrder.metadata as { userName?: string; userEmail?: string } | null) ?? {}
       const invoiceData: InvoiceData = {
         invoiceNumber,
         orderNumber,
         date: new Date(),
-        customerName: `${pendingOrder.metadata.userName}`,
+        customerName: meta.userName ?? 'Customer',
         customerAddress: `${pendingOrder.delivery_address.street}, ${pendingOrder.delivery_address.city}, ${pendingOrder.delivery_address.region}`,
         customerPhone: pendingOrder.delivery_address.phone,
-        customerEmail: pendingOrder.metadata.userEmail,
+        customerEmail: meta.userEmail ?? '',
         items: (pendingOrder.cart_items as Array<Record<string, unknown>>).map((item) => ({
           description: (item.name as string) ?? '',
           quantity: (item.quantity as number) ?? 0,

@@ -5,12 +5,14 @@ const supabase_1 = require("../config/supabase");
 const paystack_service_1 = require("./paystack.service");
 const pdf_invoice_service_1 = require("./pdf-invoice.service");
 const email_service_1 = require("./email.service");
+const voucher_service_1 = require("./voucher.service");
 const uuid_1 = require("uuid");
 class OrderService {
     constructor() {
         this.paystack = new paystack_service_1.PaystackService();
         this.pdfService = new pdf_invoice_service_1.PDFInvoiceService();
         this.emailService = new email_service_1.EmailService();
+        this.voucherService = new voucher_service_1.VoucherService();
         this.supabase = (0, supabase_1.createAdminClient)();
     }
     /**
@@ -18,7 +20,7 @@ class OrderService {
      */
     async createPendingOrder(params) {
         try {
-            const { userId, cartItems, deliveryAddress, discount = 0, credits = 0, deliveryNotes } = params;
+            const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes } = params;
             // 1. Get user details
             const { data: user, error: userError } = await this.supabase
                 .from('users')
@@ -73,6 +75,20 @@ class OrderService {
                     image: product.images?.[0] || null,
                 };
             });
+            // Validate voucher server-side only; never trust client-supplied discount amount
+            let discount = 0;
+            if (voucherCode && voucherCode.trim()) {
+                const validation = await this.voucherService.validateVoucher(voucherCode.trim(), userId, subtotal);
+                if (validation.valid && validation.discountAmount != null) {
+                    discount = validation.discountAmount;
+                }
+                else if (voucherCode.trim()) {
+                    return {
+                        success: false,
+                        error: validation.error || 'Invalid voucher code',
+                    };
+                }
+            }
             const totalAmount = subtotal - discount - credits;
             if (totalAmount <= 0) {
                 return {
@@ -253,9 +269,10 @@ class OrderService {
                 .single();
             if (orderError) {
                 console.error('Failed to create order:', orderError);
+                const msg = orderError.message || 'Failed to create order';
                 return {
                     success: false,
-                    error: 'Failed to create order',
+                    error: process.env.NODE_ENV === 'development' ? msg : 'Failed to create order',
                 };
             }
             // 6. Create order items
@@ -273,13 +290,18 @@ class OrderService {
             await this.supabase
                 .from('order_items')
                 .insert(orderItems);
-            // 7. Update product stock
+            // 7. Update product stock (non-fatal if RPC missing or fails)
             for (const item of pendingOrder.cart_items) {
-                await this.supabase
-                    .rpc('decrement_product_stock', {
-                    product_id: item.productId,
-                    quantity: item.quantity,
-                });
+                try {
+                    await this.supabase
+                        .rpc('decrement_product_stock', {
+                        product_id: item.productId,
+                        quantity: item.quantity,
+                    });
+                }
+                catch (stockErr) {
+                    console.warn('Stock decrement skipped:', stockErr);
+                }
             }
             // 8. Update payment transaction
             await this.supabase
@@ -297,7 +319,7 @@ class OrderService {
                 provider_response: paymentData,
             })
                 .eq('provider_reference', paymentReference);
-            // 9. Mark pending order as converted
+            // 9. Mark pending order as converted (match by payment_reference in case table has no id column)
             await this.supabase
                 .from('pending_orders')
                 .update({
@@ -305,16 +327,17 @@ class OrderService {
                 converted_to_order_id: order.id,
                 converted_at: new Date().toISOString(),
             })
-                .eq('id', pendingOrder.id);
+                .eq('payment_reference', paymentReference);
             // 10. Generate invoice PDF
+            const meta = pendingOrder.metadata ?? {};
             const invoiceData = {
                 invoiceNumber,
                 orderNumber,
                 date: new Date(),
-                customerName: `${pendingOrder.metadata.userName}`,
+                customerName: meta.userName ?? 'Customer',
                 customerAddress: `${pendingOrder.delivery_address.street}, ${pendingOrder.delivery_address.city}, ${pendingOrder.delivery_address.region}`,
                 customerPhone: pendingOrder.delivery_address.phone,
-                customerEmail: pendingOrder.metadata.userEmail,
+                customerEmail: meta.userEmail ?? '',
                 items: pendingOrder.cart_items.map((item) => ({
                     description: item.name ?? '',
                     quantity: item.quantity ?? 0,

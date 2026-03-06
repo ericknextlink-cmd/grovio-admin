@@ -26,6 +26,7 @@ import { favoritesRoutes } from './routes/favorites.routes'
 import { pricingRoutes } from './routes/pricing.routes'
 import { scheduledOrdersRoutes } from './routes/scheduled-orders.routes'
 import { contactRoutes } from './routes/contact.routes'
+import { voucherRoutes } from './routes/voucher.routes'
 import { logFrontendErrorRoutes } from './routes/log-frontend-error.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
@@ -78,9 +79,6 @@ const allowedOrigins: (string | RegExp)[] = [
   process.env.ADMIN_URL,
   process.env.BACKEND_URL,
   'https://grovio-gamma.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
 ].filter((origin): origin is string => !!origin)
 
 // In development, allow all localhost origins
@@ -206,6 +204,7 @@ app.use('/api/favorites', favoritesRoutes)
 app.use('/api/pricing', pricingRoutes)
 app.use('/api/scheduled-orders', scheduledOrdersRoutes)
 app.use('/api/contact', contactRoutes)
+app.use('/api/vouchers', voucherRoutes)
 app.use('/api/log-frontend-error', logFrontendErrorRoutes)
 
 // Webhook endpoint (before general routes)
@@ -257,8 +256,8 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(` Grovio Backend Server running on port ${PORT}`)
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
-      console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`)
-      console.log(`Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`)
+      console.log(`Frontend URL: ${process.env.FRONTEND_URL || ''}`)
+      console.log(`Admin URL: ${process.env.ADMIN_URL || ''}`)
       console.log(` Server URL: http://localhost:${PORT}`)
     })
   } catch (error) {

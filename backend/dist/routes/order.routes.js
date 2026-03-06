@@ -52,6 +52,11 @@ const createOrderValidation = [
         .trim()
         .isLength({ max: 500 })
         .withMessage('Delivery notes must not exceed 500 characters'),
+    (0, express_validator_1.body)('voucherCode')
+        .optional()
+        .trim()
+        .isLength({ max: 50 })
+        .withMessage('Voucher code must not exceed 50 characters'),
     validation_middleware_1.handleValidationErrors,
 ];
 const verifyPaymentValidation = [

@@ -140,7 +140,7 @@ class EmailService {
     async sendAccountRecoveryEmail(email, recoveryToken, options) {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
-            const frontendUrl = options?.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3001';
+            const frontendUrl = options?.frontendUrl || process.env.FRONTEND_URL || '';
             const fromEmail = options?.fromEmail || process.env.EMAIL_FROM || 'noreply@grovio.com';
             // Build recovery URL
             const recoveryUrl = options?.recoveryUrl || `${frontendUrl}/account/recover?email=${encodeURIComponent(email)}&token=${encodeURIComponent(recoveryToken)}`;

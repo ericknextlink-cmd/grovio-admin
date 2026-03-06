@@ -30,6 +30,7 @@ const favorites_routes_1 = require("./routes/favorites.routes");
 const pricing_routes_1 = require("./routes/pricing.routes");
 const scheduled_orders_routes_1 = require("./routes/scheduled-orders.routes");
 const contact_routes_1 = require("./routes/contact.routes");
+const voucher_routes_1 = require("./routes/voucher.routes");
 const log_frontend_error_routes_1 = require("./routes/log-frontend-error.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
@@ -78,9 +79,6 @@ const allowedOrigins = [
     process.env.ADMIN_URL,
     process.env.BACKEND_URL,
     'https://grovio-gamma.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
 ].filter((origin) => !!origin);
 // In development, allow all localhost origins
 const localhostRegex = /^http:\/\/localhost:\d+$/;
@@ -193,6 +191,7 @@ app.use('/api/favorites', favorites_routes_1.favoritesRoutes);
 app.use('/api/pricing', pricing_routes_1.pricingRoutes);
 app.use('/api/scheduled-orders', scheduled_orders_routes_1.scheduledOrdersRoutes);
 app.use('/api/contact', contact_routes_1.contactRoutes);
+app.use('/api/vouchers', voucher_routes_1.voucherRoutes);
 app.use('/api/log-frontend-error', log_frontend_error_routes_1.logFrontendErrorRoutes);
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', order_routes_1.orderRoutes);
@@ -237,8 +236,8 @@ const startServer = async () => {
         app.listen(PORT, () => {
             console.log(` Grovio Backend Server running on port ${PORT}`);
             console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
-            console.log(`Admin URL: ${process.env.ADMIN_URL || 'http://localhost:3000'}`);
+            console.log(`Frontend URL: ${process.env.FRONTEND_URL || ''}`);
+            console.log(`Admin URL: ${process.env.ADMIN_URL || ''}`);
             console.log(` Server URL: http://localhost:${PORT}`);
         });
     }

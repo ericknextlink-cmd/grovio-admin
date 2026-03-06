@@ -19,7 +19,7 @@ class OrderController {
                     });
                     return;
                 }
-                const { cartItems, deliveryAddress, discount, credits, deliveryNotes } = req.body;
+                const { cartItems, deliveryAddress, voucherCode, credits, deliveryNotes } = req.body;
                 if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
                     res.status(400).json({
                         success: false,
@@ -40,7 +40,7 @@ class OrderController {
                     userId,
                     cartItems,
                     deliveryAddress,
-                    discount,
+                    voucherCode: voucherCode?.trim() || undefined,
                     credits,
                     deliveryNotes,
                 });

@@ -287,14 +287,18 @@ export class AIEnhancedService {
     userToken?: string
   ): Promise<Product[]> {
     try {
-      const productsSupabase = userToken 
-        ? this.getUserSupabaseClient(userToken)
-        : createClient()
+      // Anonymous users: use admin client so we always have catalog access (no RLS block). Serves everyone.
+      const productsSupabase = !userToken
+        ? this.adminSupabase
+        : this.getUserSupabaseClient(userToken)
 
       let query = productsSupabase
         .from('products')
         .select('*')
-        .eq('in_stock', true)
+      // Only filter in_stock when using user client; for admin (anonymous) return all so we can recommend
+      if (userToken) {
+        query = query.eq('in_stock', true)
+      }
 
       if (queryIntent && (queryIntent.keywords.length > 0 || queryIntent.categories.length > 0 || queryIntent.productTypes.length > 0)) {
         const allSearchTerms = [...queryIntent.keywords, ...queryIntent.productTypes].filter(term => term && term.length > 2)

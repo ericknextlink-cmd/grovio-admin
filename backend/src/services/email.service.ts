@@ -159,7 +159,7 @@ export class EmailService {
   ): Promise<{ success: boolean; message: string; errors?: string[] }> {
     try {
       const resendApiKey = process.env.RESEND_API_KEY
-      const frontendUrl = options?.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3001'
+      const frontendUrl = options?.frontendUrl || process.env.FRONTEND_URL || ''
       const fromEmail = options?.fromEmail || process.env.EMAIL_FROM || 'noreply@grovio.com'
       
       // Build recovery URL

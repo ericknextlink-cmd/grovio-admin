@@ -42,6 +42,7 @@ class AIController {
                         data: {
                             message: result.message,
                             threadId: result.threadId,
+                            ...(result.products && result.products.length > 0 && { products: result.products }),
                         },
                     });
                 }

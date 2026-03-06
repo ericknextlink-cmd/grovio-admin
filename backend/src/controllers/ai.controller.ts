@@ -60,8 +60,9 @@ export class AIController {
           data: {
             message: result.message,
             threadId: result.threadId,
+            ...(result.products && result.products.length > 0 && { products: result.products }),
           },
-        } as ApiResponse<{ message: string; threadId: string }>)
+        } as ApiResponse<{ message: string; threadId: string; products?: Array<{ id: string; name: string; price: number; quantity: number; reason: string }> }>)
       } else {
         res.status(500).json({
           success: false,

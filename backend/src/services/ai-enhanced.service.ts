@@ -208,6 +208,7 @@ export class AIEnhancedService {
     keywords: string[]
     categories: string[]
     budget?: number
+    familySize?: number
     productTypes: string[]
   } {
     const lowerMessage = message.toLowerCase()
@@ -217,6 +218,14 @@ export class AIEnhancedService {
 
     const budgetMatch = message.match(/₵?\s*(\d+(?:\.\d+)?)/) || message.match(/(\d+(?:\.\d+)?)\s*cedis?/i)
     const extractedBudget = budgetMatch ? parseFloat(budgetMatch[1]) : context.budget
+
+    const familyMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|for\s+(?:a\s+)?family\s+of\s+(\d+)/i)
+    const extractedFamilySize = familyMatch
+      ? parseInt(familyMatch[1] || familyMatch[2] || familyMatch[3] || familyMatch[4] || '0', 10)
+      : undefined
+    const familySize = (extractedFamilySize && extractedFamilySize >= 1 && extractedFamilySize <= 20)
+      ? extractedFamilySize
+      : undefined
 
     const productKeywords = [
       'rice', 'flour', 'oil', 'sugar', 'salt', 'tomato', 'onion', 'garlic',
@@ -262,6 +271,7 @@ export class AIEnhancedService {
       keywords: [...new Set(keywords)],
       categories: [...new Set(categories)],
       budget: extractedBudget,
+      familySize,
       productTypes: [...new Set(productTypes)],
     }
   }
@@ -325,18 +335,23 @@ export class AIEnhancedService {
       const limit = 500
       const { data: products, error } = await query.limit(limit)
 
-      if (error) {
-        console.error('Error fetching products (RLS may have blocked access):', error)
-        
-        console.warn('Using admin client for products access (RLS blocked regular client)')
-        
+      if (error || !products || products.length === 0) {
+        if (error) {
+          console.error('Error fetching products (RLS may have blocked access):', error)
+        } else {
+          console.warn('Products query returned 0 rows (RLS or in_stock filter). Using admin client.')
+        }
         const { data: fallbackProducts } = await this.adminSupabase
           .from('products')
           .select('*')
-          .eq('in_stock', true)
           .order('rating', { ascending: false })
-          .limit(200)
-        return fallbackProducts || []
+          .order('price', { ascending: true })
+          .limit(500)
+        const list = fallbackProducts || []
+        if (list.length > 0 && queryIntent && (queryIntent.keywords.length > 1 || (queryIntent.productTypes?.length ?? 0) > 0)) {
+          return this.scoreProductsByRelevance(list, queryIntent)
+        }
+        return list
       }
 
       let rankedProducts = products || []
@@ -380,9 +395,9 @@ export class AIEnhancedService {
         const { data: fallbackProducts } = await this.adminSupabase
           .from('products')
           .select('*')
-          .eq('in_stock', true)
           .order('rating', { ascending: false })
-          .limit(200)
+          .order('price', { ascending: true })
+          .limit(500)
         return fallbackProducts || []
       } catch (fallbackError) {
         console.error('Fallback query also failed:', fallbackError)
@@ -1249,6 +1264,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
     success: boolean
     message?: string
     threadId?: string
+    products?: Array<{ id: string; name: string; price: number; quantity: number; reason: string }>
     error?: string
   }> {
     try {
@@ -1263,16 +1279,22 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
 
       const userContext = await this.getUserContext(userId, options.userToken)
       
-      const context: RecommendationContext = {
+      const queryIntent = this.extractQueryIntent(message, {
         ...userContext,
         role: options.role || userContext.role,
         familySize: options.familySize || userContext.familySize,
         budget: options.budget,
+      })
+
+      // Prefer prompt-extracted budget and family size over profile so the user's current message drives recommendations
+      const context: RecommendationContext = {
+        ...userContext,
+        role: options.role || userContext.role,
+        familySize: queryIntent.familySize ?? options.familySize ?? userContext.familySize,
+        budget: queryIntent.budget ?? options.budget,
         threadId,
       }
 
-      const queryIntent = this.extractQueryIntent(message, context)
-      
       const products = await this.getProductsForRAGWithQuery(context, queryIntent, options.userToken)
       
       const productContext = this.buildProductContext(products, 200)
@@ -1311,10 +1333,20 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
         timestamp: new Date(),
       }, userId)
 
+      // Return products used in context so frontend can show them as selectable (real DB products)
+      const productsForFrontend = products.slice(0, 30).map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        quantity: 1,
+        reason: 'From recommendation',
+      }))
+
       return {
         success: true,
         message: response,
         threadId,
+        products: productsForFrontend,
       }
     } catch (error) {
       console.error('Enhanced AI chat error:', error)

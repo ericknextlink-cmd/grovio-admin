@@ -426,10 +426,42 @@ export const adminVouchersApi = {
     max_uses?: number
   }) => apiClient.post<{ id: string; code: string }>('/api/admin/vouchers', body),
 
+  update: (voucherId: string, body: {
+    code?: string
+    discount_type?: 'percentage' | 'fixed'
+    discount_value?: number
+    description?: string | null
+    image_type?: 'regular' | 'nss' | null
+    min_order_amount?: number
+    valid_until?: string | null
+    max_uses?: number | null
+  }) => apiClient.put<{ id: string; code: string }>(`/api/admin/vouchers/${voucherId}`, body),
+
   assign: (userId: string, voucherId: string) =>
     apiClient.post<{ ok: boolean }>('/api/admin/vouchers/assign', { userId, voucherId }),
 
   listUsers: () => apiClient.get<Array<{ id: string; email: string; name: string }>>('/api/admin/vouchers/users'),
+
+  listAssignments: (voucherId?: string) =>
+    apiClient.get<Array<{
+      id: string
+      voucher_id: string
+      user_id: string
+      used_at: string | null
+      created_at: string
+      user_email: string | null
+      user_name: string | null
+    }>>('/api/admin/vouchers/assignments', voucherId ? { voucherId } : undefined),
+
+  revokeAssignment: (assignmentId: string) =>
+    apiClient.delete<{ ok: boolean }>(`/api/admin/vouchers/assignments/${assignmentId}`),
+
+  listTemplates: () =>
+    apiClient.get<{
+      bucket: string
+      prefix: string
+      files: Array<{ name: string; id: string | null; updated_at: string | null; created_at: string | null }>
+    }>('/api/admin/vouchers/templates'),
 
   getPreviewImageUrl: (voucherId: string, imageType: 'regular' | 'nss', userName?: string, expiryText?: string): string => {
     const params = new URLSearchParams({ imageType })
@@ -438,10 +470,17 @@ export const adminVouchersApi = {
     return `${API_BASE_URL}/api/admin/vouchers/${voucherId}/preview-image?${params.toString()}`
   },
 
-  fetchPreviewImageBlobUrl: async (voucherId: string, imageType: 'regular' | 'nss', userName?: string, expiryText?: string): Promise<string> => {
+  fetchPreviewImageBlobUrl: async (
+    voucherId: string,
+    imageType: 'regular' | 'nss',
+    userName?: string,
+    expiryText?: string,
+    templateName?: string
+  ): Promise<string> => {
     const params = new URLSearchParams({ imageType })
     if (userName) params.set('userName', userName)
     if (expiryText) params.set('expiryText', expiryText)
+    if (templateName) params.set('templateName', templateName)
     const url = `${API_BASE_URL}/api/admin/vouchers/${voucherId}/preview-image?${params.toString()}`
     const token = typeof window !== 'undefined' ? (localStorage.getItem('admin_token') || document.cookie.match(/admin_token=([^;]+)/)?.[1]) : ''
     const res = await fetch(url, {

@@ -3,7 +3,7 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { createClient, createAdminClient } from '../config/supabase'
-import { buildSupplierRecommendationPrompt, buildProductRecommendationPrompt } from '../config/ai-prompts'
+import { buildSupplierRecommendationPrompt, buildProductRecommendationPrompt, QueryIntent } from '../config/ai-prompts'
 import { getMealPatternsForCulture, validateGhanaianMeal } from '../config/cultural-food-matching'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -117,6 +117,13 @@ export class AIEnhancedService {
     this.adminSupabase = createAdminClient()
   }
 
+  private sanitizeAssistantResponse(text: string): string {
+    return text
+      .replace(/^\s*Since your family size is\s*\d+[^.]*\.\s*/i, '')
+      .replace(/^\s*Since your family size is\s*[a-z]+[^.]*\.\s*/i, '')
+      .replace(/^\s*Since\b/i, 'Based on your request,')
+  }
+
   private getUserSupabaseClient(userToken?: string) {
     const client = createClient()
     
@@ -220,9 +227,16 @@ export class AIEnhancedService {
     const extractedBudget = budgetMatch ? parseFloat(budgetMatch[1]) : context.budget
 
     const familyMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|for\s+(?:a\s+)?family\s+of\s+(\d+)/i)
+    const numberWords: Record<string, number> = {
+      one: 1, two: 2, three: 3, four: 4, five: 5,
+      six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    }
+    const familyWordEntry = Object.entries(numberWords).find(([w]) =>
+      new RegExp(`family\\s+of\\s+${w}|${w}\\s+people|${w}\\s+persons?`, 'i').test(message)
+    )
     const extractedFamilySize = familyMatch
       ? parseInt(familyMatch[1] || familyMatch[2] || familyMatch[3] || familyMatch[4] || '0', 10)
-      : undefined
+      : familyWordEntry?.[1]
     const familySize = (extractedFamilySize && extractedFamilySize >= 1 && extractedFamilySize <= 20)
       ? extractedFamilySize
       : undefined
@@ -809,7 +823,13 @@ export class AIEnhancedService {
   async chatWithSupplierProducts(
     message: string,
     supplierProducts: Array<{ code: string; name: string; unitPrice: number }>,
-    _userId: string = 'admin'
+    _userId: string = 'admin',
+    options: {
+      familySize?: number
+      budget?: number
+      mealType?: 'breakfast' | 'lunch' | 'dinner' | 'all'
+      budgetMode?: 'combined' | 'per_meal'
+    } = {}
   ): Promise<{
     success: boolean
     message?: string
@@ -839,17 +859,39 @@ export class AIEnhancedService {
         try {
           const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts)
 
-          // Extract family size and budget from message
-          const familySizeMatch = message.match(/family of (\d+)|family size (\d+)|(\d+) people|(\d+) person/i)
-          const budgetMatch = message.match(/[₵$]?(\d+)|under [₵$]?(\d+)|budget of [₵$]?(\d+)/i)
-          
-          const familySize = familySizeMatch 
-            ? parseInt(familySizeMatch[1] || familySizeMatch[2] || familySizeMatch[3] || familySizeMatch[4] || '1')
-            : 1
-          
-          const budget = budgetMatch
-            ? parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3] || '0')
-            : 0
+          // Extract family size and budget directly from prompt (never from profile).
+          const lowerMessage = message.toLowerCase()
+          const numberWords: Record<string, number> = {
+            one: 1,
+            two: 2,
+            three: 3,
+            four: 4,
+            five: 5,
+            six: 6,
+            seven: 7,
+            eight: 8,
+            nine: 9,
+            ten: 10,
+          }
+
+          const familySizeDigitMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|(\d+)\s+persons?/i)
+          const familySizeWordMatch = Object.entries(numberWords).find(([w]) =>
+            new RegExp(`family\\s+of\\s+${w}|${w}\\s+people|${w}\\s+persons?`, 'i').test(message)
+          )
+          const parsedFamilySize = familySizeDigitMatch
+            ? parseInt(familySizeDigitMatch[1] || familySizeDigitMatch[2] || familySizeDigitMatch[3] || familySizeDigitMatch[4] || '0', 10)
+            : familySizeWordMatch?.[1]
+          const messageFamilySize = parsedFamilySize && parsedFamilySize >= 1 && parsedFamilySize <= 20
+            ? parsedFamilySize
+            : undefined
+          const familySize = options.familySize ?? messageFamilySize
+
+          const budgetMatch =
+            message.match(/(\d+(?:\.\d+)?)\s*cedis?/i) ||
+            message.match(/budget\s*(?:of|is)?\s*₵?\s*(\d+(?:\.\d+)?)/i) ||
+            message.match(/₵\s*(\d+(?:\.\d+)?)/i)
+          const messageBudget = budgetMatch ? parseFloat(budgetMatch[1]) : 0
+          const budget = options.budget ?? messageBudget
           
           const context = {
             userId: _userId,
@@ -857,22 +899,30 @@ export class AIEnhancedService {
             budget,
           }
           
-          const queryIntent = {
-            keywords: message.toLowerCase().split(/\s+/).filter(word => word.length > 2)
+          const queryIntent: QueryIntent = {
+            keywords: lowerMessage.split(/\s+/).filter(word => word.length > 2),
+            mealType: options.mealType ?? (lowerMessage.includes('breakfast')
+              ? 'breakfast'
+              : lowerMessage.includes('lunch')
+                ? 'lunch'
+                : lowerMessage.includes('dinner')
+                  ? 'dinner'
+                  : 'all'),
+            budgetMode: options.budgetMode ?? (/respectively|each\s+meal|per\s+meal/.test(lowerMessage)
+              ? 'per_meal'
+              : /combined|overall|together|spread\s+across|all\s+meals/.test(lowerMessage)
+                ? 'combined'
+                : 'per_meal'),
+            familySizeExplicit: familySize != null
           }
-          
-          // Detect meal type from message
-          const mealType = message.toLowerCase().includes('breakfast') ? 'breakfast' 
-            : message.toLowerCase().includes('lunch') ? 'lunch'
-            : message.toLowerCase().includes('dinner') ? 'dinner'
-            : 'all'
+          const mealType = queryIntent.mealType ?? 'all'
           
           // Multi-Agent Step 1: xAI Cultural Analysis (runs in parallel with OpenAI prep)
           console.log('🤖 Starting Multi-Agent Deliberation...')
           const culturalAnalysis = await this.performCulturalDeliberation(
             message,
             productContext,
-            familySize,
+            familySize ?? 1,
             budget,
             mealType
           )
@@ -915,16 +965,17 @@ export class AIEnhancedService {
           const responseText = typeof response.content === 'string' 
             ? response.content 
             : JSON.stringify(response.content)
+          const normalizedResponseText = this.sanitizeAssistantResponse(responseText)
 
           // Extract recommended products from AI response for cart functionality
           const recommendedProducts = this.extractRecommendedProducts(
-            responseText, 
+            normalizedResponseText, 
             supplierProducts.slice(0, maxProducts)
           )
 
           return {
             success: true,
-            message: responseText,
+            message: normalizedResponseText,
             recommendedProducts,
           }
         } catch (error) {
@@ -1286,15 +1337,17 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
       const queryIntent = this.extractQueryIntent(message, {
         ...userContext,
         role: options.role || userContext.role,
-        familySize: options.familySize || userContext.familySize,
+        // Do not seed family size from DB/profile for chat recommendations.
+        // The current user prompt must drive this value.
+        familySize: options.familySize,
         budget: options.budget,
       })
 
-      // Prefer prompt-extracted budget and family size over profile so the user's current message drives recommendations
+      // Prompt-first context: only use prompt/options for family size and budget.
       const context: RecommendationContext = {
         ...userContext,
         role: options.role || userContext.role,
-        familySize: queryIntent.familySize ?? options.familySize ?? userContext.familySize,
+        familySize: queryIntent.familySize ?? options.familySize,
         budget: queryIntent.budget ?? options.budget,
         threadId,
       }
@@ -1324,6 +1377,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
         message,
         history: historyMessages,
       })
+      const sanitizedResponse = this.sanitizeAssistantResponse(response)
 
       await this.saveMessageToThread(threadId, {
         role: 'user',
@@ -1333,7 +1387,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
 
       await this.saveMessageToThread(threadId, {
         role: 'assistant',
-        content: response,
+        content: sanitizedResponse,
         timestamp: new Date(),
       }, userId)
 
@@ -1348,7 +1402,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
 
       return {
         success: true,
-        message: response,
+        message: sanitizedResponse,
         threadId,
         products: productsForFrontend,
       }

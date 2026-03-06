@@ -10,6 +10,7 @@ export interface UserPreferencesData {
   role?: string  // parent, student, professional, senior, other
   dietaryRestrictions?: string[]
   cuisinePreferences?: string[]  // Maps to preferred_categories
+  preferredCategories?: string[] // Backward-compatible alias from some clients
   budgetRange?: string
   shoppingFrequency?: string
   cookingFrequency?: string
@@ -50,8 +51,8 @@ export class UserPreferencesService {
         family_size: preferences.familySize,
         role: preferences.role?.toLowerCase(),
         dietary_restrictions: preferences.dietaryRestrictions || [],
-        preferred_categories: preferences.cuisinePreferences || [],
-        cuisine_preferences: preferences.cuisinePreferences || [],
+        preferred_categories: preferences.cuisinePreferences || preferences.preferredCategories || [],
+        cuisine_preferences: preferences.cuisinePreferences || preferences.preferredCategories || [],
         budget_range: preferences.budgetRange,
         shopping_frequency: preferences.shoppingFrequency,
         cooking_frequency: preferences.cookingFrequency,

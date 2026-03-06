@@ -477,7 +477,7 @@ export class AIController {
    */
   getSupplierProductRecommendations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { message } = req.body
+      const { message, familySize, budget, mealType, budgetMode } = req.body
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({
@@ -535,7 +535,13 @@ export class AIController {
       const result = await this.aiService.chatWithSupplierProducts(
         message,
         supplierProducts,
-        userId
+        userId,
+        {
+          familySize: typeof familySize === 'number' ? familySize : undefined,
+          budget: typeof budget === 'number' ? budget : undefined,
+          mealType: mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'all' ? mealType : undefined,
+          budgetMode: budgetMode === 'combined' || budgetMode === 'per_meal' ? budgetMode : undefined,
+        }
       )
 
       if (result.success) {

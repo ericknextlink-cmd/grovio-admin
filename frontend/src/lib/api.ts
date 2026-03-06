@@ -520,5 +520,5 @@ export const aiApi = {
         deliberationReason?: string
         isInFinalList?: boolean
       }>
-    }>('/api/ai/recommendations', { message }),
+    }>('/api/ai/supplier-recommendations', { message }),
 }

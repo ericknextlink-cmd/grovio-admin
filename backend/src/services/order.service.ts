@@ -322,7 +322,12 @@ export class OrderService {
       const orderNumber = this.pdfService.generateOrderId()
       const invoiceNumber = this.pdfService.generateInvoiceNumber()
 
-      // 5. Create confirmed order
+      // 5. Create confirmed order (payment_method must match DB CHECK: use channel or 'paystack')
+      const allowedMethods = ['card', 'mobile_money', 'bank_transfer', 'bank', 'ussd', 'qr', 'eft']
+      const rawChannel = (paymentData.channel ?? (paymentData as { authorization?: { channel?: string } }).authorization?.channel) as string | undefined
+      const channel = rawChannel?.toLowerCase().replace(/-/g, '_')
+      const paymentMethod = channel && allowedMethods.includes(channel) ? channel : 'paystack'
+
       const { data: order, error: orderError } = await this.supabase
         .from('orders')
         .insert({
@@ -335,7 +340,7 @@ export class OrderService {
           credits: pendingOrder.credits,
           total_amount: pendingOrder.total_amount,
           currency: 'GHS',
-          payment_method: 'paystack',
+          payment_method: paymentMethod,
           payment_status: 'paid',
           payment_reference: paymentReference,
           payment_access_code: pendingOrder.payment_access_code,
@@ -829,6 +834,147 @@ export class OrderService {
         success: false,
         status: 'unknown',
         error: error instanceof Error ? error.message : 'Failed to check status',
+      }
+    }
+  }
+
+  /**
+   * Get all orders for admin (live DB)
+   */
+  async getAdminOrders(options: { page?: number; limit?: number; status?: string } = {}): Promise<{
+    success: boolean
+    data?: unknown[]
+    pagination?: { page: number; limit: number; total: number; totalPages: number }
+    error?: string
+  }> {
+    try {
+      const { page = 1, limit = 50, status } = options
+      const offset = (page - 1) * limit
+
+      let query = this.supabase
+        .from('orders')
+        .select('*, order_items(*)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+
+      if (status) {
+        query = query.eq('status', status)
+      }
+
+      const { data: orders, error, count } = await query.range(offset, offset + limit - 1)
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      const list = orders || []
+      const userIds = [...new Set(list.map((o: { user_id: string }) => o.user_id).filter(Boolean))]
+      let usersMap: Record<string, { email?: string; first_name?: string; last_name?: string }> = {}
+
+      if (userIds.length > 0) {
+        const { data: users } = await this.supabase
+          .from('users')
+          .select('id, email, first_name, last_name')
+          .in('id', userIds)
+        usersMap = (users || []).reduce((acc, u) => {
+          acc[u.id] = { email: u.email, first_name: u.first_name, last_name: u.last_name }
+          return acc
+        }, {} as Record<string, { email?: string; first_name?: string; last_name?: string }>)
+      }
+
+      const rows = list.map((o: Record<string, unknown>) => {
+        const user = usersMap[o.user_id as string]
+        const name = user ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email : ''
+        const addr = o.delivery_address as { street?: string; city?: string; region?: string; phone?: string } | null
+        const deliveryStr = addr ? [addr.street, addr.city, addr.region].filter(Boolean).join(', ') : ''
+        return {
+          ...o,
+          customerName: name || '—',
+          customerEmail: (user?.email as string) || '—',
+          customerPhone: addr?.phone || '—',
+          deliveryAddress: deliveryStr || '—',
+          items: (o.order_items as unknown[]) || [],
+        }
+      })
+
+      return {
+        success: true,
+        data: rows,
+        pagination: {
+          page,
+          limit,
+          total: count ?? 0,
+          totalPages: Math.ceil((count ?? 0) / limit),
+        },
+      }
+    } catch (err) {
+      console.error('Get admin orders error:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to fetch orders',
+      }
+    }
+  }
+
+  /**
+   * Get all payment transactions for admin (live DB)
+   */
+  async getAdminPaymentTransactions(options: { page?: number; limit?: number; status?: string } = {}): Promise<{
+    success: boolean
+    data?: unknown[]
+    pagination?: { page: number; limit: number; total: number; totalPages: number }
+    error?: string
+  }> {
+    try {
+      const { page = 1, limit = 50, status } = options
+      const offset = (page - 1) * limit
+
+      let query = this.supabase
+        .from('payment_transactions')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+
+      if (status) {
+        const mapped = status === 'completed' ? 'success' : status
+        query = query.eq('status', mapped)
+      }
+
+      const { data: rows, error, count } = await query.range(offset, offset + limit - 1)
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      const list = (rows || []).map((t: Record<string, unknown>) => ({
+        id: t.id,
+        orderId: t.order_id || t.pending_order_id || '—',
+        customerName: '—',
+        customerEmail: (t.customer_email as string) || '—',
+        amount: parseFloat(String(t.amount ?? 0)),
+        currency: (t.currency as string) || 'GHS',
+        paymentMethod: (t.channel as string) || (t.payment_method as string) || 'paystack',
+        status: t.status === 'success' ? 'completed' : (t.status === 'failed' ? 'failed' : (t.status as string)),
+        transactionId: (t.provider_reference as string) || (t.transaction_id as string),
+        paymentReference: (t.provider_reference as string) || '',
+        notes: null,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+      }))
+
+      return {
+        success: true,
+        data: list,
+        pagination: {
+          page,
+          limit,
+          total: count ?? 0,
+          totalPages: Math.ceil((count ?? 0) / limit),
+        },
+      }
+    } catch (err) {
+      console.error('Get admin transactions error:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to fetch transactions',
       }
     }
   }

@@ -148,16 +148,142 @@ export class VoucherService {
       })
       .map((r) => {
         const v = (Array.isArray(r.discount_vouchers) ? r.discount_vouchers[0] : r.discount_vouchers)!
-        return {
-          id: r.id,
-          voucherId: v.id,
-          code: v.code,
-          discountType: v.discount_type,
-          discountValue: Number(v.discount_value),
-          description: v.description ?? null,
-          imageType: v.image_type ?? null,
-          validUntil: v.valid_until ?? null,
-        }
+    return {
+      id: r.id,
+      voucherId: v.id,
+      code: v.code,
+      discountType: v.discount_type,
+      discountValue: Number(v.discount_value),
+      description: v.description ?? null,
+      imageType: v.image_type ?? null,
+      validUntil: v.valid_until ?? null,
+    }
+  })
+  }
+
+  /**
+   * Admin: create a new voucher (unique code).
+   */
+  async createVoucher(params: {
+    code: string
+    discount_type: 'percentage' | 'fixed'
+    discount_value: number
+    description?: string
+    image_type?: 'regular' | 'nss'
+    min_order_amount?: number
+    valid_from?: string
+    valid_until?: string
+    max_uses?: number
+  }): Promise<{ id: string; code: string } | { error: string }> {
+    const code = params.code.trim().toUpperCase()
+    if (!code) return { error: 'Code is required' }
+    if (params.discount_value <= 0) return { error: 'Discount value must be positive' }
+    if (params.discount_type === 'percentage' && params.discount_value > 100) return { error: 'Percentage cannot exceed 100' }
+
+    const { data, error } = await this.supabase
+      .from('discount_vouchers')
+      .insert({
+        code,
+        discount_type: params.discount_type,
+        discount_value: params.discount_value,
+        description: params.description ?? null,
+        image_type: params.image_type ?? null,
+        min_order_amount: params.min_order_amount ?? 0,
+        valid_from: params.valid_from ?? new Date().toISOString(),
+        valid_until: params.valid_until ?? null,
+        max_uses: params.max_uses ?? null,
       })
+      .select('id, code')
+      .single()
+
+    if (error) {
+      if (error.code === '23505') return { error: 'Voucher code already exists' }
+      return { error: error.message }
+    }
+    return { id: data.id, code: data.code }
+  }
+
+  /**
+   * Admin: list all vouchers.
+   */
+  async listAllVouchers(): Promise<Array<{
+    id: string
+    code: string
+    discount_type: string
+    discount_value: number
+    description: string | null
+    image_type: string | null
+    min_order_amount: number
+    valid_from: string
+    valid_until: string | null
+    max_uses: number | null
+    use_count: number
+    created_at: string
+  }>> {
+    const { data, error } = await this.supabase
+      .from('discount_vouchers')
+      .select('id, code, discount_type, discount_value, description, image_type, min_order_amount, valid_from, valid_until, max_uses, use_count, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error || !data) return []
+    return data.map((r) => ({
+      id: r.id,
+      code: r.code,
+      discount_type: r.discount_type,
+      discount_value: Number(r.discount_value),
+      description: r.description ?? null,
+      image_type: r.image_type ?? null,
+      min_order_amount: Number(r.min_order_amount ?? 0),
+      valid_from: r.valid_from,
+      valid_until: r.valid_until ?? null,
+      max_uses: r.max_uses ?? null,
+      use_count: Number(r.use_count ?? 0),
+      created_at: r.created_at,
+    }))
+  }
+
+  /**
+   * Admin: assign a voucher to a user (insert user_vouchers).
+   */
+  async assignToUser(userId: string, voucherId: string): Promise<{ ok: true } | { error: string }> {
+    if (!userId || !voucherId) return { error: 'User ID and voucher ID are required' }
+    const { error } = await this.supabase
+      .from('user_vouchers')
+      .insert({ user_id: userId, voucher_id: voucherId })
+    if (error) {
+      if (error.code === '23505') return { error: 'Voucher already assigned to this user' }
+      if (error.code === '23503') return { error: 'Invalid user or voucher' }
+      return { error: error.message }
+    }
+    return { ok: true }
+  }
+
+  /**
+   * Admin: get voucher by id.
+   */
+  async getVoucherById(id: string): Promise<{
+    id: string
+    code: string
+    discount_type: string
+    discount_value: number
+    description: string | null
+    image_type: string | null
+    valid_until: string | null
+  } | null> {
+    const { data, error } = await this.supabase
+      .from('discount_vouchers')
+      .select('id, code, discount_type, discount_value, description, image_type, valid_until')
+      .eq('id', id)
+      .maybeSingle()
+    if (error || !data) return null
+    return {
+      id: data.id,
+      code: data.code,
+      discount_type: data.discount_type,
+      discount_value: Number(data.discount_value),
+      description: data.description ?? null,
+      image_type: data.image_type ?? null,
+      valid_until: data.valid_until ?? null,
+    }
   }
 }

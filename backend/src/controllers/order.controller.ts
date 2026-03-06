@@ -510,6 +510,76 @@ export class OrderController {
   }
 
   /**
+   * Get all orders (Admin only, live DB)
+   */
+  getAdminOrders = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { page, limit, status } = req.query
+      const result = await this.orderService.getAdminOrders({
+        page: page ? parseInt(String(page), 10) : 1,
+        limit: limit ? parseInt(String(limit), 10) : 50,
+        status: status as string,
+      })
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Orders retrieved successfully',
+          data: result.data,
+          pagination: result.pagination,
+        })
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'Failed to fetch orders',
+          errors: [result.error || 'Fetch failed'],
+        } as ApiResponse)
+      }
+    } catch (error) {
+      console.error('Get admin orders controller error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        errors: ['Failed to fetch orders'],
+      } as ApiResponse)
+    }
+  }
+
+  /**
+   * Get all payment transactions (Admin only, live DB)
+   */
+  getAdminPaymentTransactions = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { page, limit, status } = req.query
+      const result = await this.orderService.getAdminPaymentTransactions({
+        page: page ? parseInt(String(page), 10) : 1,
+        limit: limit ? parseInt(String(limit), 10) : 50,
+        status: status as string,
+      })
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Transactions retrieved successfully',
+          data: result.data,
+          pagination: result.pagination,
+        })
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'Failed to fetch transactions',
+          errors: [result.error || 'Fetch failed'],
+        } as ApiResponse)
+      }
+    } catch (error) {
+      console.error('Get admin transactions controller error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        errors: ['Failed to fetch transactions'],
+      } as ApiResponse)
+    }
+  }
+
+  /**
    * Get order statistics (Admin only)
    */
   getOrderStats = async (req: Request, res: Response): Promise<void> => {

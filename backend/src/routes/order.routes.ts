@@ -205,11 +205,18 @@ router.post('/pending/:pendingOrderId/cancel', pendingOrderValidation, orderCont
 router.use(authenticateAdmin)
 
 /**
- * @route   PUT /api/orders/:id/status
- * @desc    Update order status (Admin only)
+ * @route   GET /api/orders/admin/orders
+ * @desc    List all orders (Admin only, live DB)
  * @access  Admin
  */
-router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus)
+router.get('/admin/orders', orderController.getAdminOrders)
+
+/**
+ * @route   GET /api/orders/admin/transactions
+ * @desc    List all payment transactions (Admin only, live DB)
+ * @access  Admin
+ */
+router.get('/admin/transactions', orderController.getAdminPaymentTransactions)
 
 /**
  * @route   GET /api/orders/admin/stats
@@ -217,6 +224,13 @@ router.put('/:id/status', updateStatusValidation, orderController.updateOrderSta
  * @access  Admin
  */
 router.get('/admin/stats', orderController.getOrderStats)
+
+/**
+ * @route   PUT /api/orders/:id/status
+ * @desc    Update order status (Admin only)
+ * @access  Admin
+ */
+router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus)
 
 export { router as orderRoutes }
 

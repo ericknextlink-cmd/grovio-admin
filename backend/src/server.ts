@@ -12,6 +12,7 @@ import { accountRoutes } from './routes/account.routes'
 import { profileRoutes } from './routes/profile.routes'
 import { otpRoutes } from './routes/otp.routes'
 import { adminRoutes } from './routes/admin.routes'
+import { adminVoucherRoutes } from './routes/admin-voucher.routes'
 import { productsRoutes } from './routes/products.routes'
 import { categoriesRoutes } from './routes/categories.routes'
 import { dashboardRoutes } from './routes/dashboard.routes'
@@ -190,6 +191,7 @@ app.use('/api/account', accountRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/otp', otpRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/admin/vouchers', adminVoucherRoutes)
 app.use('/api/products', productsRoutes)
 app.use('/api/categories', categoriesRoutes)
 app.use('/api/dashboard', dashboardRoutes)

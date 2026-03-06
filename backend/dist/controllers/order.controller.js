@@ -467,6 +467,78 @@ class OrderController {
             }
         };
         /**
+         * Get all orders (Admin only, live DB)
+         */
+        this.getAdminOrders = async (req, res) => {
+            try {
+                const { page, limit, status } = req.query;
+                const result = await this.orderService.getAdminOrders({
+                    page: page ? parseInt(String(page), 10) : 1,
+                    limit: limit ? parseInt(String(limit), 10) : 50,
+                    status: status,
+                });
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'Orders retrieved successfully',
+                        data: result.data,
+                        pagination: result.pagination,
+                    });
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: result.error || 'Failed to fetch orders',
+                        errors: [result.error || 'Fetch failed'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Get admin orders controller error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Failed to fetch orders'],
+                });
+            }
+        };
+        /**
+         * Get all payment transactions (Admin only, live DB)
+         */
+        this.getAdminPaymentTransactions = async (req, res) => {
+            try {
+                const { page, limit, status } = req.query;
+                const result = await this.orderService.getAdminPaymentTransactions({
+                    page: page ? parseInt(String(page), 10) : 1,
+                    limit: limit ? parseInt(String(limit), 10) : 50,
+                    status: status,
+                });
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'Transactions retrieved successfully',
+                        data: result.data,
+                        pagination: result.pagination,
+                    });
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: result.error || 'Failed to fetch transactions',
+                        errors: [result.error || 'Fetch failed'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Get admin transactions controller error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Failed to fetch transactions'],
+                });
+            }
+        };
+        /**
          * Get order statistics (Admin only)
          */
         this.getOrderStats = async (req, res) => {

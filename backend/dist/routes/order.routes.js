@@ -186,14 +186,26 @@ router.post('/pending/:pendingOrderId/cancel', pendingOrderValidation, orderCont
 // Admin routes
 router.use(adminAuth_middleware_1.authenticateAdmin);
 /**
- * @route   PUT /api/orders/:id/status
- * @desc    Update order status (Admin only)
+ * @route   GET /api/orders/admin/orders
+ * @desc    List all orders (Admin only, live DB)
  * @access  Admin
  */
-router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus);
+router.get('/admin/orders', orderController.getAdminOrders);
+/**
+ * @route   GET /api/orders/admin/transactions
+ * @desc    List all payment transactions (Admin only, live DB)
+ * @access  Admin
+ */
+router.get('/admin/transactions', orderController.getAdminPaymentTransactions);
 /**
  * @route   GET /api/orders/admin/stats
  * @desc    Get order statistics (Admin only)
  * @access  Admin
  */
 router.get('/admin/stats', orderController.getOrderStats);
+/**
+ * @route   PUT /api/orders/:id/status
+ * @desc    Update order status (Admin only)
+ * @access  Admin
+ */
+router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus);

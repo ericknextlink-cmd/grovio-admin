@@ -121,19 +121,33 @@ export class DashboardService {
     try {
       const activities: RecentActivity[] = []
 
-      // Get recent orders
+      // Get recent orders (orders have user_id, not customer_name)
       const { data: recentOrders } = await this.supabase
         .from('orders')
-        .select('id, customer_name, status, total_amount, created_at')
+        .select('id, user_id, status, total_amount, created_at')
         .order('created_at', { ascending: false })
         .limit(Math.floor(limit / 2))
 
-      recentOrders?.forEach(order => {
+      const userIds = (recentOrders || []).map((o: { user_id: string }) => o.user_id).filter(Boolean)
+      let usersMap: Record<string, string> = {}
+      if (userIds.length > 0) {
+        const { data: users } = await this.supabase
+          .from('users')
+          .select('id, email, first_name, last_name')
+          .in('id', userIds)
+        usersMap = (users || []).reduce((acc: Record<string, string>, u: { id: string; email?: string; first_name?: string; last_name?: string }) => {
+          const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Customer'
+          acc[u.id] = name
+          return acc
+        }, {})
+      }
+
+      recentOrders?.forEach((order: { id: string; user_id: string; status: string; total_amount: number; created_at: string }) => {
         activities.push({
           id: order.id,
           type: 'order',
           action: 'created',
-          description: `New order from ${order.customer_name} for ₵${order.total_amount}`,
+          description: `New order from ${usersMap[order.user_id] || 'Customer'} for GHS ${order.total_amount}`,
           timestamp: order.created_at
         })
       })
@@ -396,21 +410,21 @@ export class DashboardService {
 
   private async getTransactionStats() {
     const { count: totalTransactions } = await this.supabase
-      .from('transactions')
+      .from('payment_transactions')
       .select('*', { count: 'exact', head: true })
 
     const { count: pendingTransactions } = await this.supabase
-      .from('transactions')
+      .from('payment_transactions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending')
 
     const { count: completedTransactions } = await this.supabase
-      .from('transactions')
+      .from('payment_transactions')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'completed')
+      .eq('status', 'success')
 
     const { count: failedTransactions } = await this.supabase
-      .from('transactions')
+      .from('payment_transactions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'failed')
 

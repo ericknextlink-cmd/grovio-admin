@@ -318,6 +318,49 @@ export class OrderService {
         }
       }
 
+      // 3b. Re-check right before creating (another request may have converted in the meantime)
+      const { data: recheckPending } = await this.supabase
+        .from('pending_orders')
+        .select('converted_to_order_id')
+        .eq('payment_reference', paymentReference)
+        .single()
+      if (recheckPending?.converted_to_order_id) {
+        const { data: existingOrder } = await this.supabase
+          .from('orders')
+          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+          .eq('id', recheckPending.converted_to_order_id)
+          .single()
+        if (existingOrder) {
+          return {
+            success: true,
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.order_id,
+            invoiceNumber: existingOrder.invoice_number,
+            pdfUrl: existingOrder.invoice_pdf_url,
+            imageUrl: existingOrder.invoice_image_url,
+          }
+        }
+      }
+
+      // 3c. Order may already exist for this reference (e.g. duplicate callback or race)
+      const { data: existingByRef } = await this.supabase
+        .from('orders')
+        .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+        .eq('payment_reference', paymentReference)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (existingByRef) {
+        return {
+          success: true,
+          orderId: existingByRef.id,
+          orderNumber: existingByRef.order_id,
+          invoiceNumber: existingByRef.invoice_number,
+          pdfUrl: existingByRef.invoice_pdf_url,
+          imageUrl: existingByRef.invoice_image_url,
+        }
+      }
+
       // 4. Generate order and invoice numbers
       const orderNumber = this.pdfService.generateOrderId()
       const invoiceNumber = this.pdfService.generateInvoiceNumber()
@@ -357,6 +400,24 @@ export class OrderService {
         .single()
 
       if (orderError) {
+        // Idempotent: another request already created the order (unique on payment_reference)
+        if (orderError.code === '23505') {
+          const { data: existingOrder } = await this.supabase
+            .from('orders')
+            .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+            .eq('payment_reference', paymentReference)
+            .maybeSingle()
+          if (existingOrder) {
+            return {
+              success: true,
+              orderId: existingOrder.id,
+              orderNumber: existingOrder.order_id,
+              invoiceNumber: existingOrder.invoice_number,
+              pdfUrl: existingOrder.invoice_pdf_url,
+              imageUrl: existingOrder.invoice_image_url,
+            }
+          }
+        }
         console.error('Failed to create order:', orderError)
         const msg = orderError.message || 'Failed to create order'
         return {

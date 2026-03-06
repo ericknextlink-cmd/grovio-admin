@@ -235,7 +235,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
         </div>
 
         {/* Transactions */}
-        <div className="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gr,ay-200 dark:border-gray-700">
+        <div className="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Transactions
           </h3>

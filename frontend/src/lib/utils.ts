@@ -52,12 +52,6 @@ export function getOrderStatusColor(status: string): string {
   return statusColors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
 }
 
-export function getPaymentMethodIcon(method: string): string {
-  const methodIcons: Record<string, string> = {
-    cash: '💵',
-    mobile_money: '📱',
-    card: '💳',
-    bank_transfer: '🏦',
-  }
-  return methodIcons[method] || '💰'
+export function getPaymentMethodIcon(_method: string): string {
+  return ''
 }

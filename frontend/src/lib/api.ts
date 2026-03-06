@@ -58,6 +58,11 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
   if (endpoint.includes('/api/ai-products')) {
     return true
   }
+
+  // Admin orders/transactions list (GET)
+  if (endpoint.includes('/api/orders/admin')) {
+    return true
+  }
   
   // Write operations on products, categories, etc. require admin auth
   const writeMethods = ['POST', 'PUT', 'PATCH', 'DELETE']
@@ -356,6 +361,16 @@ export const dashboardApi = {
   getAlerts: (threshold?: number) => apiClient.get<any>('/api/dashboard/alerts', { threshold }),
 }
 
+// Admin orders & transactions (live DB)
+export const ordersApi = {
+  getAdminOrders: (params?: { page?: number; limit?: number; status?: string }) =>
+    apiClient.get<{ data: unknown[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/api/orders/admin/orders', params),
+  getAdminTransactions: (params?: { page?: number; limit?: number; status?: string }) =>
+    apiClient.get<{ data: unknown[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/api/orders/admin/transactions', params),
+  updateOrderStatus: (orderId: string, status: string, reason?: string) =>
+    apiClient.put<any>(`/api/orders/${orderId}/status`, { status, reason }),
+}
+
 // Categories API
 export const categoriesApi = {
   getAll: (params?: {
@@ -381,6 +396,62 @@ export const bundlesApi = {
   generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number; productsPerBundle?: number }) =>
     apiClient.post<any>('/api/bundles/generate', body),
   refresh: () => apiClient.post<any>('/api/bundles/refresh'),
+}
+
+// Admin vouchers (create, list, assign, preview image)
+export const adminVouchersApi = {
+  list: () => apiClient.get<Array<{
+    id: string
+    code: string
+    discount_type: string
+    discount_value: number
+    description: string | null
+    image_type: string | null
+    min_order_amount: number
+    valid_from: string
+    valid_until: string | null
+    max_uses: number | null
+    use_count: number
+    created_at: string
+  }>>('/api/admin/vouchers'),
+
+  create: (body: {
+    code: string
+    discount_type: 'percentage' | 'fixed'
+    discount_value: number
+    description?: string
+    image_type?: 'regular' | 'nss'
+    min_order_amount?: number
+    valid_until?: string
+    max_uses?: number
+  }) => apiClient.post<{ id: string; code: string }>('/api/admin/vouchers', body),
+
+  assign: (userId: string, voucherId: string) =>
+    apiClient.post<{ ok: boolean }>('/api/admin/vouchers/assign', { userId, voucherId }),
+
+  listUsers: () => apiClient.get<Array<{ id: string; email: string; name: string }>>('/api/admin/vouchers/users'),
+
+  getPreviewImageUrl: (voucherId: string, imageType: 'regular' | 'nss', userName?: string, expiryText?: string): string => {
+    const params = new URLSearchParams({ imageType })
+    if (userName) params.set('userName', userName)
+    if (expiryText) params.set('expiryText', expiryText)
+    return `${API_BASE_URL}/api/admin/vouchers/${voucherId}/preview-image?${params.toString()}`
+  },
+
+  fetchPreviewImageBlobUrl: async (voucherId: string, imageType: 'regular' | 'nss', userName?: string, expiryText?: string): Promise<string> => {
+    const params = new URLSearchParams({ imageType })
+    if (userName) params.set('userName', userName)
+    if (expiryText) params.set('expiryText', expiryText)
+    const url = `${API_BASE_URL}/api/admin/vouchers/${voucherId}/preview-image?${params.toString()}`
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('admin_token') || document.cookie.match(/admin_token=([^;]+)/)?.[1]) : ''
+    const res = await fetch(url, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error('Failed to load preview image')
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  },
 }
 
 // Pricing API (admin)

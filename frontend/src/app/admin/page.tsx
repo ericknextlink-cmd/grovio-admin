@@ -57,18 +57,40 @@ export default function AdminDashboard() {
   const [editingProduct, setEditingProduct] = useState<GroceryProduct | undefined>()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
-  // Fetch dashboard stats from API
+  // Fetch dashboard stats from API (live DB only; no fallback)
   useEffect(() => {
     const fetchStats = async () => {
       setStatsLoading(true)
       try {
         const response = await dashboardApi.getStats()
-        
         if (response.success && response.data && typeof response.data === 'object') {
-          setStats((prev) => ({ ...prev, ...response.data }))
+          const d = response.data as Record<string, unknown>
+          setStats({
+            totalProducts: Number(d.totalProducts ?? 0),
+            inStock: Number(d.inStockProducts ?? 0),
+            outOfStock: Number(d.outOfStockProducts ?? 0),
+            categories: Number(d.totalCategories ?? 0),
+            totalOrders: Number(d.totalOrders ?? 0),
+            pendingOrders: Number(d.pendingOrders ?? 0),
+            totalRevenue: Number(d.totalRevenue ?? 0),
+            totalTransactions: Number(d.totalTransactions ?? 0),
+            pendingTransactions: Number(d.pendingTransactions ?? 0),
+            completedTransactions: Number(d.completedTransactions ?? 0),
+          })
         }
       } catch {
-        // Keep existing stats on error
+        setStats({
+          totalProducts: 0,
+          inStock: 0,
+          outOfStock: 0,
+          categories: 0,
+          totalOrders: 0,
+          pendingOrders: 0,
+          totalRevenue: 0,
+          totalTransactions: 0,
+          pendingTransactions: 0,
+          completedTransactions: 0,
+        })
       } finally {
         setStatsLoading(false)
       }

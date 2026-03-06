@@ -1,33 +1,79 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useAdminStore } from '@/store/adminStore'
+import React, { useState, useEffect } from 'react'
 import OrdersTable from '@/components/OrdersTable'
 import AdminSidebar from '@/components/AdminSidebar'
 import { Order, OrderStatus } from '@/types/grocery'
 import { X } from 'lucide-react'
 import Image from 'next/image'
+import { ordersApi } from '@/lib/api'
+import { toast } from 'sonner'
+
+function mapRowToOrder(row: Record<string, unknown>): Order {
+  const items = (row.items as Record<string, unknown>[]) || []
+  return {
+    id: (row.id as string) || '',
+    customerName: (row.customerName as string) || '—',
+    customerEmail: (row.customerEmail as string) || '—',
+    customerPhone: (row.customerPhone as string) || '—',
+    items: items.map((item: Record<string, unknown>) => ({
+      productId: (item.product_id as string) || '',
+      productName: (item.product_name as string) || '',
+      productImage: (item.product_image as string) || '',
+      quantity: Number(item.quantity) || 0,
+      unitPrice: Number(item.unit_price) || 0,
+      totalPrice: Number(item.total_price) || 0,
+    })),
+    totalAmount: Number(row.total_amount) || 0,
+    currency: (row.currency as string) || 'GHS',
+    status: (row.status as OrderStatus) || 'pending',
+    paymentMethod: ((row.payment_method as string) || 'paystack').replace(/-/g, '_') as Order['paymentMethod'],
+    deliveryAddress: (row.deliveryAddress as string) || '—',
+    notes: (row.delivery_notes as string) || undefined,
+    createdAt: row.created_at ? new Date(row.created_at as string) : new Date(),
+    updatedAt: row.updated_at ? new Date(row.updated_at as string) : new Date(),
+  }
+}
 
 export default function OrdersPage() {
-  const {
-    orders,
-    updateOrder,
-    deleteOrder,
-  } = useAdminStore()
-
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
+  useEffect(() => {
+    let cancelled = false
+    const fetchOrders = async () => {
+      setLoading(true)
+      try {
+        const res = await ordersApi.getAdminOrders({ limit: 200 })
+        if (cancelled) return
+        if (res.success && res.data) {
+          const list = Array.isArray(res.data) ? res.data : []
+          setOrders(list.map((row: Record<string, unknown>) => mapRowToOrder(row)))
+        } else {
+          setOrders([])
+        }
+      } catch {
+        if (!cancelled) setOrders([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    fetchOrders()
+    return () => { cancelled = true }
+  }, [])
+
   const handleEditOrder = (order: Order) => {
     setSelectedOrder(order)
     setIsEditModalOpen(true)
   }
 
-  const handleDeleteOrder = (order: Order) => {
-    deleteOrder(order.id)
+  const handleDeleteOrder = (_order: Order) => {
+    toast.info('Order deletion is not available; cancel the order instead.')
   }
 
   const handleViewOrder = (order: Order) => {
@@ -35,8 +81,19 @@ export default function OrdersPage() {
     setIsViewModalOpen(true)
   }
 
-  const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
-    updateOrder(orderId, { status })
+  const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    try {
+      const res = await ordersApi.updateOrderStatus(orderId, status)
+      if (res.success) {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, updatedAt: new Date() } : o))
+        if (selectedOrder?.id === orderId) setSelectedOrder(prev => prev ? { ...prev, status } : null)
+        toast.success('Order status updated')
+      } else {
+        toast.error(res.message || 'Failed to update status')
+      }
+    } catch {
+      toast.error('Failed to update order status')
+    }
   }
 
   return (
@@ -62,14 +119,20 @@ export default function OrdersPage() {
 
         {/* Page Content */}
         <div className="p-6">
-          <OrdersTable
-            orders={orders}
-            onEdit={handleEditOrder}
-            onDelete={handleDeleteOrder}
-            onView={handleViewOrder}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-          />
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-gray-600 dark:text-gray-400">Loading orders...</p>
+            </div>
+          ) : (
+            <OrdersTable
+              orders={orders}
+              onEdit={handleEditOrder}
+              onDelete={handleDeleteOrder}
+              onView={handleViewOrder}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
+          )}
         </div>
       </div>
 
@@ -219,19 +282,6 @@ export default function OrdersPage() {
                   <option value="delivered">Delivered</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-              </div>
-
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Notes
-                </label>
-                <textarea
-                  value={selectedOrder.notes || ''}
-                  onChange={(e) => updateOrder(selectedOrder.id, { notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
-                  placeholder="Add order notes..."
-                />
               </div>
 
               {/* Actions */}

@@ -119,9 +119,30 @@ export class AIEnhancedService {
 
   private sanitizeAssistantResponse(text: string): string {
     return text
-      .replace(/^\s*Since your family size is\s*\d+[^.]*\.\s*/i, '')
-      .replace(/^\s*Since your family size is\s*[a-z]+[^.]*\.\s*/i, '')
+      // Handles variants like: "Since your family size is 1, ...",
+      // "Since your family size is **1**, ...", etc.
+      .replace(/^\s*Since your family size is\s*(?:\*\*)?\s*[\w\d]+\s*(?:\*\*)?\s*,?[^.]*\.\s*/i, '')
+      // If model starts with this clause and immediately continues (without period), trim to the first "Here's/Here is".
+      .replace(/^\s*Since your family size is[\s\S]{0,180}?(?=(Here(?:'|’)?s|Here is)\b)/i, '')
       .replace(/^\s*Since\b/i, 'Based on your request,')
+  }
+
+  private parseBudgetFromMessage(message: string, fallback?: number): number | undefined {
+    const text = String(message)
+    const patterns = [
+      /budget\s*(?:of|is|:)?\s*₵?\s*(\d+(?:\.\d+)?)/i,
+      /under\s*₵?\s*(\d+(?:\.\d+)?)/i,
+      /(?:₵|ghs?\s*)\s*(\d+(?:\.\d+)?)/i,
+      /(\d+(?:\.\d+)?)\s*(?:cedis?|ghs)\b/i,
+    ]
+    for (const p of patterns) {
+      const m = text.match(p)
+      if (m?.[1]) {
+        const n = parseFloat(m[1])
+        if (Number.isFinite(n) && n > 0) return n
+      }
+    }
+    return fallback
   }
 
   private getUserSupabaseClient(userToken?: string) {
@@ -223,8 +244,7 @@ export class AIEnhancedService {
     const categories: string[] = []
     const productTypes: string[] = []
 
-    const budgetMatch = message.match(/₵?\s*(\d+(?:\.\d+)?)/) || message.match(/(\d+(?:\.\d+)?)\s*cedis?/i)
-    const extractedBudget = budgetMatch ? parseFloat(budgetMatch[1]) : context.budget
+    const extractedBudget = this.parseBudgetFromMessage(message, context.budget)
 
     const familyMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|for\s+(?:a\s+)?family\s+of\s+(\d+)/i)
     const numberWords: Record<string, number> = {
@@ -886,11 +906,7 @@ export class AIEnhancedService {
             : undefined
           const familySize = options.familySize ?? messageFamilySize
 
-          const budgetMatch =
-            message.match(/(\d+(?:\.\d+)?)\s*cedis?/i) ||
-            message.match(/budget\s*(?:of|is)?\s*₵?\s*(\d+(?:\.\d+)?)/i) ||
-            message.match(/₵\s*(\d+(?:\.\d+)?)/i)
-          const messageBudget = budgetMatch ? parseFloat(budgetMatch[1]) : 0
+          const messageBudget = this.parseBudgetFromMessage(message, 0) ?? 0
           const budget = options.budget ?? messageBudget
           
           const context = {

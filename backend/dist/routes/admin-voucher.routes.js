@@ -53,6 +53,18 @@ const createVoucherValidation = [
     (0, express_validator_1.body)('max_uses').optional().isInt({ min: 1 }),
     validation_middleware_1.handleValidationErrors,
 ];
+const updateVoucherValidation = [
+    (0, express_validator_1.param)('id').isUUID(),
+    (0, express_validator_1.body)('code').optional().trim().notEmpty().isLength({ max: 50 }),
+    (0, express_validator_1.body)('discount_type').optional().isIn(['percentage', 'fixed']),
+    (0, express_validator_1.body)('discount_value').optional().isFloat({ min: 0.01 }),
+    (0, express_validator_1.body)('description').optional({ nullable: true }).trim().isLength({ max: 500 }),
+    (0, express_validator_1.body)('image_type').optional({ nullable: true }).isIn(['regular', 'nss']),
+    (0, express_validator_1.body)('min_order_amount').optional().isFloat({ min: 0 }),
+    (0, express_validator_1.body)('valid_until').optional({ nullable: true }).isISO8601(),
+    (0, express_validator_1.body)('max_uses').optional({ nullable: true }).isInt({ min: 1 }),
+    validation_middleware_1.handleValidationErrors,
+];
 const assignVoucherValidation = [
     (0, express_validator_1.body)('userId').trim().notEmpty(),
     (0, express_validator_1.body)('voucherId').trim().notEmpty().isUUID(),
@@ -60,6 +72,10 @@ const assignVoucherValidation = [
 ];
 router.get('/', adminVoucherController.listVouchers);
 router.post('/', createVoucherValidation, adminVoucherController.createVoucher);
+router.put('/:id', updateVoucherValidation, adminVoucherController.updateVoucher);
 router.post('/assign', assignVoucherValidation, adminVoucherController.assignVoucher);
 router.get('/users', adminVoucherController.listUsersForAssign);
+router.get('/assignments', adminVoucherController.listVoucherAssignments);
+router.delete('/assignments/:id', [(0, express_validator_1.param)('id').isUUID()], validation_middleware_1.handleValidationErrors, adminVoucherController.revokeVoucherAssignment);
+router.get('/templates', adminVoucherController.listVoucherTemplates);
 router.get('/:id/preview-image', [(0, express_validator_1.param)('id').isUUID()], validation_middleware_1.handleValidationErrors, adminVoucherController.previewVoucherImage);

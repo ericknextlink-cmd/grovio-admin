@@ -61,19 +61,82 @@ export class VoucherImageService {
   private supabase = createAdminClient()
   private templatesBucket = process.env.SUPABASE_STORAGE_BUCKET || 'invoices'
 
-  /** Template filenames in SUPABASE_STORAGE_BUCKET/templates/ (same bucket as invoice templates). */
-  private static readonly DEFAULT_TEMPLATE_FILES: Record<VoucherImageType, string> = {
-    regular: 'Voucher Orange template.png',
-    nss: 'Voucher Blue template.png',
+  /** Preferred template filenames in SUPABASE_STORAGE_BUCKET/templates/ (same bucket as invoice templates). */
+  private static readonly DEFAULT_TEMPLATE_FILES: Record<VoucherImageType, string[]> = {
+    regular: [
+      'Voucher Orange template.png',
+      'Voucher Orange Template.png',
+      'Voucher Orange.png',
+      'voucher orange template.png',
+      'voucher-orange-template.png',
+    ],
+    nss: [
+      'Voucher Blue template.png',
+      'Voucher Blue Template.png',
+      'Voucher Blue.png',
+      'voucher blue template.png',
+      'voucher-blue-template.png',
+    ],
+  }
+
+  private normalizeFilename(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/\.(png|jpg|jpeg|webp)$/i, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
   }
 
   /** Load from Supabase: bucket (SUPABASE_STORAGE_BUCKET), path templates/<filename> (no subfolders). */
   private async loadTemplateFromStorage(imageType: VoucherImageType): Promise<Buffer | null> {
-    const filename = VoucherImageService.DEFAULT_TEMPLATE_FILES[imageType]
-    const storagePath = `templates/${filename}`
+    const candidates = VoucherImageService.DEFAULT_TEMPLATE_FILES[imageType]
+
+    // 1) Try known candidate names first.
+    for (const filename of candidates) {
+      const storagePath = `templates/${filename}`
+      const { data, error } = await this.supabase.storage
+        .from(this.templatesBucket)
+        .download(storagePath)
+      if (!error && data) {
+        return Buffer.from(await data.arrayBuffer())
+      }
+    }
+
+    // 2) Fallback: list templates/ and fuzzy match by keywords.
+    const { data: listed, error: listErr } = await this.supabase.storage
+      .from(this.templatesBucket)
+      .list('templates', { limit: 200 })
+    if (listErr || !listed || listed.length === 0) return null
+
+    const allowedExt = /\.(png|jpg|jpeg|webp)$/i
+    const files = listed
+      .map((f) => f.name)
+      .filter((name) => allowedExt.test(name))
+
+    const pick = files.find((name) => {
+      const n = this.normalizeFilename(name)
+      if (imageType === 'regular') {
+        return n.includes('voucher') && n.includes('orange')
+      }
+      return n.includes('voucher') && (n.includes('blue') || n.includes('nss'))
+    })
+
+    if (!pick) return null
+
     const { data, error } = await this.supabase.storage
       .from(this.templatesBucket)
-      .download(storagePath)
+      .download(`templates/${pick}`)
+    if (error || !data) return null
+    return Buffer.from(await data.arrayBuffer())
+  }
+
+  /** Load exact template filename from Supabase templates/ */
+  private async loadTemplateByNameFromStorage(templateName: string): Promise<Buffer | null> {
+    const cleaned = templateName.replace(/^templates\//, '').trim()
+    if (!cleaned) return null
+    const { data, error } = await this.supabase.storage
+      .from(this.templatesBucket)
+      .download(`templates/${cleaned}`)
     if (error || !data) return null
     return Buffer.from(await data.arrayBuffer())
   }
@@ -84,10 +147,22 @@ export class VoucherImageService {
         ? process.env.VOUCHER_TEMPLATE_NSS_PATH
         : process.env.VOUCHER_TEMPLATE_REGULAR_PATH
     if (envPath && existsSync(envPath)) return envPath
-    const filename = VoucherImageService.DEFAULT_TEMPLATE_FILES[imageType]
-    const inVoucherFolder = path.join(process.cwd(), 'public', 'voucher-templates', filename)
+    const filenames = VoucherImageService.DEFAULT_TEMPLATE_FILES[imageType]
+    for (const filename of filenames) {
+      const inVoucherFolder = path.join(process.cwd(), 'public', 'voucher-templates', filename)
+      if (existsSync(inVoucherFolder)) return inVoucherFolder
+      const inPublic = path.join(process.cwd(), 'public', filename)
+      if (existsSync(inPublic)) return inPublic
+    }
+    return null
+  }
+
+  private getTemplatePathByName(templateName: string): string | null {
+    const cleaned = templateName.replace(/^templates\//, '').trim()
+    if (!cleaned) return null
+    const inVoucherFolder = path.join(process.cwd(), 'public', 'voucher-templates', cleaned)
     if (existsSync(inVoucherFolder)) return inVoucherFolder
-    const inPublic = path.join(process.cwd(), 'public', filename)
+    const inPublic = path.join(process.cwd(), 'public', cleaned)
     return existsSync(inPublic) ? inPublic : null
   }
 
@@ -197,6 +272,29 @@ export class VoucherImageService {
     return null
   }
 
+  private async loadTemplateBufferByName(templateName: string): Promise<Buffer | null> {
+    const fromStorage = await this.loadTemplateByNameFromStorage(templateName)
+    if (fromStorage && fromStorage.length > 0) return fromStorage
+    const filePath = this.getTemplatePathByName(templateName)
+    if (filePath) return fs.readFile(filePath)
+    return null
+  }
+
+  private async compose(templateBuffer: Buffer, options: VoucherImageOptions): Promise<Buffer> {
+    const image = sharp(templateBuffer)
+    const meta = await image.metadata()
+    const width = meta.width ?? 600
+    const height = meta.height ?? 400
+
+    const svg = await this.buildTextOverlaySvg(width, height, options)
+    const svgBuffer = Buffer.from(svg)
+
+    return image
+      .composite([{ input: svgBuffer, top: 0, left: 0 }])
+      .png()
+      .toBuffer()
+  }
+
   /**
    * Generate a voucher image with dynamic text overlaid.
    * Returns PNG buffer or null if no template is configured.
@@ -207,21 +305,17 @@ export class VoucherImageService {
   ): Promise<Buffer | null> {
     const templateBuffer = await this.loadTemplateBuffer(imageType)
     if (!templateBuffer) return null
+    return this.compose(templateBuffer, options)
+  }
 
-    const image = sharp(templateBuffer)
-    const meta = await image.metadata()
-    const width = meta.width ?? 600
-    const height = meta.height ?? 400
-
-    const svg = await this.buildTextOverlaySvg(width, height, options)
-    const svgBuffer = Buffer.from(svg)
-
-    const composed = await image
-      .composite([{ input: svgBuffer, top: 0, left: 0 }])
-      .png()
-      .toBuffer()
-
-    return composed
+  /** Generate using exact template filename from templates/ directory. */
+  async generateFromTemplateName(
+    templateName: string,
+    options: VoucherImageOptions
+  ): Promise<Buffer | null> {
+    const templateBuffer = await this.loadTemplateBufferByName(templateName)
+    if (!templateBuffer) return null
+    return this.compose(templateBuffer, options)
   }
 }
 

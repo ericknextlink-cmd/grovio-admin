@@ -175,6 +175,66 @@ class VoucherService {
         }));
     }
     /**
+     * Admin: update an existing voucher.
+     */
+    async updateVoucher(id, params) {
+        if (!id)
+            return { error: 'Voucher ID is required' };
+        const payload = {};
+        if (params.code !== undefined) {
+            const code = params.code.trim().toUpperCase();
+            if (!code)
+                return { error: 'Code cannot be empty' };
+            payload.code = code;
+        }
+        let existingType = null;
+        if (params.discount_value !== undefined && params.discount_type === undefined) {
+            const { data: existing } = await this.supabase
+                .from('discount_vouchers')
+                .select('discount_type')
+                .eq('id', id)
+                .maybeSingle();
+            existingType = existing?.discount_type ?? null;
+        }
+        if (params.discount_type !== undefined)
+            payload.discount_type = params.discount_type;
+        if (params.discount_value !== undefined) {
+            if (params.discount_value <= 0)
+                return { error: 'Discount value must be positive' };
+            const effectiveType = params.discount_type ?? existingType;
+            if (effectiveType === 'percentage' && params.discount_value > 100) {
+                return { error: 'Percentage cannot exceed 100' };
+            }
+            payload.discount_value = params.discount_value;
+        }
+        if (params.description !== undefined)
+            payload.description = params.description;
+        if (params.image_type !== undefined)
+            payload.image_type = params.image_type;
+        if (params.min_order_amount !== undefined)
+            payload.min_order_amount = params.min_order_amount;
+        if (params.valid_until !== undefined)
+            payload.valid_until = params.valid_until;
+        if (params.max_uses !== undefined)
+            payload.max_uses = params.max_uses;
+        if (Object.keys(payload).length === 0) {
+            return { error: 'No fields provided to update' };
+        }
+        payload.updated_at = new Date().toISOString();
+        const { data, error } = await this.supabase
+            .from('discount_vouchers')
+            .update(payload)
+            .eq('id', id)
+            .select('id, code')
+            .single();
+        if (error) {
+            if (error.code === '23505')
+                return { error: 'Voucher code already exists' };
+            return { error: error.message };
+        }
+        return { id: data.id, code: data.code };
+    }
+    /**
      * Admin: assign a voucher to a user (insert user_vouchers).
      */
     async assignToUser(userId, voucherId) {
@@ -212,6 +272,65 @@ class VoucherService {
             image_type: data.image_type ?? null,
             valid_until: data.valid_until ?? null,
         };
+    }
+    /**
+     * Admin: list voucher assignments (user_vouchers joined with users).
+     */
+    async listAssignments(voucherId) {
+        let query = this.supabase
+            .from('user_vouchers')
+            .select(`
+        id,
+        voucher_id,
+        user_id,
+        used_at,
+        created_at
+      `)
+            .order('created_at', { ascending: false });
+        if (voucherId) {
+            query = query.eq('voucher_id', voucherId);
+        }
+        const { data, error } = await query;
+        if (error || !data || data.length === 0)
+            return [];
+        const userIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
+        let usersById = {};
+        if (userIds.length > 0) {
+            const { data: users } = await this.supabase
+                .from('users')
+                .select('id, email, first_name, last_name')
+                .in('id', userIds);
+            usersById = (users || []).reduce((acc, u) => {
+                acc[u.id] = {
+                    email: u.email ?? null,
+                    name: [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
+                };
+                return acc;
+            }, {});
+        }
+        return data.map((r) => ({
+            id: r.id,
+            voucher_id: r.voucher_id,
+            user_id: r.user_id,
+            used_at: r.used_at,
+            created_at: r.created_at,
+            user_email: usersById[r.user_id]?.email ?? null,
+            user_name: usersById[r.user_id]?.name ?? null,
+        }));
+    }
+    /**
+     * Admin: revoke a user-voucher assignment.
+     */
+    async revokeAssignment(assignmentId) {
+        if (!assignmentId)
+            return { error: 'Assignment ID is required' };
+        const { error } = await this.supabase
+            .from('user_vouchers')
+            .delete()
+            .eq('id', assignmentId);
+        if (error)
+            return { error: error.message };
+        return { ok: true };
     }
 }
 exports.VoucherService = VoucherService;

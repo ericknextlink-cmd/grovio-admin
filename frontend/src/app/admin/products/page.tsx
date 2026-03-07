@@ -208,8 +208,10 @@ export default function ProductsPage() {
     setAiResponse('')
 
     try {
-      // Send prompt as-is - AI will extract budget and family size from natural language
-      const result = await aiApi.getSupplierRecommendations(aiPrompt.trim())
+      const prompt = aiPrompt.trim()
+      const result = await aiApi.getSupplierRecommendations({
+        message: prompt,
+      })
 
       if (result.success && result.data) {
         setAiResponse(result.data.response || '')

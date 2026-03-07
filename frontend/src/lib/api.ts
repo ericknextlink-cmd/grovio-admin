@@ -506,7 +506,13 @@ export const pricingApi = {
 
 // AI API - Uses local proxy route to mask backend and handle auth
 export const aiApi = {
-  getSupplierRecommendations: (message: string) =>
+  getSupplierRecommendations: (payload: {
+    message: string
+    familySize?: number
+    budget?: number
+    mealType?: 'breakfast' | 'lunch' | 'dinner' | 'all'
+    budgetMode?: 'combined' | 'per_meal'
+  }) =>
     apiClient.post<{
       response: string
       recommendedProducts: Array<{id: string, name: string, price: number, quantity: number}>
@@ -520,5 +526,5 @@ export const aiApi = {
         deliberationReason?: string
         isInFinalList?: boolean
       }>
-    }>('/api/ai/supplier-recommendations', { message }),
+    }>('/api/ai/supplier-recommendations', payload),
 }

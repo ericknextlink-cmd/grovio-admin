@@ -18,8 +18,8 @@ const savePreferencesValidation = [
     (0, express_validator_1.body)('role')
         .optional()
         .trim()
-        .isIn(['parent', 'student', 'professional', 'senior', 'other'])
-        .withMessage('Role must be one of: parent, student, professional, senior, other'),
+        .isIn(['parent', 'student', 'professional', 'senior', 'other', 'user'])
+        .withMessage('Role must be one of: parent, student, professional, senior, other, user'),
     (0, express_validator_1.body)('dietaryRestrictions')
         .optional()
         .isArray()

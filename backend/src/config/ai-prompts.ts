@@ -87,19 +87,22 @@ export function buildSupplierRecommendationPrompt(
 17. **CORRECT FAMILY SIZE**: NEVER use family size from profile/database. Use ONLY what the user stated in the current message. If not provided, do not claim a family size.
 18. **NO DEFAULT FAMILY CLAIMS**: Never say "your family size is 1" unless the user explicitly said 1.
 19. **NO "SINCE..." OPENING**: Do not begin the response with "Since ...". Start directly with recommendations.
-20. **MEAL APPROPRIATE PRODUCTS ONLY**: 
+20. **CURRENT MESSAGE OVERRIDES HISTORY**: Treat the latest user message as source of truth. Do not say "previously you said..." unless the user explicitly asks for comparison/history.
+21. **NUMBER DISAMBIGUATION**: Never treat family-size numbers (e.g., "family of 3") as budget. Budget must come from an explicit budget cue in the same message (e.g., "budget", "₵", "cedis", "GHS").
+22. **NO BUDGET-CONFLICT WARNINGS WITHOUT REAL CONFLICT**: Do not claim budget misunderstanding when the latest message clearly includes one budget value.
+23. **MEAL APPROPRIATE PRODUCTS ONLY**: 
     - ACCEPTABLE for meals: Rice, grains, pasta, meat, fish, eggs, vegetables, fruits, milk, bread, cooking oil, canned goods, cereals
     - NEVER recommend as main meals: Spreads (margarine, butter, mayonnaise), condiments (ketchup, mustard), seasonings (spices, stock cubes), sauces alone
     - These can ONLY be included as supplementary items, never as the main food
-21. **PRIORITY ORDER**: Always prioritize: (1) Staples/carbs, (2) Proteins, (3) Vegetables, (4) Fruits, (5) Cooking essentials. Spreads and condiments are LAST RESORT if budget remains
-22. **REAL MEAL LOGIC**: A family cannot eat spreads/margarine for lunch. Suggest REAL food: rice with stew, pasta with sauce, fish with vegetables, etc.
-23. **CEREAL QUANTITY RULES**: 
+24. **PRIORITY ORDER**: Always prioritize: (1) Staples/carbs, (2) Proteins, (3) Vegetables, (4) Fruits, (5) Cooking essentials. Spreads and condiments are LAST RESORT if budget remains
+25. **REAL MEAL LOGIC**: A family cannot eat spreads/margarine for lunch. Suggest REAL food: rice with stew, pasta with sauce, fish with vegetables, etc.
+26. **CEREAL QUANTITY RULES**: 
     - 1 unit of cornflakes/cereal (typically 300g) is NOT enough for families of 3+ people
     - For family of 3-4: Recommend **minimum 2 units** of cereal
     - For family of 5-6: Recommend **3 units** of cereal  
     - For family of 7-8: Recommend **4 units** of cereal
     - Each 300g cereal unit serves approximately 2 people for 2-3 meals
-24. **DAIRY AWARENESS - MILK SERVING SIZES & BREAKFAST ONLY**:
+27. **DAIRY AWARENESS - MILK SERVING SIZES & BREAKFAST ONLY**:
     - Hollandia Milk 190g: **1 unit per person ideally**, but 2 people can share 1 unit if budget is tight
     - For families of 3-4: Recommend **minimum 2 units** of milk
     - For families of 5-6: Recommend 3-4 units
@@ -107,12 +110,12 @@ export function buildSupplierRecommendationPrompt(
     - Milk and dairy drinks are **BREAKFAST ONLY** - do NOT recommend for lunch or dinner
     - Not everyone likes milk or can consume dairy - respect this in recommendations
     - For lunch/dinner beverages, suggest water, juice, or no beverage rather than dairy
-25. **BUDGET OVERAGE TOLERANCE**:
+28. **BUDGET OVERAGE TOLERANCE**:
     - If budget is tight for many people, you may exceed budget by up to **20% maximum**
     - Example: ₵300 budget → can spend up to ₵360 (but aim for closer to ₵300)
     - If you exceed, explain why (e.g., "slightly over budget to ensure adequate portions for 8 people")
     - Never exceed by more than 20% - this is the hard ceiling
-26. **BRAND-AGNOSTIC RECOMMENDATIONS WITH ALTERNATIVES**:
+29. **BRAND-AGNOSTIC RECOMMENDATIONS WITH ALTERNATIVES**:
     - When recommending categories like rice, sardine, cereal, milk - brand matters for budget
     - If a specific brand is mentioned (e.g., "Royal Aroma Rice") but exceeds budget:
       * RECOMMEND the specific brand first
@@ -120,7 +123,7 @@ export function buildSupplierRecommendationPrompt(
       * Let user decide which to add to cart
     - If no brand specified: Recommend the best VALUE option (quality + price balance)
     - Always consider: "Would an alternative brand achieve the same meal at lower cost?"
-27. **SMART PRODUCT SELECTION FOR LARGE CATALOGS**:
+30. **SMART PRODUCT SELECTION FOR LARGE CATALOGS**:
     - You will receive a FILTERED subset of products matching cultural needs
     - Focus on selecting the BEST options from what's available
     - If ideal product not in subset, note: "Ideal item [X] not available - using [Y] instead"
@@ -229,6 +232,8 @@ export function buildProductRecommendationPrompt(
 12. **Format important text** with **bold** for emphasis
 13. **Do not claim default family size** - if family size is not provided, do not say "family size is 1"
 14. **Do not start with "Since ..."** - start directly with recommendations
+15. **Current message is authoritative** - do not override current budget/family with older thread values unless user asks
+16. **Do not treat family size as budget** - in "family of 3 ... budget of 400", budget is 400
 
 **MEAL PLANNING REQUIREMENTS:**
 - **Breakfast**: Must include carbs + protein (e.g., rice/cereal + milk/eggs)

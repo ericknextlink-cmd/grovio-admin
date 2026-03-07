@@ -407,7 +407,7 @@ class AIController {
          */
         this.getSupplierProductRecommendations = async (req, res) => {
             try {
-                const { message } = req.body;
+                const { message, familySize, budget, mealType, budgetMode } = req.body;
                 if (!message || typeof message !== 'string') {
                     res.status(400).json({
                         success: false,
@@ -453,7 +453,12 @@ class AIController {
                     inStock: p.in_stock
                 }));
                 const userId = req.user?.id || 'admin';
-                const result = await this.aiService.chatWithSupplierProducts(message, supplierProducts, userId);
+                const result = await this.aiService.chatWithSupplierProducts(message, supplierProducts, userId, {
+                    familySize: typeof familySize === 'number' ? familySize : undefined,
+                    budget: typeof budget === 'number' ? budget : undefined,
+                    mealType: mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'all' ? mealType : undefined,
+                    budgetMode: budgetMode === 'combined' || budgetMode === 'per_meal' ? budgetMode : undefined,
+                });
                 if (result.success) {
                     res.json({
                         success: true,

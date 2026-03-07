@@ -124,6 +124,8 @@ export class AIEnhancedService {
       .replace(/^\s*Since your family size is\s*(?:\*\*)?\s*[\w\d]+\s*(?:\*\*)?\s*,?[^.]*\.\s*/i, '')
       // If model starts with this clause and immediately continues (without period), trim to the first "Here's/Here is".
       .replace(/^\s*Since your family size is[\s\S]{0,180}?(?=(Here(?:'|’)?s|Here is)\b)/i, '')
+      // Remove stale budget-conflict opener like "previously you specified ₵3" when model hallucinates history conflicts.
+      .replace(/^\s*It seems there was a misunderstanding[^.]*previously[^.]*\.\s*/i, '')
       .replace(/^\s*Since\b/i, 'Based on your request,')
   }
 

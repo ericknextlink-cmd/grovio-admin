@@ -49,3 +49,4 @@ const validateBody = [
 router.use(auth_middleware_1.authenticateToken);
 router.post('/validate', validateBody, voucherController.validateVoucher);
 router.get('/', voucherController.listMyVouchers);
+router.get('/:code/image', voucherController.getMyVoucherImage);

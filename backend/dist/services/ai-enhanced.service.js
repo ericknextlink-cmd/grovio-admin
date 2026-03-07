@@ -43,6 +43,17 @@ class AIEnhancedService {
         }
         this.adminSupabase = (0, supabase_1.createAdminClient)();
     }
+    sanitizeAssistantResponse(text) {
+        return text
+            // Handles variants like: "Since your family size is 1, ...",
+            // "Since your family size is **1**, ...", etc.
+            .replace(/^\s*Since your family size is\s*(?:\*\*)?\s*[\w\d]+\s*(?:\*\*)?\s*,?[^.]*\.\s*/i, '')
+            // If model starts with this clause and immediately continues (without period), trim to the first "Here's/Here is".
+            .replace(/^\s*Since your family size is[\s\S]{0,180}?(?=(Here(?:'|’)?s|Here is)\b)/i, '')
+            // Remove stale budget-conflict opener like "previously you specified ₵3" when model hallucinates history conflicts.
+            .replace(/^\s*It seems there was a misunderstanding[^.]*previously[^.]*\.\s*/i, '')
+            .replace(/^\s*Since\b/i, 'Based on your request,');
+    }
     getUserSupabaseClient(userToken) {
         const client = (0, supabase_1.createClient)();
         if (userToken) {
@@ -121,15 +132,8 @@ class AIEnhancedService {
         const keywords = [];
         const categories = [];
         const productTypes = [];
-        const budgetMatch = message.match(/₵?\s*(\d+(?:\.\d+)?)/) || message.match(/(\d+(?:\.\d+)?)\s*cedis?/i);
-        const extractedBudget = budgetMatch ? parseFloat(budgetMatch[1]) : context.budget;
-        const familyMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|for\s+(?:a\s+)?family\s+of\s+(\d+)/i);
-        const extractedFamilySize = familyMatch
-            ? parseInt(familyMatch[1] || familyMatch[2] || familyMatch[3] || familyMatch[4] || '0', 10)
-            : undefined;
-        const familySize = (extractedFamilySize && extractedFamilySize >= 1 && extractedFamilySize <= 20)
-            ? extractedFamilySize
-            : undefined;
+        const extractedBudget = context.budget;
+        const familySize = context.familySize;
         const productKeywords = [
             'rice', 'flour', 'oil', 'sugar', 'salt', 'tomato', 'onion', 'garlic',
             'chicken', 'fish', 'meat', 'beef', 'pork', 'milk', 'egg', 'bread',
@@ -601,7 +605,7 @@ class AIEnhancedService {
         }
         return null;
     }
-    async chatWithSupplierProducts(message, supplierProducts, _userId = 'admin') {
+    async chatWithSupplierProducts(message, supplierProducts, _userId = 'admin', options = {}) {
         try {
             if (!process.env.OPENAI_API_KEY) {
                 return {
@@ -621,31 +625,25 @@ class AIEnhancedService {
             while (attempts < maxAttempts) {
                 try {
                     const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts);
-                    // Extract family size and budget from message
-                    const familySizeMatch = message.match(/family of (\d+)|family size (\d+)|(\d+) people|(\d+) person/i);
-                    const budgetMatch = message.match(/[₵$]?(\d+)|under [₵$]?(\d+)|budget of [₵$]?(\d+)/i);
-                    const familySize = familySizeMatch
-                        ? parseInt(familySizeMatch[1] || familySizeMatch[2] || familySizeMatch[3] || familySizeMatch[4] || '1')
-                        : 1;
-                    const budget = budgetMatch
-                        ? parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3] || '0')
-                        : 0;
+                    const lowerMessage = message.toLowerCase();
+                    const familySize = options.familySize;
+                    const budget = options.budget;
+                    const normalizedBudget = typeof budget === 'number' && Number.isFinite(budget) ? budget : 0;
                     const context = {
                         userId: _userId,
                         familySize,
                         budget,
                     };
                     const queryIntent = {
-                        keywords: message.toLowerCase().split(/\s+/).filter(word => word.length > 2)
+                        keywords: lowerMessage.split(/\s+/).filter(word => word.length > 2),
+                        mealType: options.mealType ?? 'all',
+                        budgetMode: options.budgetMode ?? 'per_meal',
+                        familySizeExplicit: familySize != null
                     };
-                    // Detect meal type from message
-                    const mealType = message.toLowerCase().includes('breakfast') ? 'breakfast'
-                        : message.toLowerCase().includes('lunch') ? 'lunch'
-                            : message.toLowerCase().includes('dinner') ? 'dinner'
-                                : 'all';
+                    const mealType = queryIntent.mealType ?? 'all';
                     // Multi-Agent Step 1: xAI Cultural Analysis (runs in parallel with OpenAI prep)
                     console.log('🤖 Starting Multi-Agent Deliberation...');
-                    const culturalAnalysis = await this.performCulturalDeliberation(message, productContext, familySize, budget, mealType);
+                    const culturalAnalysis = await this.performCulturalDeliberation(message, productContext, familySize ?? 1, normalizedBudget, mealType);
                     console.log('✅ Cultural Analysis:', culturalAnalysis.mealPatterns.join(', '));
                     if (culturalAnalysis.warnings.length > 0) {
                         console.log('⚠️ Cultural Warnings:', culturalAnalysis.warnings);
@@ -680,11 +678,12 @@ class AIEnhancedService {
                     const responseText = typeof response.content === 'string'
                         ? response.content
                         : JSON.stringify(response.content);
+                    const normalizedResponseText = this.sanitizeAssistantResponse(responseText);
                     // Extract recommended products from AI response for cart functionality
-                    const recommendedProducts = this.extractRecommendedProducts(responseText, supplierProducts.slice(0, maxProducts));
+                    const recommendedProducts = this.extractRecommendedProducts(normalizedResponseText, supplierProducts.slice(0, maxProducts));
                     return {
                         success: true,
-                        message: responseText,
+                        message: normalizedResponseText,
                         recommendedProducts,
                     };
                 }
@@ -978,14 +977,16 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`;
             const queryIntent = this.extractQueryIntent(message, {
                 ...userContext,
                 role: options.role || userContext.role,
-                familySize: options.familySize || userContext.familySize,
+                // Do not seed family size from DB/profile for chat recommendations.
+                // The current user prompt must drive this value.
+                familySize: options.familySize,
                 budget: options.budget,
             });
-            // Prefer prompt-extracted budget and family size over profile so the user's current message drives recommendations
+            // Prompt-first context: only use prompt/options for family size and budget.
             const context = {
                 ...userContext,
                 role: options.role || userContext.role,
-                familySize: queryIntent.familySize ?? options.familySize ?? userContext.familySize,
+                familySize: queryIntent.familySize ?? options.familySize,
                 budget: queryIntent.budget ?? options.budget,
                 threadId,
             };
@@ -1006,6 +1007,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`;
                 message,
                 history: historyMessages,
             });
+            const sanitizedResponse = this.sanitizeAssistantResponse(response);
             await this.saveMessageToThread(threadId, {
                 role: 'user',
                 content: message,
@@ -1013,7 +1015,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`;
             }, userId);
             await this.saveMessageToThread(threadId, {
                 role: 'assistant',
-                content: response,
+                content: sanitizedResponse,
                 timestamp: new Date(),
             }, userId);
             // Return products used in context so frontend can show them as selectable (real DB products)
@@ -1026,7 +1028,7 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`;
             }));
             return {
                 success: true,
-                message: response,
+                message: sanitizedResponse,
                 threadId,
                 products: productsForFrontend,
             };

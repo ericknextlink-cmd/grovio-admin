@@ -499,7 +499,7 @@ export default function SupplierProductsPage() {
 
     try {
       // Backend now fetches products directly - just send the prompt
-      const result = await aiApi.getSupplierRecommendations(aiPrompt)
+      const result = await aiApi.getSupplierRecommendations({ message: aiPrompt })
 
       if (result.success && result.data?.response) {
         setAiResponse(result.data.response)

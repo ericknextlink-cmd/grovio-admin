@@ -127,24 +127,6 @@ export class AIEnhancedService {
       .replace(/^\s*Since\b/i, 'Based on your request,')
   }
 
-  private parseBudgetFromMessage(message: string, fallback?: number): number | undefined {
-    const text = String(message)
-    const patterns = [
-      /budget\s*(?:of|is|:)?\s*₵?\s*(\d+(?:\.\d+)?)/i,
-      /under\s*₵?\s*(\d+(?:\.\d+)?)/i,
-      /(?:₵|ghs?\s*)\s*(\d+(?:\.\d+)?)/i,
-      /(\d+(?:\.\d+)?)\s*(?:cedis?|ghs)\b/i,
-    ]
-    for (const p of patterns) {
-      const m = text.match(p)
-      if (m?.[1]) {
-        const n = parseFloat(m[1])
-        if (Number.isFinite(n) && n > 0) return n
-      }
-    }
-    return fallback
-  }
-
   private getUserSupabaseClient(userToken?: string) {
     const client = createClient()
     
@@ -244,22 +226,8 @@ export class AIEnhancedService {
     const categories: string[] = []
     const productTypes: string[] = []
 
-    const extractedBudget = this.parseBudgetFromMessage(message, context.budget)
-
-    const familyMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|for\s+(?:a\s+)?family\s+of\s+(\d+)/i)
-    const numberWords: Record<string, number> = {
-      one: 1, two: 2, three: 3, four: 4, five: 5,
-      six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-    }
-    const familyWordEntry = Object.entries(numberWords).find(([w]) =>
-      new RegExp(`family\\s+of\\s+${w}|${w}\\s+people|${w}\\s+persons?`, 'i').test(message)
-    )
-    const extractedFamilySize = familyMatch
-      ? parseInt(familyMatch[1] || familyMatch[2] || familyMatch[3] || familyMatch[4] || '0', 10)
-      : familyWordEntry?.[1]
-    const familySize = (extractedFamilySize && extractedFamilySize >= 1 && extractedFamilySize <= 20)
-      ? extractedFamilySize
-      : undefined
+    const extractedBudget = context.budget
+    const familySize = context.familySize
 
     const productKeywords = [
       'rice', 'flour', 'oil', 'sugar', 'salt', 'tomato', 'onion', 'garlic',
@@ -879,35 +847,10 @@ export class AIEnhancedService {
         try {
           const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts)
 
-          // Extract family size and budget directly from prompt (never from profile).
           const lowerMessage = message.toLowerCase()
-          const numberWords: Record<string, number> = {
-            one: 1,
-            two: 2,
-            three: 3,
-            four: 4,
-            five: 5,
-            six: 6,
-            seven: 7,
-            eight: 8,
-            nine: 9,
-            ten: 10,
-          }
-
-          const familySizeDigitMatch = message.match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|(\d+)\s+persons?/i)
-          const familySizeWordMatch = Object.entries(numberWords).find(([w]) =>
-            new RegExp(`family\\s+of\\s+${w}|${w}\\s+people|${w}\\s+persons?`, 'i').test(message)
-          )
-          const parsedFamilySize = familySizeDigitMatch
-            ? parseInt(familySizeDigitMatch[1] || familySizeDigitMatch[2] || familySizeDigitMatch[3] || familySizeDigitMatch[4] || '0', 10)
-            : familySizeWordMatch?.[1]
-          const messageFamilySize = parsedFamilySize && parsedFamilySize >= 1 && parsedFamilySize <= 20
-            ? parsedFamilySize
-            : undefined
-          const familySize = options.familySize ?? messageFamilySize
-
-          const messageBudget = this.parseBudgetFromMessage(message, 0) ?? 0
-          const budget = options.budget ?? messageBudget
+          const familySize = options.familySize
+          const budget = options.budget
+          const normalizedBudget = typeof budget === 'number' && Number.isFinite(budget) ? budget : 0
           
           const context = {
             userId: _userId,
@@ -917,18 +860,8 @@ export class AIEnhancedService {
           
           const queryIntent: QueryIntent = {
             keywords: lowerMessage.split(/\s+/).filter(word => word.length > 2),
-            mealType: options.mealType ?? (lowerMessage.includes('breakfast')
-              ? 'breakfast'
-              : lowerMessage.includes('lunch')
-                ? 'lunch'
-                : lowerMessage.includes('dinner')
-                  ? 'dinner'
-                  : 'all'),
-            budgetMode: options.budgetMode ?? (/respectively|each\s+meal|per\s+meal/.test(lowerMessage)
-              ? 'per_meal'
-              : /combined|overall|together|spread\s+across|all\s+meals/.test(lowerMessage)
-                ? 'combined'
-                : 'per_meal'),
+            mealType: options.mealType ?? 'all',
+            budgetMode: options.budgetMode ?? 'per_meal',
             familySizeExplicit: familySize != null
           }
           const mealType = queryIntent.mealType ?? 'all'
@@ -939,7 +872,7 @@ export class AIEnhancedService {
             message,
             productContext,
             familySize ?? 1,
-            budget,
+            normalizedBudget,
             mealType
           )
           

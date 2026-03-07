@@ -532,35 +532,13 @@ export class AIController {
 
       const userId = req.user?.id || 'admin'
 
-      // Extract from prompt as a fallback so we always pass explicit values when present.
-      const numberWords: Record<string, number> = {
-        one: 1, two: 2, three: 3, four: 4, five: 5,
-        six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-      }
-      const familyDigitMatch = String(message).match(/family\s+of\s+(\d+)|family\s+size\s+(\d+)|(\d+)\s+people|(\d+)\s+persons?/i)
-      const familyWordEntry = Object.entries(numberWords).find(([w]) =>
-        new RegExp(`family\\s+of\\s+${w}|${w}\\s+people|${w}\\s+persons?`, 'i').test(String(message))
-      )
-      const parsedFamilySize = familyDigitMatch
-        ? parseInt(familyDigitMatch[1] || familyDigitMatch[2] || familyDigitMatch[3] || familyDigitMatch[4] || '0', 10)
-        : familyWordEntry?.[1]
-      const effectiveFamilySize = (typeof familySize === 'number' ? familySize : parsedFamilySize) || undefined
-
-      const budgetMatch =
-        String(message).match(/budget\s*(?:of|is|:)?\s*₵?\s*(\d+(?:\.\d+)?)/i) ||
-        String(message).match(/under\s*₵?\s*(\d+(?:\.\d+)?)/i) ||
-        String(message).match(/(?:₵|ghs?\s*)\s*(\d+(?:\.\d+)?)/i) ||
-        String(message).match(/(\d+(?:\.\d+)?)\s*(?:cedis?|ghs)\b/i)
-      const parsedBudget = budgetMatch ? parseFloat(budgetMatch[1]) : undefined
-      const effectiveBudget = typeof budget === 'number' ? budget : parsedBudget
-
       const result = await this.aiService.chatWithSupplierProducts(
         message,
         supplierProducts,
         userId,
         {
-          familySize: effectiveFamilySize,
-          budget: effectiveBudget,
+          familySize: typeof familySize === 'number' ? familySize : undefined,
+          budget: typeof budget === 'number' ? budget : undefined,
           mealType: mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'all' ? mealType : undefined,
           budgetMode: budgetMode === 'combined' || budgetMode === 'per_meal' ? budgetMode : undefined,
         }

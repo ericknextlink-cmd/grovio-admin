@@ -187,6 +187,42 @@ export class CartService {
   }
 
   /**
+   * Add multiple items to cart in one request (e.g. from AI assistant).
+   * Each item is merged with existing quantity for that product.
+   */
+  async addBatchToCart(
+    userId: string,
+    items: Array<{ product_id: string; quantity: number }>
+  ): Promise<{
+    success: boolean
+    message: string
+    data?: { added: number; skipped: number; errors: string[] }
+  }> {
+    const errors: string[] = []
+    let added = 0
+    let skipped = 0
+
+    for (const { product_id, quantity } of items) {
+      if (!product_id || quantity < 1) {
+        skipped++
+        continue
+      }
+      const result = await this.addToCart(userId, product_id, quantity)
+      if (result.success) added++
+      else {
+        skipped++
+        errors.push(`${product_id}: ${result.message}`)
+      }
+    }
+
+    return {
+      success: true,
+      message: `Added ${added} item(s) to cart${skipped > 0 ? `; ${skipped} skipped` : ''}`,
+      data: { added, skipped, errors },
+    }
+  }
+
+  /**
    * Remove product from cart
    */
   async removeFromCart(

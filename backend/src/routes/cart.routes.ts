@@ -13,7 +13,7 @@ router.use(authenticateToken)
 // Get user's cart
 router.get('/', cartController.getCart)
 
-// Add or remove item from cart
+// Add or remove item from cart (single item)
 router.post('/',
   [
     body('product_id')
@@ -33,6 +33,26 @@ router.post('/',
     handleValidationErrors
   ],
   cartController.updateCart
+)
+
+// Add multiple items in one call (e.g. AI assistant "Add all to cart")
+router.post('/batch',
+  [
+    body('items')
+      .isArray()
+      .withMessage('items must be an array'),
+    body('items.*.product_id')
+      .notEmpty()
+      .withMessage('Each item must have product_id')
+      .isUUID()
+      .withMessage('Each product_id must be a valid UUID'),
+    body('items.*.quantity')
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage('Each quantity must be a positive integer'),
+    handleValidationErrors
+  ],
+  cartController.addBatch
 )
 
 // Clear cart

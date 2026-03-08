@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const supabase_1 = require("../config/supabase");
 const auth_1 = require("../utils/auth");
 const error_sanitizer_1 = require("../utils/error-sanitizer");
@@ -944,11 +948,15 @@ class AuthService {
         }
         try {
             const supabase = (0, supabase_1.createClient)();
-            // Do not pass nonce: Google ID tokens (especially from One Tap) use a nonce format that
-            // Supabase hashes and compares, causing "Nonces mismatch". Omitting nonce avoids this.
+            // Supabase requires: if the id_token has a nonce claim, we must pass the same nonce; otherwise omit.
+            // One Tap / GSI modal tokens often include a nonce; the button flow may not. Decode without verifying
+            // (Supabase verifies the token); pass nonce only when present in the token to satisfy "both or neither".
+            const decoded = jsonwebtoken_1.default.decode(idToken);
+            const nonceFromToken = decoded?.nonce && typeof decoded.nonce === 'string' ? decoded.nonce : undefined;
             const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
                 provider: 'google',
                 token: idToken,
+                ...(nonceFromToken ? { nonce: nonceFromToken } : {}),
             });
             if (authError) {
                 console.error('Google auth error:', authError);

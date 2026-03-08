@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import jwt from 'jsonwebtoken'
 import { createClient, createAdminClient } from '../config/supabase'
 import { hashPassword, isValidEmail, isValidPassword, isValidPhoneNumber } from '../utils/auth'
 import { sanitizeDatabaseError, sanitizeAuthError, sanitizeError } from '../utils/error-sanitizer'
@@ -1024,11 +1025,16 @@ export class AuthService {
     try {
       const supabase = createClient()
 
-      // Do not pass nonce: Google ID tokens (especially from One Tap) use a nonce format that
-      // Supabase hashes and compares, causing "Nonces mismatch". Omitting nonce avoids this.
+      // Supabase requires: if the id_token has a nonce claim, we must pass the same nonce; otherwise omit.
+      // One Tap / GSI modal tokens often include a nonce; the button flow may not. Decode without verifying
+      // (Supabase verifies the token); pass nonce only when present in the token to satisfy "both or neither".
+      const decoded = jwt.decode(idToken) as { nonce?: string } | null
+      const nonceFromToken = decoded?.nonce && typeof decoded.nonce === 'string' ? decoded.nonce : undefined
+
       const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
+        ...(nonceFromToken ? { nonce: nonceFromToken } : {}),
       })
 
       if (authError) {

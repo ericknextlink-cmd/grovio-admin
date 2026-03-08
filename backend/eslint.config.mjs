@@ -1,16 +1,5 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+/** ESLint 9 flat config. No FlatCompat/eslintrc to avoid ajv "defaultMeta" bug. */
+export default [
   {
     ignores: [
       "node_modules/**",
@@ -18,18 +7,31 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "dist/**",
-      "next-env.d.ts",
+      "**/*.js",
     ],
   },
   {
+    files: ["src/**/*.ts"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: "module",
+      },
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        module: "readonly",
+        require: "readonly",
+        exports: "writable",
+      },
+    },
     rules: {
-      "no-html-link-for-pages": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" },
-      ],
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
 ];
-
-export default eslintConfig;

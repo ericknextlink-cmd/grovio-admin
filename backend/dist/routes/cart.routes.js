@@ -13,7 +13,7 @@ const cartController = new cart_controller_1.CartController();
 router.use(auth_middleware_1.authenticateToken);
 // Get user's cart
 router.get('/', cartController.getCart);
-// Add or remove item from cart
+// Add or remove item from cart (single item)
 router.post('/', [
     (0, express_validator_1.body)('product_id')
         .notEmpty()
@@ -31,5 +31,21 @@ router.post('/', [
         .withMessage('Quantity must be a positive integer'),
     validation_middleware_1.handleValidationErrors
 ], cartController.updateCart);
+// Add multiple items in one call (e.g. AI assistant "Add all to cart")
+router.post('/batch', [
+    (0, express_validator_1.body)('items')
+        .isArray()
+        .withMessage('items must be an array'),
+    (0, express_validator_1.body)('items.*.product_id')
+        .notEmpty()
+        .withMessage('Each item must have product_id')
+        .isUUID()
+        .withMessage('Each product_id must be a valid UUID'),
+    (0, express_validator_1.body)('items.*.quantity')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Each quantity must be a positive integer'),
+    validation_middleware_1.handleValidationErrors
+], cartController.addBatch);
 // Clear cart
 router.delete('/', cartController.clearCart);

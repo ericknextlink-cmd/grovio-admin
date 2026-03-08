@@ -920,14 +920,43 @@ export class AIEnhancedService {
 
           // Extract recommended products from AI response for cart functionality
           const recommendedProducts = this.extractRecommendedProducts(
-            normalizedResponseText, 
+            normalizedResponseText,
             supplierProducts.slice(0, maxProducts)
           )
 
+          // Second xAI pass: validate list; feedback is for the recommender only (no cultural note to user)
+          let finalMessage = normalizedResponseText
+          let finalProducts = recommendedProducts
+          const productNames = recommendedProducts.map((p) => p.name)
+          if (productNames.length > 0) {
+            const familyContext = `family of ${familySize ?? 'unknown'}`
+            const validationNote = await this.performRecommendationValidation(
+              productNames,
+              mealType,
+              familyContext
+            )
+            if (validationNote) {
+              const revised = await this.reviseRecommendationWithFeedback(
+                normalizedResponseText,
+                validationNote,
+                productContext,
+                message
+              )
+              if (revised) {
+                finalMessage = this.sanitizeAssistantResponse(revised)
+                finalProducts = this.extractRecommendedProducts(
+                  finalMessage,
+                  supplierProducts.slice(0, maxProducts)
+                )
+                console.log('✅ Main agent revised list using xAI validation feedback')
+              }
+            }
+          }
+
           return {
             success: true,
-            message: normalizedResponseText,
-            recommendedProducts,
+            message: finalMessage,
+            recommendedProducts: finalProducts,
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
@@ -1254,6 +1283,80 @@ SUGGESTIONS: [3 meal ideas using ONLY available products]`
     }
 
     return result
+  }
+
+  /**
+   * Second xAI pass: validate the main agent's recommended product list in Ghanaian context.
+   * Returns feedback for the recommender only (not shown to user). Used to revise the list.
+   */
+  private async performRecommendationValidation(
+    productNames: string[],
+    mealType: string,
+    familyContext: string
+  ): Promise<string> {
+    if (!this.xaiModel || !productNames.length) return ''
+
+    try {
+      const list = productNames.slice(0, 30).join('\n- ')
+      const prompt = `You are a Ghanaian food culture expert. We are about to show the user a shopping recommendation that includes these products for ${familyContext} (${mealType}):
+
+- ${list}
+
+**Task:** In 1–3 short sentences, validate whether these choices are culturally appropriate for a Ghanaian context.
+- If any product is typically considered baby/child food (e.g. Cerelac, infant cereals) but is being recommended as a general staple for adults, say so and suggest a brief alternative (e.g. "For adult staples, consider plain rice or oats instead of Cerelac").
+- If something is better suited to a different meal type, note it.
+- If the selection is generally appropriate, respond with only: "OK" or "Looks good."
+- Be concise. No preamble.`
+
+      const response = await this.xaiModel.invoke([
+        new SystemMessage('You give brief, factual validation notes for Ghanaian food recommendations. One to three sentences only.'),
+        new HumanMessage(prompt),
+      ])
+      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+      const trimmed = content.trim()
+      if (!trimmed || /^(ok|looks good|all good)\.?$/i.test(trimmed)) return ''
+      return trimmed
+    } catch (error) {
+      console.warn('xAI recommendation validation failed:', error)
+      return ''
+    }
+  }
+
+  /**
+   * Main agent revision pass: given xAI validation feedback, revise the recommendation list
+   * (e.g. replace Cerelac with adult staples). User sees only the revised list; no cultural note.
+   */
+  private async reviseRecommendationWithFeedback(
+    currentRecommendation: string,
+    validationFeedback: string,
+    productContext: string,
+    userRequest: string
+  ): Promise<string | null> {
+    try {
+      const systemPrompt = `You are Grovio AI. You previously gave this shopping recommendation. A Ghanaian food culture expert gave this feedback (for your use only; do not show this to the user):
+
+"${validationFeedback}"
+
+Revise your recommendation: replace any inappropriate products with better alternatives from the catalog below. Keep the same format (product name, price, quantity, brief "why"). Do not mention the expert or validation. Output only the revised recommendation.`
+
+      const humanPrompt = `User request: ${userRequest.slice(0, 500)}
+
+**Current recommendation to revise:**
+${currentRecommendation.slice(0, 6000)}
+
+**Product catalog:**
+${productContext.slice(0, 8000)}`
+
+      const response = await this.openAIModel.invoke([
+        new SystemMessage(systemPrompt),
+        new HumanMessage(humanPrompt),
+      ])
+      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+      return content.trim() || null
+    } catch (error) {
+      console.warn('Revise recommendation with feedback failed:', error)
+      return null
+    }
   }
 
   async chat(

@@ -9,6 +9,7 @@ export interface GroceryProduct {
   currency: string;
   quantity: number;
   weight?: number;
+  weight_unit?: 'kg' | 'g';
   volume?: number;
   type: string;
   packaging: string;

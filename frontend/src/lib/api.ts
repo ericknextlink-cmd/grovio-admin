@@ -369,6 +369,12 @@ export const ordersApi = {
     apiClient.get<{ data: unknown[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/api/orders/admin/transactions', params),
   updateOrderStatus: (orderId: string, status: string, reason?: string) =>
     apiClient.put<any>(`/api/orders/${orderId}/status`, { status, reason }),
+  /** Verify delivery by 4-digit code (public endpoint; rider or admin) */
+  verifyDeliveryByCode: (code: string) =>
+    apiClient.post<{ data?: { orderId?: string; orderNumber?: string } }>('/api/orders/delivery/verify-code', { code }),
+  /** Verify delivery by QR token (public endpoint; rider or admin) */
+  verifyDeliveryByToken: (token: string) =>
+    apiClient.post<{ data?: { orderId?: string; orderNumber?: string } }>('/api/orders/delivery/verify-qr', { token }),
 }
 
 // Categories API

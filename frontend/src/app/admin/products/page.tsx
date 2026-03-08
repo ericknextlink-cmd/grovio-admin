@@ -26,6 +26,7 @@ interface Product {
   currency: string
   quantity: number
   weight?: number
+  weight_unit?: 'kg' | 'g'
   volume?: number
   type?: string
   packaging?: string
@@ -259,6 +260,7 @@ export default function ProductsPage() {
     currency: product.currency,
     quantity: product.quantity,
     weight: product.weight,
+    weight_unit: product.weight_unit ?? 'kg',
     volume: product.volume,
     type: product.type || '',
     packaging: product.packaging || '',
@@ -281,7 +283,7 @@ export default function ProductsPage() {
       const payload = {
         name: formValues.name.trim(),
         brand: formValues.brand.trim() || null,
-        description: formValues.description.trim(),
+        description: (formValues.description && formValues.description.trim()) ? formValues.description.trim() : formValues.name.trim(),
         category: formValues.category,
         category_name: formValues.category,
         subcategory: formValues.subcategory || null,
@@ -289,6 +291,7 @@ export default function ProductsPage() {
         currency: formValues.currency,
         quantity: formValues.quantity,
         weight: formValues.weight ?? null,
+        weight_unit: formValues.weight_unit ?? null,
         volume: formValues.volume ?? null,
         type: formValues.type || null,
         packaging: formValues.packaging || null,
@@ -333,21 +336,23 @@ export default function ProductsPage() {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Products</h1>
               <p className="text-gray-600 dark:text-gray-400">Manage your product inventory</p>
             </div>
-            <button
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Add Product
-            </button>
-            <button
-              onClick={() => setShowAIRecommendationModal(true)}
-              disabled={products.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="h-4 w-4" />
-              AI Recommendations
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Add Product
+              </button>
+              <button
+                onClick={() => setShowAIRecommendationModal(true)}
+                disabled={products.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="h-4 w-4" />
+                AI Recommendations
+              </button>
+            </div>
           </div>
         </div>
 

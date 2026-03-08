@@ -25,6 +25,7 @@ const initialFormData = {
   currency: 'GHS',
   quantity: 0,
   weight: undefined as number | undefined,
+  weight_unit: 'kg' as 'kg' | 'g',
   volume: undefined as number | undefined,
   type: '',
   packaging: '',
@@ -93,6 +94,7 @@ export default function ProductForm({
         currency: product.currency,
         quantity: product.quantity,
         weight: product.weight,
+        weight_unit: (product as { weight_unit?: 'kg' | 'g' }).weight_unit ?? 'kg',
         volume: product.volume,
         type: product.type,
         packaging: product.packaging,
@@ -129,15 +131,13 @@ export default function ProductForm({
 
     if (!formData.name.trim()) newErrors.name = 'Product name is required'
     if (!formData.brand.trim()) newErrors.brand = 'Brand is required'
-    if (!formData.description.trim()) newErrors.description = 'Description is required'
     if (!formData.category) newErrors.category = 'Category is required'
-    if (!formData.subcategory) newErrors.subcategory = 'Subcategory is required'
     if (formData.price <= 0) newErrors.price = 'Price must be greater than 0'
     if (formData.quantity < 0) newErrors.quantity = 'Quantity cannot be negative'
-    if (formData.weight !== undefined && formData.weight <= 0) {
+    if (formData.weight != null && formData.weight <= 0) {
       newErrors.weight = 'Weight must be greater than 0'
     }
-    if (formData.volume !== undefined && formData.volume <= 0) {
+    if (formData.volume != null && formData.volume <= 0) {
       newErrors.volume = 'Volume must be greater than 0'
     }
     if (formData.images.length === 0) newErrors.images = 'At least one image is required'
@@ -239,10 +239,10 @@ export default function ProductForm({
             </div>
           </div>
 
-          {/* Description */}
+          {/* Description (optional; product name used if empty) */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Description *
+              Description
             </label>
             <textarea
               value={formData.description}
@@ -253,7 +253,7 @@ export default function ProductForm({
                 errors.description ? "border-red-500" : "border-gray-300 dark:border-gray-600",
                 "dark:bg-gray-800 dark:text-white"
               )}
-              placeholder="Enter product description"
+              placeholder="Optional; product name will be used if left empty"
             />
             {errors.description && <p className="text-sm text-red-500">{errors.description}</p>}
           </div>
@@ -288,7 +288,7 @@ export default function ProductForm({
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Subcategory *
+                Subcategory
               </label>
               <select
                 value={formData.subcategory}
@@ -301,7 +301,7 @@ export default function ProductForm({
                   !formData.category && "opacity-50 cursor-not-allowed"
                 )}
               >
-                <option value="">Select subcategory</option>
+                <option value="">Select subcategory (optional)</option>
                 {(availableSubcategories ?? []).map((subcategory) => (
                   <option key={subcategory} value={subcategory}>
                     {subcategory}
@@ -370,31 +370,41 @@ export default function ProductForm({
             </div>
           </div>
 
-          {/* Weight and Volume */}
+          {/* Weight and Volume (optional) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Weight (kg)
+                Weight (optional)
               </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={formData.weight || ''}
-                onChange={(e) => handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className={cn(
-                  "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                  errors.weight ? "border-red-500" : "border-gray-300 dark:border-gray-600",
-                  "dark:bg-gray-800 dark:text-white"
-                )}
-                placeholder="0.0"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step={formData.weight_unit === 'g' ? '1' : '0.1'}
+                  min="0"
+                  value={formData.weight ?? ''}
+                  onChange={(e) => handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : undefined)}
+                  className={cn(
+                    "flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    errors.weight ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+                    "dark:bg-gray-800 dark:text-white"
+                  )}
+                  placeholder={formData.weight_unit === 'g' ? 'e.g. 500' : 'e.g. 1.5'}
+                />
+                <select
+                  value={formData.weight_unit}
+                  onChange={(e) => handleInputChange('weight_unit', e.target.value as 'kg' | 'g')}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white w-20"
+                >
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
               {errors.weight && <p className="text-sm text-red-500">{errors.weight}</p>}
             </div>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Volume (L)
+                Volume (L, optional)
               </label>
               <input
                 type="number"

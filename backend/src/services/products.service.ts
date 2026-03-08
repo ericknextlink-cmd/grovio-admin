@@ -25,6 +25,8 @@ export interface Product {
   currency: string
   quantity: number
   weight?: number
+  /** Unit for weight: 'kg' or 'g'. When null, treat as kg for display. */
+  weight_unit?: 'kg' | 'g' | null
   volume?: number
   type?: string
   packaging?: string

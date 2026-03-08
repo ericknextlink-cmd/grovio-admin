@@ -5,6 +5,9 @@ import { EmailService } from './email.service'
 import { VoucherService } from './voucher.service'
 import { v4 as uuidv4 } from 'uuid'
 
+const ACTIVE_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'confirmed']
+const DELIVERY_CODE_MAX_ATTEMPTS = 50
+
 /**
  * Comprehensive Order Management Service
  * Handles order creation, payment processing, and invoice generation
@@ -67,6 +70,64 @@ export class OrderService {
     this.emailService = new EmailService()
     this.voucherService = new VoucherService()
     this.supabase = createAdminClient()
+  }
+
+  /**
+   * Generate a 4-digit delivery code unique among active (non-delivered, non-cancelled) orders.
+   * Codes from delivered/cancelled orders can be reused.
+   */
+  private async generateUniqueDeliveryCode(): Promise<string> {
+    const { data: activeCodes } = await this.supabase
+      .from('orders')
+      .select('delivery_code')
+      .not('delivery_code', 'is', null)
+      .in('status', ACTIVE_ORDER_STATUSES)
+
+    const usedSet = new Set((activeCodes || []).map((r: { delivery_code: string }) => r.delivery_code?.trim()).filter(Boolean))
+
+    for (let i = 0; i < DELIVERY_CODE_MAX_ATTEMPTS; i++) {
+      const code = String(1000 + Math.floor(Math.random() * 9000))
+      if (!usedSet.has(code)) return code
+    }
+    // Fallback: use last 4 digits of timestamp + random to avoid collision
+    const fallback = String(Date.now() % 10000).padStart(4, '0')
+    if (!usedSet.has(fallback)) return fallback
+    return String(10000 + Math.floor(Math.random() * 90000)).slice(0, 5)
+  }
+
+  /**
+   * Ensure an order has delivery_code and delivery_verification_token if it is still active.
+   * Used for old orders created before delivery verification was added. Delivered/cancelled orders are not updated.
+   */
+  private async ensureDeliveryVerification(orderId: string): Promise<{ delivery_code: string; delivery_verification_token: string } | null> {
+    try {
+      const { data: order, error } = await this.supabase
+        .from('orders')
+        .select('id, status, delivery_code, delivery_verification_token')
+        .eq('id', orderId)
+        .single()
+
+      if (error || !order) return null
+      if (!ACTIVE_ORDER_STATUSES.includes((order.status as string))) return null
+      if (order.delivery_code && order.delivery_verification_token) return null
+
+      const deliveryCode = await this.generateUniqueDeliveryCode()
+      const deliveryVerificationToken = uuidv4()
+
+      const { error: updateError } = await this.supabase
+        .from('orders')
+        .update({ delivery_code: deliveryCode, delivery_verification_token: deliveryVerificationToken })
+        .eq('id', orderId)
+
+      if (updateError) {
+        console.warn('Backfill delivery verification failed for order', orderId, updateError.message)
+        return null
+      }
+      return { delivery_code: deliveryCode, delivery_verification_token: deliveryVerificationToken }
+    } catch (err) {
+      console.warn('ensureDeliveryVerification error:', err)
+      return null
+    }
   }
 
   /**
@@ -365,6 +426,10 @@ export class OrderService {
       const orderNumber = this.pdfService.generateOrderId()
       const invoiceNumber = this.pdfService.generateInvoiceNumber()
 
+      // 4b. Generate delivery verification: 4-digit code (unique among active orders) and QR token
+      const deliveryCode = await this.generateUniqueDeliveryCode()
+      const deliveryVerificationToken = uuidv4()
+
       // 5. Create confirmed order (payment_method must match DB CHECK: use channel or 'paystack')
       const allowedMethods = ['card', 'mobile_money', 'bank_transfer', 'bank', 'ussd', 'qr', 'eft']
       const rawChannel = (paymentData.channel ?? (paymentData as { authorization?: { channel?: string } }).authorization?.channel) as string | undefined
@@ -390,6 +455,8 @@ export class OrderService {
           paid_at: paymentData.paid_at,
           delivery_address: pendingOrder.delivery_address,
           delivery_notes: pendingOrder.delivery_notes,
+          delivery_code: deliveryCode,
+          delivery_verification_token: deliveryVerificationToken,
           metadata: {
             paystack_transaction_id: paymentData.id,
             payment_channel: paymentData.channel,
@@ -580,10 +647,15 @@ export class OrderService {
         .eq('user_id', userId)
         .single()
 
-      if (error) {
+      if (error || !order) {
         return null
       }
 
+      // Backfill delivery code/token for old orders still active (e.g. processing)
+      const backfill = await this.ensureDeliveryVerification(orderId)
+      if (backfill) {
+        return { ...order, delivery_code: backfill.delivery_code, delivery_verification_token: backfill.delivery_verification_token }
+      }
       return order
     } catch (error) {
       console.error('Get order error:', error)
@@ -664,9 +736,23 @@ export class OrderService {
         }
       }
 
+      const list = orders || []
+      // Backfill delivery code/token for old orders still active (e.g. processing); delivered/cancelled are left as-is
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i] as Record<string, unknown>
+        const status = o.status as string
+        const hasCode = o.delivery_code != null && o.delivery_verification_token != null
+        if (ACTIVE_ORDER_STATUSES.includes(status) && !hasCode && o.id) {
+          const backfill = await this.ensureDeliveryVerification(o.id as string)
+          if (backfill) {
+            list[i] = { ...o, delivery_code: backfill.delivery_code, delivery_verification_token: backfill.delivery_verification_token }
+          }
+        }
+      }
+
       return {
         success: true,
-        data: orders || [],
+        data: list,
         pagination: {
           page,
           limit,
@@ -1072,6 +1158,100 @@ export class OrderService {
     } catch (error) {
       console.error('Get order stats error:', error)
       return null
+    }
+  }
+
+  /**
+   * Verify delivery by 4-digit code (rider or admin enters code to confirm delivery)
+   */
+  async verifyDeliveryByCode(code: string): Promise<{
+    success: boolean
+    orderId?: string
+    orderNumber?: string
+    error?: string
+  }> {
+    try {
+      const normalized = String(code || '').trim().replace(/\D/g, '')
+      const fourDigit = normalized.length === 4 ? normalized : (normalized.length > 4 ? normalized.slice(-4) : normalized.padStart(4, '0'))
+
+      if (fourDigit.length < 4) {
+        return { success: false, error: 'Invalid delivery code' }
+      }
+
+      const { data: order, error } = await this.supabase
+        .from('orders')
+        .select('id, order_id, status')
+        .eq('delivery_code', fourDigit)
+        .in('status', ACTIVE_ORDER_STATUSES)
+        .limit(1)
+        .maybeSingle()
+
+      if (error || !order) {
+        return { success: false, error: 'No active order found for this code' }
+      }
+
+      const updateResult = await this.updateOrderStatus(order.id, 'delivered', undefined, 'Delivery confirmed by code')
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error }
+      }
+
+      return {
+        success: true,
+        orderId: order.id,
+        orderNumber: order.order_id,
+      }
+    } catch (err) {
+      console.error('Verify delivery by code error:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Verification failed',
+      }
+    }
+  }
+
+  /**
+   * Verify delivery by QR token (rider scans QR or admin submits token)
+   */
+  async verifyDeliveryByToken(token: string): Promise<{
+    success: boolean
+    orderId?: string
+    orderNumber?: string
+    error?: string
+  }> {
+    try {
+      const t = String(token || '').trim()
+      if (!t) {
+        return { success: false, error: 'Verification token is required' }
+      }
+
+      const { data: order, error } = await this.supabase
+        .from('orders')
+        .select('id, order_id, status')
+        .eq('delivery_verification_token', t)
+        .in('status', ACTIVE_ORDER_STATUSES)
+        .limit(1)
+        .maybeSingle()
+
+      if (error || !order) {
+        return { success: false, error: 'No active order found for this verification' }
+      }
+
+      const updateResult = await this.updateOrderStatus(order.id, 'delivered', undefined, 'Delivery confirmed by QR/token')
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error }
+      }
+
+      return {
+        success: true,
+        orderId: order.id,
+        orderNumber: order.order_id,
+      }
+    } catch (err) {
+      console.error('Verify delivery by token error:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Verification failed',
+      }
     }
   }
 

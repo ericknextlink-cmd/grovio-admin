@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "dev": "nodemon --watch 'src/**/*.ts' --exec \"ts-node\" src/server.ts",
     "lint": "eslint 'src/**/*.ts'",
-    "test:invoice": "ts-node -r dotenv/config scripts/test-invoice.ts"
+    "test:invoice": "ts-node -r dotenv/config scripts/test-invoice.ts",
+    "grok-categories": "ts-node -r dotenv/config scripts/grok-categories.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.3.57",
@@ -55,6 +56,7 @@
     "ts-node": "^10.9.2",
     "uuid": "^13.0.0",
     "wagmi": "^2.17.5",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.11",
     "zod-to-json-schema": "^3.24.6"
   },
@@ -64,6 +66,7 @@
     "@types/cookie-parser": "^1.4.7",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20",
+    "@types/xlsx": "^0.0.36",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

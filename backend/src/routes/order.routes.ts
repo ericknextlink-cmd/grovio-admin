@@ -135,6 +135,20 @@ const checkPaymentStatusValidation = [
  */
 router.post('/webhook/paystack', orderController.handleWebhook)
 
+/**
+ * @route   POST /api/orders/delivery/verify-code
+ * @desc    Verify delivery by 4-digit code (rider or admin)
+ * @access  Public
+ */
+router.post('/delivery/verify-code', orderController.verifyDeliveryByCode)
+
+/**
+ * @route   POST /api/orders/delivery/verify-qr
+ * @desc    Verify delivery by QR token (rider or admin)
+ * @access  Public
+ */
+router.post('/delivery/verify-qr', orderController.verifyDeliveryByToken)
+
 // Protected routes (require authentication)
 router.use(authenticateToken)
 

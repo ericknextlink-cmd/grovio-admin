@@ -559,6 +559,84 @@ class OrderController {
                 });
             }
         };
+        /**
+         * Verify delivery by 4-digit code (public: rider or admin)
+         */
+        this.verifyDeliveryByCode = async (req, res) => {
+            try {
+                const code = req.body?.code ?? req.query?.code;
+                if (!code || String(code).trim() === '') {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Delivery code is required',
+                        errors: ['Missing code'],
+                    });
+                    return;
+                }
+                const result = await this.orderService.verifyDeliveryByCode(String(code).trim());
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'Delivery confirmed successfully',
+                        data: { orderId: result.orderId, orderNumber: result.orderNumber },
+                    });
+                }
+                else {
+                    res.status(400).json({
+                        success: false,
+                        message: result.error || 'Verification failed',
+                        errors: [result.error || 'Invalid code or order already delivered'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Verify delivery by code controller error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Verification failed'],
+                });
+            }
+        };
+        /**
+         * Verify delivery by QR token (public: rider or admin)
+         */
+        this.verifyDeliveryByToken = async (req, res) => {
+            try {
+                const token = req.body?.token ?? req.query?.token;
+                if (!token || String(token).trim() === '') {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Verification token is required',
+                        errors: ['Missing token'],
+                    });
+                    return;
+                }
+                const result = await this.orderService.verifyDeliveryByToken(String(token).trim());
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'Delivery confirmed successfully',
+                        data: { orderId: result.orderId, orderNumber: result.orderNumber },
+                    });
+                }
+                else {
+                    res.status(400).json({
+                        success: false,
+                        message: result.error || 'Verification failed',
+                        errors: [result.error || 'Invalid token or order already delivered'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Verify delivery by token controller error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Verification failed'],
+                });
+            }
+        };
         this.orderService = new order_service_1.OrderService();
         this.paystackService = new paystack_service_1.PaystackService();
     }

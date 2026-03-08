@@ -50,6 +50,10 @@ const createProductValidation = [
         .optional()
         .isFloat({ min: 0 })
         .withMessage('Weight must be a positive number'),
+    (0, express_validator_1.body)('weight_unit')
+        .optional()
+        .isIn(['kg', 'g'])
+        .withMessage('Weight unit must be kg or g'),
     (0, express_validator_1.body)('volume')
         .optional()
         .isFloat({ min: 0 })
@@ -131,6 +135,10 @@ const updateProductValidation = [
         .optional()
         .isFloat({ min: 0 })
         .withMessage('Weight must be a positive number'),
+    (0, express_validator_1.body)('weight_unit')
+        .optional()
+        .isIn(['kg', 'g'])
+        .withMessage('Weight unit must be kg or g'),
     (0, express_validator_1.body)('volume')
         .optional()
         .isFloat({ min: 0 })

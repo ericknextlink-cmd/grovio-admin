@@ -357,6 +357,68 @@ Grovio – Redefining the Way You Save.
         }
     }
     /**
+     * Send order confirmation email after successful payment (Resend).
+     * Includes invoice link and delivery code for the rider.
+     */
+    async sendOrderConfirmationEmail(to, options) {
+        const resendApiKey = process.env.RESEND_API_KEY;
+        if (!resendApiKey) {
+            console.warn('RESEND_API_KEY not set. Skipping order confirmation email.');
+            return { success: false, message: 'Email service not configured', errors: ['RESEND_API_KEY not set'] };
+        }
+        const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'orders@grovio.com';
+        const displayName = (options.customerName || 'Customer').trim();
+        const { orderNumber, invoicePdfUrl, deliveryCode } = options;
+        const deliveryBlock = deliveryCode
+            ? `<p><strong>Delivery code (give to rider to confirm delivery):</strong> <span style="font-size: 1.2em; letter-spacing: 0.1em;">${deliveryCode}</span></p>`
+            : '';
+        const textDelivery = deliveryCode ? `\nDelivery code (give to rider): ${deliveryCode}\n` : '';
+        try {
+            const emailResponse = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
+                body: JSON.stringify({
+                    from: fromEmail,
+                    to,
+                    subject: `Order confirmed – ${orderNumber}`,
+                    html: `
+            <!DOCTYPE html>
+            <html>
+              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
+                  <h1 style="color: #D35F0E; margin-top: 0;">Order confirmed</h1>
+                  <p>Hi ${displayName},</p>
+                  <p>Your payment was successful and your order <strong>${orderNumber}</strong> is confirmed.</p>
+                  ${deliveryBlock}
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${invoicePdfUrl}" style="background-color: #D35F0E; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">Download invoice (PDF)</a>
+                  </div>
+                  <p style="font-size: 14px; color: #666;">Or copy: <a href="${invoicePdfUrl}" style="color: #D35F0E; word-break: break-all;">${invoicePdfUrl}</a></p>
+                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                  <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
+                </div>
+              </body>
+            </html>
+          `,
+                    text: `Order confirmed\n\nHi ${displayName},\n\nYour order ${orderNumber} is confirmed.${textDelivery}\nDownload invoice: ${invoicePdfUrl}\n\nGrovio – Redefining the Way You Save.`.trim(),
+                }),
+            });
+            if (!emailResponse.ok) {
+                const errorData = await emailResponse.json().catch(() => ({}));
+                console.error('Resend order confirmation email error:', errorData);
+                return { success: false, message: 'Failed to send email', errors: [errorData.message || `Resend ${emailResponse.status}`] };
+            }
+            const data = await emailResponse.json();
+            console.log('Order confirmation email sent via Resend:', { to, orderNumber, messageId: data.id });
+            return { success: true, message: 'Order confirmation email sent successfully' };
+        }
+        catch (error) {
+            console.error('Send order confirmation email error:', error);
+            return { success: false, message: 'Internal server error', errors: [error instanceof Error ? error.message : 'Failed to send email'] };
+        }
+    }
+    /**
      * Send scheduled order reminder (1 day before). Uses Resend when RESEND_API_KEY is set.
      */
     async sendScheduledOrderReminder(email, options) {

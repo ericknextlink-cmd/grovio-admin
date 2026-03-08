@@ -122,6 +122,8 @@ export class OrderController {
             invoiceNumber: result.invoiceNumber,
             pdfUrl: result.pdfUrl,
             imageUrl: result.imageUrl,
+            deliveryCode: result.deliveryCode,
+            deliveryVerificationToken: result.deliveryVerificationToken,
           },
         })
       } else {

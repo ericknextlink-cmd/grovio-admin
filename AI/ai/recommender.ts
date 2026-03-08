@@ -58,8 +58,10 @@ export function getBudgetBundle(ctx: UserContext): Recommendation {
 
   const total = items.reduce((s, i) => s + i.subtotal, 0)
   const role = ctx.role ?? "user"
-  const size = ctx.familySize ?? 1
-  const rationale = `Optimized a budget-friendly basket for a ${role} (family size ${size}). Prioritized staples (rice/flour/oil), affordable proteins, and fresh produce, then filled remaining budget with essentials.`
+  const size = ctx.familySize
+  const rationale = size
+    ? `Optimized a budget-friendly basket for a ${role} (family size ${size}). Prioritized staples (rice/flour/oil), affordable proteins, and fresh produce, then filled remaining budget with essentials.`
+    : `Optimized a budget-friendly basket for a ${role}. Prioritized staples (rice/flour/oil), affordable proteins, and fresh produce, then filled remaining budget with essentials.`
 
   return { items, total, rationale }
 }

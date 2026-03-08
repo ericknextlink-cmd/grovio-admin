@@ -54,6 +54,8 @@ export interface VerifyPaymentResult {
   invoiceNumber?: string
   pdfUrl?: string
   imageUrl?: string
+  deliveryCode?: string
+  deliveryVerificationToken?: string
   error?: string
 }
 
@@ -363,7 +365,7 @@ export class OrderService {
       if (pendingOrder.converted_to_order_id) {
         const { data: existingOrder } = await this.supabase
           .from('orders')
-          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url, delivery_code, delivery_verification_token')
           .eq('id', pendingOrder.converted_to_order_id)
           .single()
 
@@ -375,6 +377,8 @@ export class OrderService {
             invoiceNumber: existingOrder.invoice_number,
             pdfUrl: existingOrder.invoice_pdf_url,
             imageUrl: existingOrder.invoice_image_url,
+            deliveryCode: existingOrder.delivery_code ?? undefined,
+            deliveryVerificationToken: existingOrder.delivery_verification_token ?? undefined,
           }
         }
       }
@@ -388,7 +392,7 @@ export class OrderService {
       if (recheckPending?.converted_to_order_id) {
         const { data: existingOrder } = await this.supabase
           .from('orders')
-          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+          .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url, delivery_code, delivery_verification_token')
           .eq('id', recheckPending.converted_to_order_id)
           .single()
         if (existingOrder) {
@@ -399,6 +403,8 @@ export class OrderService {
             invoiceNumber: existingOrder.invoice_number,
             pdfUrl: existingOrder.invoice_pdf_url,
             imageUrl: existingOrder.invoice_image_url,
+            deliveryCode: existingOrder.delivery_code ?? undefined,
+            deliveryVerificationToken: existingOrder.delivery_verification_token ?? undefined,
           }
         }
       }
@@ -406,7 +412,7 @@ export class OrderService {
       // 3c. Order may already exist for this reference (e.g. duplicate callback or race)
       const { data: existingByRef } = await this.supabase
         .from('orders')
-        .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
+        .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url, delivery_code, delivery_verification_token')
         .eq('payment_reference', paymentReference)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -419,6 +425,8 @@ export class OrderService {
           invoiceNumber: existingByRef.invoice_number,
           pdfUrl: existingByRef.invoice_pdf_url,
           imageUrl: existingByRef.invoice_image_url,
+          deliveryCode: existingByRef.delivery_code ?? undefined,
+          deliveryVerificationToken: existingByRef.delivery_verification_token ?? undefined,
         }
       }
 
@@ -469,11 +477,11 @@ export class OrderService {
       if (orderError) {
         // Idempotent: another request already created the order (unique on payment_reference)
         if (orderError.code === '23505') {
-          const { data: existingOrder } = await this.supabase
-            .from('orders')
-            .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url')
-            .eq('payment_reference', paymentReference)
-            .maybeSingle()
+      const { data: existingOrder } = await this.supabase
+        .from('orders')
+        .select('id, order_id, invoice_number, invoice_pdf_url, invoice_image_url, delivery_code, delivery_verification_token')
+        .eq('payment_reference', paymentReference)
+        .maybeSingle()
           if (existingOrder) {
             return {
               success: true,
@@ -482,6 +490,8 @@ export class OrderService {
               invoiceNumber: existingOrder.invoice_number,
               pdfUrl: existingOrder.invoice_pdf_url,
               imageUrl: existingOrder.invoice_image_url,
+              deliveryCode: existingOrder.delivery_code ?? undefined,
+              deliveryVerificationToken: existingOrder.delivery_verification_token ?? undefined,
             }
           }
         }
@@ -586,19 +596,20 @@ export class OrderService {
           })
           .eq('id', order.id)
 
-        // Send invoice to customer email via Resend (non-blocking; don't fail order if email fails)
+        // Send order confirmation + invoice to customer email (non-blocking)
         const customerEmail = pendingOrder.metadata?.userEmail as string | undefined
         if (customerEmail?.trim()) {
           this.emailService
-            .sendInvoiceEmail(customerEmail, {
+            .sendOrderConfirmationEmail(customerEmail, {
               customerName: `${pendingOrder.metadata?.userName ?? 'Customer'}`,
               orderNumber,
               invoicePdfUrl: invoiceResult.pdfUrl ?? '',
+              deliveryCode: deliveryCode,
             })
             .then((r) => {
-              if (!r.success) console.warn('Invoice email failed:', r.errors)
+              if (!r.success) console.warn('Order confirmation email failed:', r.errors)
             })
-            .catch((err) => console.error('Invoice email error:', err))
+            .catch((err) => console.error('Order confirmation email error:', err))
         }
       }
 
@@ -619,6 +630,8 @@ export class OrderService {
         invoiceNumber,
         pdfUrl: invoiceResult.pdfUrl,
         imageUrl: invoiceResult.imageUrl,
+        deliveryCode,
+        deliveryVerificationToken,
       }
     } catch (error) {
       console.error('Verify payment and create order error:', error)

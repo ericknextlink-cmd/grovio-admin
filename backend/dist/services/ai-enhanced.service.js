@@ -28,14 +28,14 @@ class AIEnhancedService {
         if (xaiKey) {
             this.xaiModel = new openai_1.ChatOpenAI({
                 apiKey: xaiKey,
-                modelName: 'grok-2-1212',
+                modelName: `${process.env.XAI_MODEL_NAME}`,
                 temperature: 0.4,
                 maxTokens: 1500,
                 configuration: {
                     baseURL: 'https://api.x.ai/v1',
                 }
             });
-            console.log('✅ xAI (Grok) model initialized for cultural analysis');
+            console.log('xAI (Grok) model initialized for cultural analysis');
         }
         else {
             this.xaiModel = null;
@@ -571,7 +571,7 @@ class AIEnhancedService {
                 }
             }
         }
-        console.log(`✅ Extracted ${allRecommended.filter(p => p.isInFinalList).length} final products and ${allRecommended.filter(p => !p.isInFinalList).length} alternatives`);
+        console.log(`Extracted ${allRecommended.filter(p => p.isInFinalList).length} final products and ${allRecommended.filter(p => !p.isInFinalList).length} alternatives`);
         return allRecommended;
     }
     /**
@@ -605,6 +605,59 @@ class AIEnhancedService {
         }
         return null;
     }
+    /**
+     * Parse budget and meal type from a single message (e.g. "budget of 500", "breakfast", "500").
+     * Used so budget-only or one-word follow-ups can still drive recommendations.
+     */
+    parseBudgetAndMealFromMessage(message) {
+        const out = {};
+        const lower = message.toLowerCase().trim();
+        const hasBudgetCue = /\b(budget|cedis|ghs|ghana|₵|cedi|suggestion|recommendation)\b/i.test(message) ||
+            /budget\s+of|on\s+a\s+budget|within\s+\d+|for\s+(me\s+)?(on\s+)?(a\s+)?(budget\s+of\s+)?\d+/i.test(message);
+        const numbers = message.match(/\d+[\.,]?\d*/g);
+        if (numbers && numbers.length > 0) {
+            const num = parseFloat(numbers[0].replace(',', '.'));
+            if (Number.isFinite(num) && num > 0 && (hasBudgetCue || lower.length < 20)) {
+                out.budget = Math.round(num);
+            }
+        }
+        if (/\bbreakfast\b/i.test(message))
+            out.mealType = 'breakfast';
+        else if (/\blunch\b/i.test(message))
+            out.mealType = 'lunch';
+        else if (/\bdinner\b/i.test(message))
+            out.mealType = 'dinner';
+        return out;
+    }
+    /**
+     * Merge context from thread history so one-word follow-ups ("breakfast", "500") resolve using prior messages.
+     */
+    mergeSupplierContext(currentMessage, history, bodyOptions) {
+        const parsed = this.parseBudgetAndMealFromMessage(currentMessage);
+        const words = currentMessage.trim().split(/\s+/).filter(Boolean);
+        const isShortFollowUp = words.length <= 2 && (words.length === 0 || words[0].length < 20);
+        let budget = bodyOptions.budget ?? parsed.budget;
+        let mealType = bodyOptions.mealType ?? parsed.mealType ?? 'all';
+        if (isShortFollowUp && history.length > 0) {
+            for (let i = history.length - 1; i >= 0 && i >= history.length - 6; i--) {
+                if (history[i].role !== 'user')
+                    continue;
+                const prev = this.parseBudgetAndMealFromMessage(history[i].content);
+                if (budget == null && prev.budget != null)
+                    budget = prev.budget;
+                if (mealType === 'all' && prev.mealType != null)
+                    mealType = prev.mealType;
+                if (budget != null && mealType !== 'all')
+                    break;
+            }
+        }
+        return {
+            familySize: bodyOptions.familySize,
+            budget,
+            mealType: mealType ?? 'all',
+            budgetMode: bodyOptions.budgetMode ?? 'per_meal',
+        };
+    }
     async chatWithSupplierProducts(message, supplierProducts, _userId = 'admin', options = {}) {
         try {
             if (!process.env.OPENAI_API_KEY) {
@@ -622,13 +675,30 @@ class AIEnhancedService {
             let maxProducts = 500;
             let attempts = 0;
             const maxAttempts = 3;
+            let mergedOptions;
+            let threadHistory = [];
+            if (options.threadId && _userId) {
+                await this.getOrCreateThread(_userId, options.threadId);
+                threadHistory = await this.getConversationHistory(options.threadId, _userId);
+                mergedOptions = this.mergeSupplierContext(message, threadHistory, options);
+            }
+            else {
+                const parsed = this.parseBudgetAndMealFromMessage(message);
+                mergedOptions = {
+                    familySize: options.familySize,
+                    budget: options.budget ?? parsed.budget,
+                    mealType: options.mealType ?? parsed.mealType ?? 'all',
+                    budgetMode: options.budgetMode ?? 'per_meal',
+                };
+            }
             while (attempts < maxAttempts) {
                 try {
                     const productContext = this.buildSupplierProductContext(supplierProducts, message, maxProducts);
                     const lowerMessage = message.toLowerCase();
-                    const familySize = options.familySize;
-                    const budget = options.budget;
+                    const familySize = mergedOptions.familySize;
+                    const budget = mergedOptions.budget;
                     const normalizedBudget = typeof budget === 'number' && Number.isFinite(budget) ? budget : 0;
+                    const mealType = mergedOptions.mealType;
                     const context = {
                         userId: _userId,
                         familySize,
@@ -636,17 +706,16 @@ class AIEnhancedService {
                     };
                     const queryIntent = {
                         keywords: lowerMessage.split(/\s+/).filter(word => word.length > 2),
-                        mealType: options.mealType ?? 'all',
-                        budgetMode: options.budgetMode ?? 'per_meal',
+                        mealType: mergedOptions.mealType,
+                        budgetMode: mergedOptions.budgetMode,
                         familySizeExplicit: familySize != null
                     };
-                    const mealType = queryIntent.mealType ?? 'all';
                     // Multi-Agent Step 1: xAI Cultural Analysis (runs in parallel with OpenAI prep)
-                    console.log('🤖 Starting Multi-Agent Deliberation...');
-                    const culturalAnalysis = await this.performCulturalDeliberation(message, productContext, familySize ?? 1, normalizedBudget, mealType);
-                    console.log('✅ Cultural Analysis:', culturalAnalysis.mealPatterns.join(', '));
+                    console.log('Starting Multi-Agent Deliberation...');
+                    const culturalAnalysis = await this.performCulturalDeliberation(message, productContext, familySize ?? 2, normalizedBudget, mealType);
+                    console.log('Cultural Analysis:', culturalAnalysis.mealPatterns.join(', '));
                     if (culturalAnalysis.warnings.length > 0) {
-                        console.log('⚠️ Cultural Warnings:', culturalAnalysis.warnings);
+                        console.log('Cultural Warnings:', culturalAnalysis.warnings);
                     }
                     // Multi-Agent Step 2: Build enhanced prompt with cultural context
                     let systemPrompt = (0, ai_prompts_1.buildSupplierRecommendationPrompt)(context, queryIntent, productContext);
@@ -674,10 +743,23 @@ class AIEnhancedService {
                     }
                     const systemMessage = new messages_1.SystemMessage(systemPrompt);
                     const humanMessage = new messages_1.HumanMessage(message);
-                    const response = await this.openAIModel.invoke([systemMessage, humanMessage]);
-                    const responseText = typeof response.content === 'string'
-                        ? response.content
-                        : JSON.stringify(response.content);
+                    let responseText;
+                    const historyMessages = threadHistory.slice(-6).map(h => h.role === 'user' ? new messages_1.HumanMessage(h.content) : new messages_1.AIMessage(h.content));
+                    if (historyMessages.length > 0) {
+                        const prompt = prompts_1.ChatPromptTemplate.fromMessages([
+                            ['system', systemPrompt],
+                            new prompts_1.MessagesPlaceholder('history'),
+                            ['human', '{message}'],
+                        ]);
+                        const chain = prompt.pipe(this.openAIModel).pipe(new output_parsers_1.StringOutputParser());
+                        responseText = await chain.invoke({ message, history: historyMessages });
+                    }
+                    else {
+                        const response = await this.openAIModel.invoke([systemMessage, humanMessage]);
+                        responseText = typeof response.content === 'string'
+                            ? response.content
+                            : JSON.stringify(response.content);
+                    }
                     const normalizedResponseText = this.sanitizeAssistantResponse(responseText);
                     // Extract recommended products from AI response for cart functionality
                     const recommendedProducts = this.extractRecommendedProducts(normalizedResponseText, supplierProducts.slice(0, maxProducts));
@@ -686,20 +768,30 @@ class AIEnhancedService {
                     let finalProducts = recommendedProducts;
                     const productNames = recommendedProducts.map((p) => p.name);
                     if (productNames.length > 0) {
-                        const familyContext = `family of ${familySize ?? 'unknown'}`;
+                        const familyContext = `family of ${familySize ?? 2}`;
                         const validationNote = await this.performRecommendationValidation(productNames, mealType, familyContext);
                         if (validationNote) {
                             const revised = await this.reviseRecommendationWithFeedback(normalizedResponseText, validationNote, productContext, message);
                             if (revised) {
                                 finalMessage = this.sanitizeAssistantResponse(revised);
                                 finalProducts = this.extractRecommendedProducts(finalMessage, supplierProducts.slice(0, maxProducts));
-                                console.log('✅ Main agent revised list using xAI validation feedback');
+                                console.log('Main agent revised list using xAI validation feedback');
                             }
+                        }
+                    }
+                    if (options.threadId && _userId) {
+                        try {
+                            await this.saveMessageToThread(options.threadId, { role: 'user', content: message, timestamp: new Date() }, _userId);
+                            await this.saveMessageToThread(options.threadId, { role: 'assistant', content: finalMessage, timestamp: new Date() }, _userId);
+                        }
+                        catch (e) {
+                            console.error('Error saving supplier-recommendations to thread:', e);
                         }
                     }
                     return {
                         success: true,
                         message: finalMessage,
+                        threadId: options.threadId,
                         recommendedProducts: finalProducts,
                     };
                 }
@@ -744,6 +836,18 @@ class AIEnhancedService {
                 if (existing) {
                     return threadId;
                 }
+                // Client sent a threadId that does not exist yet (e.g. widget first message): create with that id
+                await this.adminSupabase
+                    .from('ai_conversation_threads')
+                    .insert({
+                    thread_id: threadId,
+                    user_id: userId,
+                    messages: [],
+                    context: {},
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                });
+                return threadId;
             }
             const newThreadId = (0, uuid_1.v4)();
             await this.adminSupabase
@@ -769,7 +873,7 @@ class AIEnhancedService {
      * Reduces token usage and improves recommendation quality
      */
     smartFilterProducts(allProducts, mealType, budget, familySize) {
-        console.log(`🔍 Smart filtering ${allProducts.length} products for ${mealType}...`);
+        console.log(`Smart filtering ${allProducts.length} products for ${mealType}...`);
         // Define priority keywords based on meal type and culture
         const priorityPatterns = {
             breakfast: [
@@ -854,7 +958,7 @@ class AIEnhancedService {
         // Limit based on budget constraints
         const maxProducts = Math.min(300, sortedProducts.length);
         const filteredProducts = sortedProducts.slice(0, maxProducts);
-        console.log(`✅ Filtered to ${filteredProducts.length} relevant products (top scored)`);
+        console.log(`Filtered to ${filteredProducts.length} relevant products (top scored)`);
         // Return without score field
         return filteredProducts.map(({ score: _score, ...product }) => product);
     }

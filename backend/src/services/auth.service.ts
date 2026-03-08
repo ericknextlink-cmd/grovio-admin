@@ -245,10 +245,11 @@ export class AuthService {
       })
 
       if (authError || !authData.user) {
+        const userMessage = authError ? sanitizeAuthError(authError) : 'Invalid email or password'
         return {
           success: false,
-          message: 'Invalid email or password',
-          errors: ['Invalid credentials']
+          message: userMessage,
+          errors: []
         }
       }
 

@@ -69,7 +69,7 @@ function sanitizeAuthError(error) {
         return 'Invalid email or password';
     }
     if (errorMessage.includes('Email not confirmed')) {
-        return 'Please verify your email address before signing in';
+        return 'Please check your mail and confirm your email.';
     }
     if (errorMessage.includes('User already registered')) {
         return 'An account with this email already exists';

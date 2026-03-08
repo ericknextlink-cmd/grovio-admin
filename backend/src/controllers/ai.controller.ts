@@ -477,7 +477,7 @@ export class AIController {
    */
   getSupplierProductRecommendations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { message, familySize, budget, mealType, budgetMode } = req.body
+      const { message, familySize, budget, mealType, budgetMode, threadId } = req.body
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({
@@ -541,6 +541,7 @@ export class AIController {
           budget: typeof budget === 'number' ? budget : undefined,
           mealType: mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'all' ? mealType : undefined,
           budgetMode: budgetMode === 'combined' || budgetMode === 'per_meal' ? budgetMode : undefined,
+          threadId: typeof threadId === 'string' && threadId ? threadId : undefined,
         }
       )
 
@@ -550,11 +551,13 @@ export class AIController {
           message: 'AI recommendations generated successfully',
           data: {
             response: result.message,
+            threadId: result.threadId,
             recommendedProducts: result.recommendedProducts || [],
             allRecommendedProducts: result.recommendedProducts || [],
           },
         } as ApiResponse<{ 
           response: string; 
+          threadId?: string;
           recommendedProducts: Array<{id: string, name: string, price: number, quantity: number}>;
           allRecommendedProducts?: Array<{
             id: string;

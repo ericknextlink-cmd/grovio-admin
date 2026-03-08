@@ -226,10 +226,11 @@ class AuthService {
                 password
             });
             if (authError || !authData.user) {
+                const userMessage = authError ? (0, error_sanitizer_1.sanitizeAuthError)(authError) : 'Invalid email or password';
                 return {
                     success: false,
-                    message: 'Invalid email or password',
-                    errors: ['Invalid credentials']
+                    message: userMessage,
+                    errors: []
                 };
             }
             // Get user from our database using admin client to bypass RLS

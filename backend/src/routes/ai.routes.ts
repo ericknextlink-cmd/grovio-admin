@@ -140,6 +140,14 @@ const supplierProductRecommendationsValidation = [
     .withMessage('Message is required')
     .isLength({ min: 1, max: 2000 })
     .withMessage('Message must be between 1 and 2000 characters'),
+  body('threadId')
+    .optional({ values: 'null' })
+    .isUUID()
+    .withMessage('Thread ID must be a valid UUID'),
+  body('familySize').optional().isInt({ min: 1, max: 20 }).withMessage('Family size must be 1-20'),
+  body('budget').optional().isFloat({ min: 0 }).withMessage('Budget must be a positive number'),
+  body('mealType').optional().isIn(['breakfast', 'lunch', 'dinner', 'all']).withMessage('Meal type must be breakfast, lunch, dinner, or all'),
+  body('budgetMode').optional().isIn(['combined', 'per_meal']).withMessage('Budget mode must be combined or per_meal'),
   handleValidationErrors
 ]
 

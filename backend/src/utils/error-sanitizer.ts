@@ -71,7 +71,7 @@ export function sanitizeAuthError(error: unknown): string {
   }
   
   if (errorMessage.includes('Email not confirmed')) {
-    return 'Please verify your email address before signing in'
+    return 'Please check your mail and confirm your email.'
   }
   
   if (errorMessage.includes('User already registered')) {

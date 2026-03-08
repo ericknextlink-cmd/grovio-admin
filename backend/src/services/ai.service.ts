@@ -299,7 +299,7 @@ export class AIService {
    * Private helper methods
    */
   private generateGreetingResponse(): string {
-    return `**Hello! I'm your Grovio shopping assistant.** 🛒
+    return `**Hello! I'm your Grovio shopping assistant.**
 
 I can help you with:
 • **Budget shopping lists** - Tell me your budget and household size

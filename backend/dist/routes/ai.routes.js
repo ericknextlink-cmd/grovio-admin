@@ -137,6 +137,14 @@ const supplierProductRecommendationsValidation = [
         .withMessage('Message is required')
         .isLength({ min: 1, max: 2000 })
         .withMessage('Message must be between 1 and 2000 characters'),
+    (0, express_validator_1.body)('threadId')
+        .optional({ values: 'null' })
+        .isUUID()
+        .withMessage('Thread ID must be a valid UUID'),
+    (0, express_validator_1.body)('familySize').optional().isInt({ min: 1, max: 20 }).withMessage('Family size must be 1-20'),
+    (0, express_validator_1.body)('budget').optional().isFloat({ min: 0 }).withMessage('Budget must be a positive number'),
+    (0, express_validator_1.body)('mealType').optional().isIn(['breakfast', 'lunch', 'dinner', 'all']).withMessage('Meal type must be breakfast, lunch, dinner, or all'),
+    (0, express_validator_1.body)('budgetMode').optional().isIn(['combined', 'per_meal']).withMessage('Budget mode must be combined or per_meal'),
     validation_middleware_1.handleValidationErrors
 ];
 // Public AI routes (work for both authenticated and anonymous users)

@@ -43,7 +43,7 @@ export function buildSupplierRecommendationPrompt(
   const keywords = queryIntent.keywords.length > 0 ? queryIntent.keywords.join(', ') : 'General inquiry'
   const familyContextText = familySize
     ? `Family Size (from user prompt): ${familySize}`
-    : 'Family Size: Not specified in prompt (do NOT assume from profile/database)'
+    : 'Family Size: Not specified. Use conservative quantities suitable for 1-2 people. Do NOT say "family size not provided" or "you did not specify" - just give the recommendation.'
   const budgetMode = queryIntent.budgetMode || 'per_meal'
   const budgetModeText = budgetMode === 'combined'
     ? 'Budget mode: COMBINED (single total budget spread across requested/all meals).'
@@ -74,7 +74,7 @@ export function buildSupplierRecommendationPrompt(
 4. **NO OVER-BULKING** - Do not recommend multiple units of expensive items unless budget allows
 5. **MEAL SEPARATION** - Breakfast, lunch, and dinner are SEPARATE meals unless user explicitly asks combined planning
 6. **VARIETY OVER QUANTITY** - Better to have 1 unit each of different products than 2 units of one expensive product
-7. **PRACTICAL QUANTITIES** - Base quantities on the family size in the prompt. If missing, keep quantities conservative and ask a short follow-up
+7. **PRACTICAL QUANTITIES** - Base quantities on the family size in the prompt when given. If not given, use conservative quantities (1-2 people) and do NOT ask for family size or mention that it was missing - just provide the recommendation.
 8. **ONLY use products from catalog below** - You MUST NOT invent, suggest, or mention products that are not in the catalog
 9. **Use exact product names** from the catalog, including weight/size info
 10. **Check product availability** - Only recommend products marked with ✓ (in stock)
@@ -84,8 +84,8 @@ export function buildSupplierRecommendationPrompt(
 14. **Be culturally appropriate** - Suggest Ghanaian/African meal ideas when relevant
 15. **SPECIFIC PRODUCT SEARCH**: Only say "I don't see that product in our current catalog" if the user EXPLICITLY asks for a specific product by name (e.g., "Do you have Kellogg's cereal?") and it's not in the catalog
 16. **GENERAL RECOMMENDATIONS**: For requests like "What should I buy for breakfast/lunch/dinner?" or "Recommend products for my family" - ALWAYS provide recommendations using available catalog products, NEVER say product not found
-17. **CORRECT FAMILY SIZE**: NEVER use family size from profile/database. Use ONLY what the user stated in the current message. If not provided, do not claim a family size.
-18. **NO DEFAULT FAMILY CLAIMS**: Never say "your family size is 1" unless the user explicitly said 1.
+17. **CORRECT FAMILY SIZE**: Use only what the user stated. If not provided, use conservative quantities and never say "family size not provided", "you didn't specify", or "assuming 1" - just give the recommendation.
+18. **NO DEFAULT FAMILY CLAIMS**: Never say "your family size is 1" (or any number) unless the user explicitly stated it. When unknown, recommend without mentioning family size.
 19. **NO "SINCE..." OPENING**: Do not begin the response with "Since ...". Start directly with recommendations.
 20. **CURRENT MESSAGE OVERRIDES HISTORY**: Treat the latest user message as source of truth. Do not say "previously you said..." unless the user explicitly asks for comparison/history.
 21. **NUMBER DISAMBIGUATION**: Never treat family-size numbers (e.g., "family of 3") as budget. Budget must come from an explicit budget cue in the same message (e.g., "budget", "₵", "cedis", "GHS").

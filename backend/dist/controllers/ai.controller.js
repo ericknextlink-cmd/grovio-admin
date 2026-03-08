@@ -407,7 +407,7 @@ class AIController {
          */
         this.getSupplierProductRecommendations = async (req, res) => {
             try {
-                const { message, familySize, budget, mealType, budgetMode } = req.body;
+                const { message, familySize, budget, mealType, budgetMode, threadId } = req.body;
                 if (!message || typeof message !== 'string') {
                     res.status(400).json({
                         success: false,
@@ -458,6 +458,7 @@ class AIController {
                     budget: typeof budget === 'number' ? budget : undefined,
                     mealType: mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'all' ? mealType : undefined,
                     budgetMode: budgetMode === 'combined' || budgetMode === 'per_meal' ? budgetMode : undefined,
+                    threadId: typeof threadId === 'string' && threadId ? threadId : undefined,
                 });
                 if (result.success) {
                     res.json({
@@ -465,6 +466,7 @@ class AIController {
                         message: 'AI recommendations generated successfully',
                         data: {
                             response: result.message,
+                            threadId: result.threadId,
                             recommendedProducts: result.recommendedProducts || [],
                             allRecommendedProducts: result.recommendedProducts || [],
                         },

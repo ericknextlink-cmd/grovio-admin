@@ -121,7 +121,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         const userMetadata = fullUser.user_metadata || {}
         const appMetadata = fullUser.app_metadata || {}
         
-        console.log('📋 User metadata for auto-repair:', {
+        console.log('User metadata for auto-repair:', {
           userMetadata: Object.keys(userMetadata),
           appMetadata: Object.keys(appMetadata),
           providers: appMetadata.providers || [],

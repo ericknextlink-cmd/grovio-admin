@@ -100,7 +100,7 @@ const authenticateToken = async (req, res, next) => {
                 // Extract user metadata from auth user (prefer admin-fetched data)
                 const userMetadata = fullUser.user_metadata || {};
                 const appMetadata = fullUser.app_metadata || {};
-                console.log('📋 User metadata for auto-repair:', {
+                console.log('User metadata for auto-repair:', {
                     userMetadata: Object.keys(userMetadata),
                     appMetadata: Object.keys(appMetadata),
                     providers: appMetadata.providers || [],

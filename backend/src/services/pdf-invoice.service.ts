@@ -83,9 +83,15 @@ const ITEM_FLOOR_Y_LAST_PAGE = 920
 /** Last page: items start this far from top (smaller = items/totals higher; “totals position” for ~10 items, then totals shift down when more). */
 /** First page: gap below table heading so first product row doesn’t cross into it (mt-4 style). */
 const ITEMS_START_OFFSET_PAGE1 = 320
-const ITEMS_START_OFFSET_LAST_PAGE = 120
-/** Approx. items per blank continuation page (table only). */
-const ITEMS_PER_BLANK_PAGE = 10
+const ITEMS_START_OFFSET_LAST_PAGE = -340
+/** Max items per blank continuation page (table only). 13 gives 32→3 pages, 33→4 pages. */
+const ITEMS_PER_BLANK_PAGE = 13
+/** Continuation (middle) page: more negative (-370) so products start higher at top of page. */
+const CONTINUATION_PAGE_START_OFFSET = -370
+/** When 3+ pages, cap items on last page so continuation pages fill first (avoids 1–2 items on third page). */
+const MAX_ITEMS_ON_LAST_PAGE_WHEN_MULTI = 8
+/** Blank A4 page (height 842): margin from top to first item row baseline so content is on-page (templates use larger height + 530 offset). */
+const BLANK_PAGE_ITEMS_TOP_MARGIN = 100
 const LOGO_FILENAME = 'logo-black.svg'
 const LOGO_FILENAME_PNG = 'logo-black.png'
 
@@ -188,6 +194,13 @@ export class PDFInvoiceService {
     return doc.getPages()[0].getSize().height
   }
 
+  /** Width and height of the first page of a template PDF (for continuation pages to match layout). */
+  private async getTemplatePageSize(templateBytes: Uint8Array): Promise<{ width: number; height: number }> {
+    const doc = await PDFDocument.load(templateBytes)
+    const { width, height } = doc.getPages()[0].getSize()
+    return { width, height }
+  }
+
   /**
    * Ensure Supabase storage bucket exists
    */
@@ -239,35 +252,59 @@ export class PDFInvoiceService {
       const pageHeight1 = await this.getTemplatePageHeight(template1Bytes)
       const pageHeight2 = await this.getTemplatePageHeight(template2Bytes)
       const referencePageHeight = await this.getTemplatePageHeight(templateBytes)
+      const totalItems = data.items.length
+
+      // Pre-compute M1 and M2 so we can cap page 1 when 3+ pages (so continuation pages fill 13 each, not 1–2 on third page)
+      const M1 = Math.min(
+        totalItems,
+        this.computeItemsThatFit(data, 0, pageHeight1, ITEM_FLOOR_Y_PAGE1, ITEMS_START_OFFSET_PAGE1)
+      )
+      const M2 = this.computeItemsThatFit(data, M1, pageHeight2, ITEM_FLOOR_Y_LAST_PAGE, ITEMS_START_OFFSET_LAST_PAGE)
+      const remainingIfFullPage1 = totalItems - M1
+
+      let effectiveM1 = M1
+      if (totalItems >= 7 && totalItems <= 8) {
+        effectiveM1 = Math.min(M1, totalItems - 1)
+      } else if (remainingIfFullPage1 > M2 || totalItems >= 33) {
+        // 3+ pages (or 33+ items): cap page 1 so continuation pages fill (13 each); keep at least 6 on page 1
+        const M2Capped = Math.min(M2, MAX_ITEMS_ON_LAST_PAGE_WHEN_MULTI)
+        const minPage1 = 10
+        const maxForTwoContinuations = totalItems - M2Capped - 2 * ITEMS_PER_BLANK_PAGE
+        effectiveM1 = Math.min(M1, Math.max(minPage1, maxForTwoContinuations))
+      }
 
       const pageBuffers: Uint8Array[] = []
 
-      // Page 1: Template1 — logo, Billed To, QR, serial, date, items until page is full (barcode/QR same size as single-page)
-      const { bytes: page1Bytes, itemsDrawn: M1 } = await this.fillTemplate1FirstPage(
+      // Page 1: Template1 — draw effectiveM1 items (capped when 3+ pages so middle pages fill first)
+      const { bytes: page1Bytes, itemsDrawn: _drawn } = await this.fillTemplate1FirstPage(
         data,
         qrCodeData,
         template1Bytes,
         pageHeight1,
-        referencePageHeight
+        referencePageHeight,
+        effectiveM1
       )
       pageBuffers.push(page1Bytes)
 
-      const remaining = data.items.length - M1
-      const M2 = this.computeItemsThatFit(data, M1, pageHeight2, ITEM_FLOOR_Y_LAST_PAGE, ITEMS_START_OFFSET_LAST_PAGE)
+      const remaining = totalItems - effectiveM1
 
       if (remaining <= M2) {
         // Exactly 2 pages: last page has remaining items + totals
-        const lastBytes = await this.fillTemplate2LastPage(data, qrCodeData, template2Bytes, M1)
+        const lastBytes = await this.fillTemplate2LastPage(data, qrCodeData, template2Bytes, effectiveM1)
         pageBuffers.push(lastBytes)
       } else {
-        // 3+ pages: middle = blank table-only; last = Template2 with last M2 items + totals
-        const lastPageItemStart = data.items.length - M2
-        const _blankItemCount = lastPageItemStart - M1 // number of items drawn on blank middle pages (for clarity)
+        // 3+ pages: continuation pages (13 each), then last page (capped)
+        const M2Capped = Math.min(M2, MAX_ITEMS_ON_LAST_PAGE_WHEN_MULTI)
+        const lastPageItemStart = totalItems - M2Capped
+        const template2Size = await this.getTemplatePageSize(template2Bytes)
 
-        for (let offset = M1; offset < lastPageItemStart; offset += ITEMS_PER_BLANK_PAGE) {
-          const limit = Math.min(ITEMS_PER_BLANK_PAGE, lastPageItemStart - offset)
-          const buf = await this.drawBlankTablePage(data, offset, limit)
+        for (let offset = effectiveM1; offset < lastPageItemStart; ) {
+          const maxFit = this.computeItemsThatFit(data, offset, template2Size.height, ITEM_FLOOR_Y_PAGE1, CONTINUATION_PAGE_START_OFFSET)
+          const limit = Math.min(ITEMS_PER_BLANK_PAGE, maxFit, lastPageItemStart - offset)
+          if (limit <= 0) break
+          const buf = await this.drawBlankTablePage(data, offset, limit, template2Size)
           pageBuffers.push(buf)
+          offset += limit
         }
 
         const lastBytes = await this.fillTemplate2LastPage(data, qrCodeData, template2Bytes, lastPageItemStart)
@@ -368,27 +405,47 @@ export class PDFInvoiceService {
   }
 
   /**
+   * How many items fit on a blank A4 continuation page (no 530 offset; uses BLANK_PAGE_ITEMS_TOP_MARGIN).
+   */
+  private computeItemsThatFitBlankPage(data: InvoiceData, startIndex: number, pageHeight: number = 842): number {
+    const items = data.items.slice(startIndex)
+    const floorY = 50
+    let rowY = pageHeight - BLANK_PAGE_ITEMS_TOP_MARGIN
+    let count = 0
+    for (const item of items) {
+      const rowHeight = this.getItemRowHeight(item)
+      const rowContentBottom = rowY - rowHeight + PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET
+      if (rowContentBottom < floorY) break
+      count++
+      rowY -= rowHeight
+    }
+    return count
+  }
+
+  /**
    * First page of multi-page: Template1 with logo, Billed To, QR, serial, date, items (fill page). No totals/footer.
-   * Uses actual template page height so we don't assume A4 (842); templates may be larger.
+   * When itemLimitOverride is set (e.g. for 3+ pages so continuation pages fill first), only that many items are drawn.
    */
   private async fillTemplate1FirstPage(
     data: InvoiceData,
     qrCodeDataUrl: string,
     template1Bytes: Uint8Array,
     pageHeight: number,
-    referencePageHeight?: number
+    referencePageHeight?: number,
+    itemLimitOverride?: number
   ): Promise<{ bytes: Uint8Array; itemsDrawn: number }> {
     const M1 = Math.min(
       data.items.length,
       this.computeItemsThatFit(data, 0, pageHeight, ITEM_FLOOR_Y_PAGE1, ITEMS_START_OFFSET_PAGE1)
     )
+    const limit = itemLimitOverride !== undefined ? Math.min(M1, itemLimitOverride) : M1
     const bytes = await this.fillTemplate(data, qrCodeDataUrl, template1Bytes, {
       itemOffset: 0,
-      itemLimit: M1,
+      itemLimit: limit,
       skipTotalsAndFooter: true,
       referencePageHeight,
     })
-    return { bytes, itemsDrawn: M1 }
+    return { bytes, itemsDrawn: limit }
   }
 
   /**
@@ -793,18 +850,23 @@ export class PDFInvoiceService {
   }
 
   /**
-   * Create a blank A4 page and draw only the items table (continuation). No logo, Billed To, QR, footer.
+   * Create a blank continuation page and draw only the items table. No logo, Billed To, QR, footer.
+   * When pageSize (from Template2) is provided, uses the same dimensions and coordinates as the template so layout matches.
    */
   private async drawBlankTablePage(
     data: InvoiceData,
     itemOffset: number,
-    itemLimit: number
+    itemLimit: number,
+    pageSize?: { width: number; height: number }
   ): Promise<Uint8Array> {
     const items = data.items.slice(itemOffset, itemOffset + itemLimit)
     if (items.length === 0) throw new Error('drawBlankTablePage: no items in slice')
 
     const pdfDoc = await PDFDocument.create()
-    const page = pdfDoc.addPage([595, 842])
+    const [pageWidth, pageHeight] = pageSize
+      ? [pageSize.width, pageSize.height]
+      : [595, 842]
+    const page = pdfDoc.addPage([pageWidth, pageHeight])
     const { width, height } = page.getSize()
 
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
@@ -818,32 +880,62 @@ export class PDFInvoiceService {
     const lineThickness = 0.5
     const itemLineVerticalOffset = PDFInvoiceService.ITEM_LINE_VERTICAL_OFFSET
 
-    let yPos = height - ITEMS_START_OFFSET_PAGE1
+    if (pageSize) {
+      // Use CONTINUATION_PAGE_START_OFFSET so products start at top of page
+      let yPos = height - CONTINUATION_PAGE_START_OFFSET
+      for (const item of items) {
+        const descLines = wrapTextByWords(item.description, 4)
+        const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight)
+        const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset
 
-    for (const item of items) {
-      const descLines = wrapTextByWords(item.description, 4)
-      const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight)
-      const rowContentBottom = yPos - 530 - rowHeight + itemLineVerticalOffset
-
-      descLines.forEach((line, i) => {
-        page.drawText(line, {
-          x: leftMargin + 700,
-          y: yPos - 530 - i * descLineHeight,
-          size: 38,
-          font: helvetica,
+        descLines.forEach((line, i) => {
+          page.drawText(line, {
+            x: leftMargin + 700,
+            y: yPos - 530 - i * descLineHeight,
+            size: 38,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          })
+        })
+        page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawLine({
+          start: { x: lineLeft, y: rowContentBottom },
+          end: { x: lineRight + 90, y: rowContentBottom },
+          thickness: lineThickness,
           color: rgb(0, 0, 0),
         })
-      })
-      page.drawText(item.quantity.toString(), { x: width - 840, y: yPos - 530, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
-      page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: yPos - 530, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
-      page.drawText(item.total.toFixed(2), { x: width - 280, y: yPos - 525, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
-      page.drawLine({
-        start: { x: lineLeft, y: rowContentBottom },
-        end: { x: lineRight + 90, y: rowContentBottom },
-        thickness: lineThickness,
-        color: rgb(0, 0, 0),
-      })
-      yPos -= rowHeight
+        yPos -= rowHeight
+      }
+    } else {
+      // Fallback A4 (595×842): use top-margin layout so content is on-page
+      let rowY = height - BLANK_PAGE_ITEMS_TOP_MARGIN
+      for (const item of items) {
+        const descLines = wrapTextByWords(item.description, 4)
+        const rowHeight = PDFInvoiceService.ITEM_ROW_HEIGHT + 80 + Math.max(0, (descLines.length - 1) * descLineHeight)
+        const rowContentBottom = rowY - rowHeight + itemLineVerticalOffset
+
+        descLines.forEach((line, i) => {
+          page.drawText(line, {
+            x: leftMargin + 700,
+            y: rowY - i * descLineHeight,
+            size: 38,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          })
+        })
+        page.drawText(item.quantity.toString(), { x: width - 840, y: rowY, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawText(item.unitPrice.toFixed(2), { x: width - 560, y: rowY, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawText(item.total.toFixed(2), { x: width - 280, y: rowY + 5, size: 38, font: helveticaBold, color: rgb(0, 0, 0) })
+        page.drawLine({
+          start: { x: lineLeft, y: rowContentBottom },
+          end: { x: lineRight + 90, y: rowContentBottom },
+          thickness: lineThickness,
+          color: rgb(0, 0, 0),
+        })
+        rowY -= rowHeight
+      }
     }
 
     return await pdfDoc.save()
@@ -905,13 +997,13 @@ export class PDFInvoiceService {
       yPos -= rowHeight
     }
 
-    // Totals section: start just below last item so they sit higher when few items, and shift down when more
-    const totalsGapBelowItems = 80
+    // Totals section: larger gap (640) when last page has 3+ items (9–12 total); smaller gap (280) when 1–2 items (7–8 total) so totals stay on same page
+    const totalsGapBelowItems = items.length <= 2 ? 280 : 640
     yPos = yPos - totalsGapBelowItems
 
     page.drawText('Subtotal', { x: totalsLabelX, y: yPos + 40, size: 48, font: helveticaBold, color: rgb(0, 0, 0) })
     page.drawText(`GHC ${data.subtotal.toFixed(2)}`, { x: totalsValueX - 80, y: yPos + 40, size: 48, font: helveticaBold, color: rgb(0, 0, 0) })
-    yPos -= 66
+    yPos -= items.length <= 2 ? 86 : 266
     page.drawText('Discounts & Credits', { x: totalsLabelX, y: yPos, size: 55, font: helveticaBold, color: rgb(0, 0, 0) })
     yPos -= 86
     page.drawText('Discounts', { x: totalsLabelX, y: yPos, size: 38, font: helvetica, color: rgb(0, 0, 0) })

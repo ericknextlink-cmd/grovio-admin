@@ -81,7 +81,8 @@ const ITEM_FLOOR_Y_PAGE1 = 380
 /** On Template2 (last page), items must stay above this Y so totals never overlap (reserve space for Subtotal/Discounts/Total block). */
 const ITEM_FLOOR_Y_LAST_PAGE = 920
 /** Last page: items start this far from top (smaller = items/totals higher; “totals position” for ~10 items, then totals shift down when more). */
-const ITEMS_START_OFFSET_PAGE1 = 240
+/** First page: gap below table heading so first product row doesn’t cross into it (mt-4 style). */
+const ITEMS_START_OFFSET_PAGE1 = 320
 const ITEMS_START_OFFSET_LAST_PAGE = 120
 /** Approx. items per blank continuation page (table only). */
 const ITEMS_PER_BLANK_PAGE = 10

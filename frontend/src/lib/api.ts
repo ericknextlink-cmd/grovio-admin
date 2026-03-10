@@ -64,6 +64,11 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
     return true
   }
   
+  // Admin panel: send admin auth for products/categories so list endpoints work when required
+  if (endpoint.includes('/api/products') || endpoint.includes('/api/categories')) {
+    return true
+  }
+
   // Write operations on products, categories, etc. require admin auth
   const writeMethods = ['POST', 'PUT', 'PATCH', 'DELETE']
   if (writeMethods.includes(method.toUpperCase())) {
@@ -78,7 +83,7 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
       return true
     }
   }
-  
+
   return false
 }
 
@@ -392,13 +397,15 @@ export const categoriesApi = {
   delete: (id: string) => apiClient.delete<any>(`/api/categories/${id}`),
 }
 
-// Bundles API (GET public; generate/refresh/create admin)
+// Bundles API (GET public; generate/refresh/create/update admin)
 export const bundlesApi = {
   getAll: (params?: { category?: string; source?: 'ai' | 'admin'; page?: number; limit?: number; offset?: number }) =>
     apiClient.get<any>('/api/bundles', params),
   getById: (bundleId: string) => apiClient.get<any>(`/api/bundles/${bundleId}`),
   createManual: (body: { title: string; description?: string; category?: string; productIds: string[] }) =>
     apiClient.post<any>('/api/bundles', body),
+  update: (bundleId: string, body: { title?: string; description?: string; category?: string; productIds?: string[] }) =>
+    apiClient.put<any>(`/api/bundles/${bundleId}`, body),
   generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number; productsPerBundle?: number }) =>
     apiClient.post<any>('/api/bundles/generate', body),
   refresh: () => apiClient.post<any>('/api/bundles/refresh'),

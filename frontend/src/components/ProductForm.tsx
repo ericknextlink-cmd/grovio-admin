@@ -86,22 +86,22 @@ export default function ProductForm({
     if (product) {
       setFormData({
         name: product.name,
-        brand: product.brand,
-        description: product.description,
-        category: product.category,
-        subcategory: product.subcategory,
+        brand: product.brand ?? '',
+        description: product.description ?? '',
+        category: product.category ?? '',
+        subcategory: product.subcategory ?? '',
         price: product.price,
-        currency: product.currency,
+        currency: product.currency ?? 'GHS',
         quantity: product.quantity,
         weight: product.weight,
         weight_unit: (product as { weight_unit?: 'kg' | 'g' }).weight_unit ?? 'kg',
         volume: product.volume,
-        type: product.type,
-        packaging: product.packaging,
-        inStock: product.inStock,
-        rating: product.rating,
-        reviews: product.reviews,
-        images: product.images,
+        type: product.type ?? '',
+        packaging: product.packaging ?? '',
+        inStock: product.inStock ?? true,
+        rating: product.rating ?? 0,
+        reviews: product.reviews ?? 0,
+        images: Array.isArray(product.images) ? product.images : [],
       })
       setErrors({})
       hasRestoredDraftRef.current = false

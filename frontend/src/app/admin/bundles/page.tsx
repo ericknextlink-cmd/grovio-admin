@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
 import { bundlesApi, productsApi, categoriesApi } from '@/lib/api'
 import { toast } from 'sonner'
-import { Layers, Loader2, ChevronDown, ChevronUp, Sparkles, Package, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import Link from 'next/link'
+import { Layers, Loader2, ChevronDown, ChevronUp, Sparkles, Package, ChevronLeft, ChevronRight, Search, X, ExternalLink } from 'lucide-react'
 
 interface BundleProduct {
   id: string
@@ -118,10 +119,15 @@ export default function AdminBundlesPage() {
     setProductsLoading(true)
     try {
       const res = await productsApi.getAll({ page: 1, limit: 500 })
-      if (res.success && res.data && Array.isArray(res.data)) {
-        setProducts(res.data.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
+      const list = Array.isArray(res?.data) ? res.data : (res as { data?: { data?: unknown[] } })?.data?.data
+      const arr = Array.isArray(list) ? list : []
+      if (arr.length > 0) {
+        setProducts(arr.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
+      } else if (!res?.success) {
+        toast.error(res?.message || 'Failed to load products')
       }
-    } catch {
+    } catch (e) {
+      console.error('Load products for bundles:', e)
       toast.error('Failed to load products')
     } finally {
       setProductsLoading(false)
@@ -455,26 +461,31 @@ export default function AdminBundlesPage() {
                     const source = b.generatedBy ?? 'ai'
                     return (
                       <li key={b.bundleId} className="p-4">
-                        <div
-                          className="flex items-center justify-between cursor-pointer"
-                          onClick={() => toggleExpand(b.bundleId)}
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 flex-wrap cursor-pointer"
+                            onClick={() => toggleExpand(b.bundleId)}
+                          >
                             <span className="font-medium text-gray-900 dark:text-white">{b.title}</span>
                             <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
                               {source === 'admin' ? 'Admin' : 'AI'}
                             </span>
                             <span className="text-sm text-gray-500 dark:text-gray-400">({b.category})</span>
-                          </div>
-                          <div className="flex items-center gap-4">
                             <span className="text-gray-700 dark:text-gray-300 font-medium">
                               ₵{b.originalPrice.toFixed(2)}
                               {b.discountPercentage != null && b.discountPercentage > 0 && (
                                 <span className="text-sm text-green-600 ml-1"> (list: ₵{b.currentPrice.toFixed(2)})</span>
                               )}
                             </span>
-                            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                            {isExpanded ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
                           </div>
+                          <Link
+                            href={`/admin/bundles/${encodeURIComponent(b.bundleId)}`}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" /> View
+                          </Link>
                         </div>
                         {isExpanded && (
                           <div className="mt-3 pl-2 border-l-2 border-gray-200 dark:border-gray-600 space-y-1">
@@ -490,6 +501,12 @@ export default function AdminBundlesPage() {
                               <span>Total (sum of items)</span>
                               <span>₵{totalFromItems.toFixed(2)}</span>
                             </div>
+                            <Link
+                              href={`/admin/bundles/${encodeURIComponent(b.bundleId)}`}
+                              className="inline-flex items-center gap-1 mt-2 text-sm text-blue-600 hover:underline"
+                            >
+                              View full details & edit <ExternalLink className="h-3 w-3" />
+                            </Link>
                           </div>
                         )}
                       </li>

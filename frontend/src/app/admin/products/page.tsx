@@ -274,11 +274,13 @@ export default function ProductsPage() {
 
   const handleProductFormSubmit = async (formValues: Omit<GroceryProduct, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-      const { images: uploadedImages, errors } = await uploadLocalImages(formValues.images, 'products')
+      const { images: uploadedImages, errors } = await uploadLocalImages(formValues.images || [], 'products')
       if (errors.length > 0) {
         console.warn('Some product images failed to upload:', errors)
         toast.warning(`Some images failed to upload: ${errors.join(', ')}`)
       }
+      // Only send URLs (backend validation expects URL strings; strip any leftover data URLs)
+      const imageUrls = (uploadedImages || []).filter((url): url is string => typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://')))
 
       const payload = {
         name: formValues.name.trim(),
@@ -298,7 +300,7 @@ export default function ProductsPage() {
         in_stock: formValues.inStock,
         rating: formValues.rating ?? 0,
         reviews_count: formValues.reviews ?? 0,
-        images: uploadedImages,
+        images: imageUrls,
       }
 
       let response
@@ -314,6 +316,8 @@ export default function ProductsPage() {
       }
 
       toast.success(editingProduct ? 'Product updated' : 'Product created')
+      setEditingProduct(null)
+      setIsProductModalOpen(false)
       await fetchProducts()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save product')

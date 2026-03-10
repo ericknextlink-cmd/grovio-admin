@@ -83,9 +83,15 @@ GOOGLE_CLIENT_ID=your_google_client_id_here
 GOOGLE_CLIENT_SECRET=your_google_client_secret_here
 FRONTEND_URL=http://localhost:3001
 ADMIN_URL=http://localhost:3000
+RESEND_API_KEY=re_xxxx
+EMAIL_FROM=onboarding@resend.dev
 ```
 
  **Important**: You must add your actual `SUPABASE_SERVICE_ROLE_KEY` from your Supabase dashboard (Settings > API).
+
+**Email (Resend – invoices, order confirmation, recovery):** All transactional emails use Resend. Set `RESEND_API_KEY` (from [Resend](https://resend.com)). The **sender address** is `EMAIL_FROM`. Resend only allows sending from **verified** senders:
+- **Testing:** Use `EMAIL_FROM=onboarding@resend.dev` (Resend’s default; works on free tier).
+- **Production:** In Resend, add and verify your domain (e.g. grovio.com), then set `EMAIL_FROM=orders@yourdomain.com` (or similar). If `EMAIL_FROM` is unset or uses an unverified address, emails may not be delivered.
 
 ### 2. Install Dependencies
 

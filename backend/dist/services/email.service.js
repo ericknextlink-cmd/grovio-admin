@@ -2,6 +2,20 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmailService = void 0;
 const supabase_1 = require("../config/supabase");
+const email_1 = require("../templates/email");
+/**
+ * Resend only sends from verified senders. Set EMAIL_FROM in .env to:
+ * - Your verified domain in Resend (e.g. orders@yourdomain.com after verifying yourdomain.com), or
+ * - Resend's testing sender: onboarding@resend.dev (works on free tier until you add a domain).
+ * If EMAIL_FROM is unset, we fall back to onboarding@resend.dev so emails can still send in development.
+ */
+function getResendFromEmail(override) {
+    const from = override || process.env.EMAIL_FROM || 'onboarding@resend.dev';
+    if (!process.env.EMAIL_FROM && !override) {
+        console.warn('EMAIL_FROM not set. Using onboarding@resend.dev. For production, set EMAIL_FROM in .env to a verified sender in Resend (e.g. orders@yourdomain.com).');
+    }
+    return from;
+}
 class EmailService {
     /**
      * Send email verification OTP
@@ -141,7 +155,7 @@ class EmailService {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
             const frontendUrl = options?.frontendUrl || process.env.FRONTEND_URL || '';
-            const fromEmail = options?.fromEmail || process.env.EMAIL_FROM || 'noreply@grovio.com';
+            const fromEmail = getResendFromEmail(options?.fromEmail);
             // Build recovery URL
             const recoveryUrl = options?.recoveryUrl || `${frontendUrl}/account/recover?email=${encodeURIComponent(email)}&token=${encodeURIComponent(recoveryToken)}`;
             // If Resend API key is not configured, log error and return
@@ -159,8 +173,6 @@ class EmailService {
                     errors: ['RESEND_API_KEY environment variable is not set. Please configure email service to send recovery emails.']
                 };
             }
-            // Send email using Resend API
-            // Documentation: https://supabase.com/docs/guides/functions/examples/send-emails
             const emailResponse = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
@@ -171,65 +183,8 @@ class EmailService {
                     from: fromEmail,
                     to: email,
                     subject: 'Account Recovery - Grovio',
-                    html: `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Account Recovery</title>
-              </head>
-              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                  <h1 style="color: #2563eb; margin-top: 0;">Account Recovery Request</h1>
-                  <p>Hello,</p>
-                  <p>We received a request to recover your Grovio account. If you didn't make this request, you can safely ignore this email.</p>
-                  <p>To recover your account, click the button below or copy and paste the link into your browser:</p>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${recoveryUrl}" 
-                       style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                      Recover Account
-                    </a>
-                  </div>
-                  <p style="font-size: 14px; color: #666;">
-                    Or copy and paste this link into your browser:<br>
-                    <a href="${recoveryUrl}" style="color: #2563eb; word-break: break-all;">${recoveryUrl}</a>
-                  </p>
-                  <p style="font-size: 14px; color: #666;">
-                    <strong>Recovery Token:</strong> ${recoveryToken}
-                  </p>
-                  <p style="font-size: 14px; color: #666;">
-                    This link will expire in 24 hours. If you need a new recovery link, please request one again.
-                  </p>
-                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-                  <p style="font-size: 12px; color: #999; margin-bottom: 0;">
-                    If you didn't request this email, you can safely ignore it. Your account will remain unchanged.
-                  </p>
-                  <p style="font-size: 12px; color: #999; margin-top: 10px;">
-                    © ${new Date().getFullYear()} Grovio. All rights reserved.
-                  </p>
-                </div>
-              </body>
-            </html>
-          `,
-                    text: `
-Account Recovery Request
-
-Hello,
-
-We received a request to recover your Grovio account. If you didn't make this request, you can safely ignore this email.
-
-To recover your account, please visit the following link:
-${recoveryUrl}
-
-Recovery Token: ${recoveryToken}
-
-This link will expire in 24 hours. If you need a new recovery link, please request one again.
-
-If you didn't request this email, you can safely ignore it. Your account will remain unchanged.
-
-© ${new Date().getFullYear()} Grovio. All rights reserved.
-          `.trim(),
+                    html: (0, email_1.accountRecoveryHtml)({ recoveryUrl, recoveryToken }),
+                    text: (0, email_1.accountRecoveryText)({ recoveryUrl, recoveryToken }),
                 }),
             });
             if (!emailResponse.ok) {
@@ -267,7 +222,7 @@ If you didn't request this email, you can safely ignore it. Your account will re
     async sendInvoiceEmail(to, options) {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
-            const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'orders@grovio.com';
+            const fromEmail = getResendFromEmail(options.fromEmail);
             if (!resendApiKey) {
                 console.warn('RESEND_API_KEY not set. Skipping invoice email.');
                 return {
@@ -288,47 +243,8 @@ If you didn't request this email, you can safely ignore it. Your account will re
                     from: fromEmail,
                     to,
                     subject: `Your Grovio invoice – Order ${orderNumber}`,
-                    html: `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Your Invoice</title>
-              </head>
-              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
-                  <h1 style="color: #2563eb; margin-top: 0;">Thank you for your order</h1>
-                  <p>Hi ${displayName},</p>
-                  <p>Your payment was successful. Please find your invoice for order <strong>${orderNumber}</strong> below.</p>
-                  <div style="text-align: center; margin: 24px 0;">
-                    <a href="${invoicePdfUrl}" 
-                       style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                      Download invoice (PDF)
-                    </a>
-                  </div>
-                  <p style="font-size: 14px; color: #666;">
-                    Or copy this link: <a href="${invoicePdfUrl}" style="color: #2563eb; word-break: break-all;">${invoicePdfUrl}</a>
-                  </p>
-                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-                  <p style="font-size: 12px; color: #999;">
-                    Grovio – Redefining the Way You Save.
-                  </p>
-                </div>
-              </body>
-            </html>
-          `,
-                    text: `
-Thank you for your order
-
-Hi ${displayName},
-
-Your payment was successful. Download your invoice for order ${orderNumber} here:
-
-${invoicePdfUrl}
-
-Grovio – Redefining the Way You Save.
-          `.trim(),
+                    html: (0, email_1.invoiceHtml)({ displayName, orderNumber, invoicePdfUrl }),
+                    text: (0, email_1.invoiceText)({ displayName, orderNumber, invoicePdfUrl }),
                 }),
             });
             if (!emailResponse.ok) {
@@ -366,13 +282,9 @@ Grovio – Redefining the Way You Save.
             console.warn('RESEND_API_KEY not set. Skipping order confirmation email.');
             return { success: false, message: 'Email service not configured', errors: ['RESEND_API_KEY not set'] };
         }
-        const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'orders@grovio.com';
+        const fromEmail = getResendFromEmail(options.fromEmail);
         const displayName = (options.customerName || 'Customer').trim();
         const { orderNumber, invoicePdfUrl, deliveryCode } = options;
-        const deliveryBlock = deliveryCode
-            ? `<p><strong>Delivery code (give to rider to confirm delivery):</strong> <span style="font-size: 1.2em; letter-spacing: 0.1em;">${deliveryCode}</span></p>`
-            : '';
-        const textDelivery = deliveryCode ? `\nDelivery code (give to rider): ${deliveryCode}\n` : '';
         try {
             const emailResponse = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
@@ -381,27 +293,8 @@ Grovio – Redefining the Way You Save.
                     from: fromEmail,
                     to,
                     subject: `Order confirmed – ${orderNumber}`,
-                    html: `
-            <!DOCTYPE html>
-            <html>
-              <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
-                  <h1 style="color: #D35F0E; margin-top: 0;">Order confirmed</h1>
-                  <p>Hi ${displayName},</p>
-                  <p>Your payment was successful and your order <strong>${orderNumber}</strong> is confirmed.</p>
-                  ${deliveryBlock}
-                  <div style="text-align: center; margin: 24px 0;">
-                    <a href="${invoicePdfUrl}" style="background-color: #D35F0E; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">Download invoice (PDF)</a>
-                  </div>
-                  <p style="font-size: 14px; color: #666;">Or copy: <a href="${invoicePdfUrl}" style="color: #D35F0E; word-break: break-all;">${invoicePdfUrl}</a></p>
-                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-                  <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
-                </div>
-              </body>
-            </html>
-          `,
-                    text: `Order confirmed\n\nHi ${displayName},\n\nYour order ${orderNumber} is confirmed.${textDelivery}\nDownload invoice: ${invoicePdfUrl}\n\nGrovio – Redefining the Way You Save.`.trim(),
+                    html: (0, email_1.orderConfirmationHtml)({ displayName, orderNumber, invoicePdfUrl, deliveryCode }),
+                    text: (0, email_1.orderConfirmationText)({ displayName, orderNumber, invoicePdfUrl, deliveryCode }),
                 }),
             });
             if (!emailResponse.ok) {
@@ -424,7 +317,7 @@ Grovio – Redefining the Way You Save.
     async sendScheduledOrderReminder(email, options) {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
-            const fromEmail = process.env.EMAIL_FROM || 'noreply@grovio.com';
+            const fromEmail = getResendFromEmail();
             const shopUrl = options.shopUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
             if (!resendApiKey) {
                 console.warn('RESEND_API_KEY not set. Scheduled order reminder not sent.', { email, ...options });
@@ -434,20 +327,12 @@ Grovio – Redefining the Way You Save.
                     errors: ['RESEND_API_KEY not set'],
                 };
             }
-            const dateStr = new Date(options.scheduledDate).toLocaleDateString();
-            const html = `
-        <!DOCTYPE html>
-        <html>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h1 style="color: #D35F0E;">Your scheduled order is tomorrow</h1>
-            <p>Hi${options.userName ? ` ${options.userName}` : ''},</p>
-            <p>This is a reminder that your scheduled order for <strong>${options.bundleTitle}</strong> is due on <strong>${dateStr}</strong>.</p>
-            <p>Complete your payment so we can deliver on time:</p>
-            <p><a href="${shopUrl}/shop" style="background: #D35F0E; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px;">Go to shop</a></p>
-            <p>If you already placed this order, you can ignore this email.</p>
-          </body>
-        </html>
-      `;
+            const html = (0, email_1.scheduledReminderHtml)({
+                userName: options.userName,
+                scheduledDate: options.scheduledDate,
+                bundleTitle: options.bundleTitle,
+                shopUrl,
+            });
             const res = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
@@ -480,29 +365,16 @@ Grovio – Redefining the Way You Save.
     async sendContactToAdmin(options) {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
-            const fromEmail = options.fromEmail || process.env.EMAIL_FROM || 'noreply@grovio.com';
+            const fromEmail = getResendFromEmail(options.fromEmail);
             if (!resendApiKey) {
                 return { success: false, message: 'Email not configured', errors: ['RESEND_API_KEY not set'] };
             }
-            const phoneLine = options.phone ? `<p><strong>Phone:</strong> ${options.phone}</p>` : '';
-            const html = `
-        <!DOCTYPE html>
-        <html>
-          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
-              <h1 style="color: #D35F0E; margin-top: 0;">New contact form submission</h1>
-              <p><strong>Name:</strong> ${options.name}</p>
-              <p><strong>Email:</strong> ${options.email}</p>
-              ${phoneLine}
-              <p><strong>Message:</strong></p>
-              <p style="white-space: pre-wrap;">${(options.message || '').replace(/</g, '&lt;')}</p>
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-              <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
-            </div>
-          </body>
-        </html>
-      `;
+            const html = (0, email_1.contactToAdminHtml)({
+                name: options.name,
+                email: options.email,
+                phone: options.phone,
+                message: options.message,
+            });
             const res = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
@@ -531,27 +403,12 @@ Grovio – Redefining the Way You Save.
     async sendContactConfirmationToUser(email, name) {
         try {
             const resendApiKey = process.env.RESEND_API_KEY;
-            const fromEmail = process.env.EMAIL_FROM || 'noreply@grovio.com';
+            const fromEmail = getResendFromEmail();
             if (!resendApiKey) {
                 return { success: false, message: 'Email not configured', errors: ['RESEND_API_KEY not set'] };
             }
             const displayName = (name || 'there').trim() || 'there';
-            const html = `
-        <!DOCTYPE html>
-        <html>
-          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
-              <h1 style="color: #D35F0E; margin-top: 0;">We received your message</h1>
-              <p>Hi ${displayName},</p>
-              <p>Thank you for getting in touch. We have received your message and will get back to you as soon as we can.</p>
-              <p>If your matter is urgent, you can also reach us at the contact details on our website.</p>
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-              <p style="font-size: 12px; color: #999;">Grovio – Redefining the Way You Save.</p>
-            </div>
-          </body>
-        </html>
-      `;
+            const html = (0, email_1.contactConfirmationHtml)({ displayName });
             const res = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },

@@ -91,10 +91,20 @@ export default function AdminBundleDetailPage() {
   const loadProducts = useCallback(async () => {
     setProductsLoading(true)
     try {
-      const res = await productsApi.getAll({ page: 1, limit: 500 })
-      const list = Array.isArray(res?.data) ? res.data : (res as { data?: { data?: unknown[] } })?.data?.data
-      const arr = Array.isArray(list) ? list : []
-      setProducts(arr.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
+      const all: Array<{ id: string; name: string; price: number }> = []
+      const limit = 100
+      let page = 1
+      let total = 0
+      while (true) {
+        const res = await productsApi.getAll({ page, limit })
+        const list = Array.isArray(res?.data) ? res.data : (res as { data?: unknown[] })?.data
+        const arr = Array.isArray(list) ? list : []
+        total = (res as { pagination?: { total?: number } })?.pagination?.total ?? arr.length
+        all.push(...arr.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
+        if (all.length >= total || all.length >= 500 || arr.length < limit) break
+        page++
+      }
+      setProducts(all)
     } catch {
       toast.error('Failed to load products')
     } finally {
@@ -184,139 +194,140 @@ export default function AdminBundleDetailPage() {
           </Link>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Inline edit or view */}
             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{bundle.title}</h1>
+              <div className="flex-1 min-w-0">
+                {editOpen ? (
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full text-2xl font-bold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white"
+                    placeholder="Bundle title"
+                  />
+                ) : (
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{bundle.title}</h1>
+                )}
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   {bundle.bundleId} · {bundle.generatedBy === 'admin' ? 'Manual' : 'AI'}
                 </p>
-                {bundle.category && (
+                {editOpen ? (
+                  <input
+                    type="text"
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    list="edit-categories"
+                    placeholder="Category"
+                    className="mt-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                  />
+                ) : bundle.category ? (
                   <span className="inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
                     {bundle.category}
                   </span>
-                )}
-              </div>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-              >
-                <Edit className="h-4 w-4" /> Edit
-              </button>
-            </div>
-
-            {bundle.description && (
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">Description</h2>
-                <p className="text-gray-700 dark:text-gray-300">{bundle.description}</p>
-              </div>
-            )}
-
-            <div className="p-6">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-3 flex items-center gap-2">
-                <Package className="h-4 w-4" /> Items
-              </h2>
-              <ul className="space-y-2">
-                {(bundle.products || []).map((p) => (
-                  <li key={p.id} className="flex justify-between text-gray-700 dark:text-gray-300">
-                    <span>{p.name}</span>
-                    <span>×{p.quantity || 1} = ₵{((p.price || 0) * (p.quantity || 1)).toFixed(2)}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold text-gray-900 dark:text-white">
-                <span>Total</span>
-                <span>₵{bundle.currentPrice.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Edit modal */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Edit bundle</h3>
-              <button onClick={() => setEditOpen(false)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-                <input
-                  type="text"
-                  value={editCategory}
-                  onChange={(e) => setEditCategory(e.target.value)}
-                  list="edit-categories"
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white"
-                />
+                ) : null}
                 <datalist id="edit-categories">
                   {categories.map((c) => (
                     <option key={c.id} value={c.name} />
                   ))}
                 </datalist>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Products ({editProductIds.length})</label>
+              {editOpen ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEditOpen(false); setEditTitle(bundle.title); setEditDescription(bundle.description || ''); setEditCategory(bundle.category || ''); setEditProductIds(bundle.productIds || []); }}
+                    className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={saving || editProductIds.length < 2}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                >
+                  <Edit className="h-4 w-4" /> Edit
+                </button>
+              )}
+            </div>
+
+            {/* Description: editable inline when editOpen */}
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">Description</h2>
+              {editOpen ? (
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white"
+                  placeholder="Optional description"
+                />
+              ) : bundle.description ? (
+                <p className="text-gray-700 dark:text-gray-300">{bundle.description}</p>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 italic">No description</p>
+              )}
+            </div>
+
+            {/* Items: show selected from editProductIds when editing, else bundle.products; "Change products" opens modal only */}
+            <div className="p-6">
+              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-3 flex items-center gap-2">
+                <Package className="h-4 w-4" /> Items
+                {editOpen && (
                   <button
                     type="button"
                     onClick={() => { loadProducts(); setProductModalOpen(true) }}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline ml-2"
                   >
                     Change products
                   </button>
-                </div>
-                {selectedProducts.length > 0 ? (
-                  <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                    {selectedProducts.map((p) => (
-                      <li key={p.id}>{p.name} — ₵{p.price.toFixed(2)}</li>
+                )}
+              </h2>
+              {editOpen ? (
+                <>
+                  {selectedProducts.length >= 2 ? (
+                    <ul className="space-y-2">
+                      {selectedProducts.map((p) => (
+                        <li key={p.id} className="flex justify-between text-gray-700 dark:text-gray-300">
+                          <span>{p.name}</span>
+                          <span>₵{p.price.toFixed(2)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500">Select at least 2 products (use &quot;Change products&quot;).</p>
+                  )}
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
+                    {editProductIds.length} selected. Need at least 2.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <ul className="space-y-2">
+                    {(bundle.products || []).map((p) => (
+                      <li key={p.id} className="flex justify-between text-gray-700 dark:text-gray-300">
+                        <span>{p.name}</span>
+                        <span>×{p.quantity || 1} = ₵{((p.price || 0) * (p.quantity || 1)).toFixed(2)}</span>
+                      </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="text-sm text-gray-500">Select at least 2 products</p>
-                )}
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
-              <button
-                onClick={() => setEditOpen(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={saving || editProductIds.length < 2}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Save
-              </button>
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold text-gray-900 dark:text-white">
+                    <span>Total</span>
+                    <span>₵{bundle.currentPrice.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </main>
 
       {/* Product picker modal */}
       {productModalOpen && (

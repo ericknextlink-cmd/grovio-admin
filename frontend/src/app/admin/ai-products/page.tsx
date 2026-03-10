@@ -316,9 +316,15 @@ export default function AIProductsPage() {
           ) : (
             <ul className="flex flex-wrap gap-2">
               {aiBundles.map((b) => (
-                <li key={b.bundleId} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200">
-                  <Link href="/admin/bundles" className="hover:underline">{b.title}</Link>
-                  <span className="ml-2 text-gray-500">₵{b.originalPrice.toFixed(2)} · {b.category}</span>
+                <li key={b.bundleId} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 flex items-center gap-2 flex-wrap">
+                  <Link href={`/admin/bundles/${encodeURIComponent(b.bundleId)}`} className="hover:underline font-medium">{b.title}</Link>
+                  <span className="text-gray-500">₵{b.originalPrice.toFixed(2)} · {b.category}</span>
+                  <Link
+                    href={`/admin/bundles/${encodeURIComponent(b.bundleId)}`}
+                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    <Edit className="h-3.5 w-3.5" /> Edit
+                  </Link>
                 </li>
               ))}
             </ul>

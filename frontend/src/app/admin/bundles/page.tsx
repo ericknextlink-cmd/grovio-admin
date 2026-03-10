@@ -118,13 +118,22 @@ export default function AdminBundlesPage() {
   const loadProductsForManual = useCallback(async () => {
     setProductsLoading(true)
     try {
-      const res = await productsApi.getAll({ page: 1, limit: 500 })
-      const list = Array.isArray(res?.data) ? res.data : (res as { data?: { data?: unknown[] } })?.data?.data
-      const arr = Array.isArray(list) ? list : []
-      if (arr.length > 0) {
-        setProducts(arr.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
-      } else if (!res?.success) {
-        toast.error(res?.message || 'Failed to load products')
+      const all: Array<{ id: string; name: string; price: number }> = []
+      const limit = 100
+      let page = 1
+      let total = 0
+      while (true) {
+        const res = await productsApi.getAll({ page, limit })
+        const list = Array.isArray(res?.data) ? res.data : (res as { data?: unknown[] })?.data
+        const arr = Array.isArray(list) ? list : []
+        total = (res as { pagination?: { total?: number } })?.pagination?.total ?? arr.length
+        all.push(...arr.map((p: { id: string; name: string; price: number }) => ({ id: p.id, name: p.name, price: p.price })))
+        if (all.length >= total || all.length >= 500 || arr.length < limit) break
+        page++
+      }
+      setProducts(all)
+      if (all.length === 0) {
+        toast.error('No products found')
       }
     } catch (e) {
       console.error('Load products for bundles:', e)
@@ -363,6 +372,14 @@ export default function AdminBundlesPage() {
                       <Package className="h-4 w-4" />
                       {manualProductIds.length ? `Change selection (${manualProductIds.length})` : 'Select products'}
                     </button>
+                    {manualProductIds.length > 0 && (
+                      <ul className="mt-2 text-sm text-gray-600 dark:text-gray-400 space-y-1 max-h-32 overflow-y-auto">
+                        {manualProductIds.map((id) => {
+                          const p = products.find((x) => x.id === id)
+                          return p ? <li key={id}>{p.name} — ₵{p.price.toFixed(2)}</li> : null
+                        })}
+                      </ul>
+                    )}
                   </div>
                   {productModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">

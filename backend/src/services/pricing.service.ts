@@ -10,12 +10,16 @@ export interface PriceRange {
   product_count?: number
 }
 
-/** Default price ranges (by original_price). Percentages persisted in pricing_range_settings. */
+/**
+ * Default price ranges (by original_price). Ranges are half-open [min, max) so each cost is in exactly one range.
+ * e.g. 50-100 = [50, 100): cost 99.99 is in 50-100, cost 100 is in 100-299. No boundary is ever applied twice.
+ */
 const DEFAULT_RANGES: Omit<PriceRange, 'percentage' | 'product_count'>[] = [
   { id: '0-10', min_value: 0, max_value: 10, label: '0 - 10' },
   { id: '10-50', min_value: 10, max_value: 50, label: '10 - 50' },
-  { id: '50-100', min_value: 50, max_value: 100, label: '50 - 100' },
-  { id: '100-500', min_value: 100, max_value: 500, label: '100 - 500' },
+  { id: '50-100', min_value: 50, max_value: 100, label: '50 - 100' },   // [50, 100) — 100 goes to next
+  { id: '100-299', min_value: 100, max_value: 300, label: '100 - 299' }, // [100, 300)
+  { id: '300-499', min_value: 300, max_value: 500, label: '300 - 499' }, // [300, 500)
   { id: '500+', min_value: 500, max_value: 999999, label: '500+' }
 ]
 
@@ -76,7 +80,8 @@ export class PricingService {
   }
 
   /**
-   * Apply markup by range: update product prices, then persist percentages to DB.
+   * Apply markup by range: always from original_price (cost). New selling price = cost × (1 + markup %).
+   * Ranges must be non-overlapping (cost >= min_value && cost < max_value) so each product matches at most one range.
    */
   async applyPricing(ranges: ApplyRangeInput[]): Promise<{ updated: number }> {
     const products = await this.productsService.getAllForPricing()

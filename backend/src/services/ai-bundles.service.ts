@@ -40,17 +40,32 @@ export interface ProductBundle {
 
 export class AIBundlesService {
   private model: ChatOpenAI
+  /** Optional xAI/Grok model for bundle generation (guides + suggestions when XAI_API_KEY is set). */
+  private xaiModel: ChatOpenAI | null
   private supabase
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY
+    const xaiKey = process.env.XAI_API_KEY
 
     this.model = new ChatOpenAI({
       apiKey: apiKey || 'dummy',
       modelName: 'gpt-4o-mini',
-      temperature: 0.7,  // Higher temp for creative combinations
+      temperature: 0.7,
       maxTokens: 2000,
     })
+
+    if (xaiKey) {
+      this.xaiModel = new ChatOpenAI({
+        apiKey: xaiKey,
+        modelName: process.env.XAI_MODEL_NAME || 'grok-2-latest',
+        temperature: 0.7,
+        maxTokens: 2000,
+        configuration: { baseURL: 'https://api.x.ai/v1' },
+      })
+    } else {
+      this.xaiModel = null
+    }
 
     this.supabase = createAdminClient()
   }
@@ -173,7 +188,9 @@ ${JSON.stringify(productCatalog, null, 2)}
 
 Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JSON array.`
 
-      const response = await this.model.invoke(prompt)
+      // Use xAI/Grok when available for bundle generation (better guides for reasonable bundles)
+      const modelToUse = this.xaiModel ?? this.model
+      const response = await modelToUse.invoke(prompt)
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
 
       // Extract JSON from response
@@ -739,6 +756,82 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
     if (budgetRange.includes('₵500+') && weekly >= 500) return true
     
     return false
+  }
+
+  /**
+   * Update an existing bundle (title, description, category, productIds). Recomputes prices from current product prices.
+   */
+  async updateBundle(
+    bundleId: string,
+    updates: { title?: string; description?: string; category?: string; productIds?: string[] }
+  ): Promise<{ success: boolean; data?: ProductBundle; error?: string }> {
+    try {
+      const { data: existing, error: fetchErr } = await this.supabase
+        .from('ai_product_bundles')
+        .select('*')
+        .eq('bundle_id', bundleId)
+        .single()
+
+      if (fetchErr || !existing) {
+        return { success: false, error: 'Bundle not found' }
+      }
+
+      const productIds = updates.productIds ?? (existing.product_ids as string[]) ?? []
+      if (productIds.length < 2) {
+        return { success: false, error: 'At least 2 products are required' }
+      }
+
+      const { data: products, error: productsErr } = await this.supabase
+        .from('products')
+        .select('id, name, price')
+        .in('id', productIds)
+
+      if (productsErr || !products?.length) {
+        return { success: false, error: 'Could not load products for the selected IDs' }
+      }
+
+      const productMap = new Map(products.map((p: { id: string; name: string; price: number }) => [p.id, p]))
+      const orderedProducts = productIds
+        .map((id: string) => productMap.get(id))
+        .filter(Boolean) as Array<{ id: string; name: string; price: number }>
+      if (orderedProducts.length < 2) {
+        return { success: false, error: 'At least 2 valid products are required' }
+      }
+
+      const originalPrice = orderedProducts.reduce((sum, p) => sum + p.price, 0)
+      const currentPrice = originalPrice
+      const row = existing as Record<string, unknown>
+
+      const updatePayload: Record<string, unknown> = {
+        title: updates.title ?? row.title,
+        description: updates.description ?? row.description,
+        category: updates.category ?? row.category,
+        product_ids: productIds,
+        products_snapshot: orderedProducts.map((p) => ({ id: p.id, name: p.name, price: p.price, quantity: 1 })),
+        original_price: originalPrice,
+        current_price: currentPrice,
+        savings: 0,
+        discount_percentage: 0,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error: updateErr } = await this.supabase
+        .from('ai_product_bundles')
+        .update(updatePayload)
+        .eq('bundle_id', bundleId)
+
+      if (updateErr) {
+        return { success: false, error: updateErr.message }
+      }
+
+      return this.getBundleById(bundleId)
+    } catch (error) {
+      console.error('Update bundle error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update bundle',
+      }
+    }
   }
 
   /**

@@ -75,8 +75,8 @@ const generateBundlesValidation = [
     (0, express_validator_1.body)('prompt')
         .optional()
         .isString()
-        .isLength({ max: 2000 })
-        .withMessage('Prompt must be at most 2000 characters'),
+        .isLength({ max: 15000 })
+        .withMessage('Prompt must be at most 15000 characters'),
     (0, express_validator_1.body)('budgetMin')
         .optional()
         .isFloat({ min: 0 })
@@ -130,3 +130,18 @@ router.post('/generate', generateBundlesValidation, bundlesController.generateBu
  * @access  Admin
  */
 router.post('/refresh', bundlesController.refreshBundles);
+const updateBundleValidation = [
+    (0, express_validator_1.param)('bundleId').trim().notEmpty().withMessage('Bundle ID is required'),
+    (0, express_validator_1.body)('title').optional().trim().isLength({ max: 200 }).withMessage('Title must be at most 200 characters'),
+    (0, express_validator_1.body)('description').optional().trim().isLength({ max: 2000 }).withMessage('Description must be at most 2000 characters'),
+    (0, express_validator_1.body)('category').optional().trim().isLength({ max: 100 }).withMessage('Category must be at most 100 characters'),
+    (0, express_validator_1.body)('productIds').optional().isArray().withMessage('productIds must be an array'),
+    (0, express_validator_1.body)('productIds.*').optional().isUUID().withMessage('Each product ID must be a valid UUID'),
+    validation_middleware_1.handleValidationErrors,
+];
+/**
+ * @route   PUT /api/bundles/:bundleId
+ * @desc    Update bundle (Admin only). Body: title?, description?, category?, productIds?
+ * @access  Admin
+ */
+router.put('/:bundleId', updateBundleValidation, bundlesController.updateBundle);

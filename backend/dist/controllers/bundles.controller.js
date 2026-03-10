@@ -206,6 +206,42 @@ class BundlesController {
             }
         };
         /**
+         * Update bundle (Admin only). Body: title?, description?, category?, productIds?
+         */
+        this.updateBundle = async (req, res) => {
+            try {
+                const { bundleId } = req.params;
+                const id = Array.isArray(bundleId) ? bundleId[0] : bundleId;
+                const { title, description, category, productIds } = req.body;
+                const result = await this.bundlesService.updateBundle(id, {
+                    title: title?.trim(),
+                    description: description?.trim(),
+                    category: category?.trim(),
+                    productIds: Array.isArray(productIds) ? productIds : undefined,
+                });
+                if (result.success && result.data) {
+                    res.json({
+                        success: true,
+                        message: 'Bundle updated successfully',
+                        data: result.data,
+                    });
+                }
+                else {
+                    res.status(400).json({
+                        success: false,
+                        message: result.error || 'Failed to update bundle',
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Update bundle error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                });
+            }
+        };
+        /**
          * Refresh all bundles (Admin only)
          */
         this.refreshBundles = async (req, res) => {

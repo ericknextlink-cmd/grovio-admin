@@ -177,7 +177,7 @@ ${JSON.stringify(productCatalog, null, 2)}
 
 **Output Format (JSON array only, no other text):**
 [{
-  "title": "Bundle title",
+  "title": "Short descriptive bundle name (e.g. Student Essentials, Family Dinner Pack, Healthy Breakfast Set)",
   "description": "Short description",
   "category": "Category name",
   "targetAudience": "who it's for",
@@ -186,7 +186,7 @@ ${JSON.stringify(productCatalog, null, 2)}
   "discountPercentage": 0
 }]
 
-Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JSON array.`
+Give each bundle a clear, memorable title that describes its contents or audience. discountPercentage 0 means bundle price = sum of items. Return ONLY the JSON array.`
 
       // Use xAI/Grok when available for bundle generation (better guides for reasonable bundles)
       const modelToUse = this.xaiModel ?? this.model

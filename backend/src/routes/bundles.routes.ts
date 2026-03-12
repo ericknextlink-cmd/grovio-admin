@@ -157,5 +157,12 @@ const updateBundleValidation = [
  */
 router.put('/:bundleId', updateBundleValidation, bundlesController.updateBundle)
 
+/**
+ * @route   DELETE /api/bundles/:bundleId
+ * @desc    Delete bundle (Admin only). Soft-delete.
+ * @access  Admin
+ */
+router.delete('/:bundleId', bundleIdValidation, bundlesController.deleteBundle)
+
 export { router as bundlesRoutes }
 

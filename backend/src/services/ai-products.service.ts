@@ -4,7 +4,14 @@ import { v4 as uuidv4 } from 'uuid'
 
 /**
  * AI Products Service
- * Handles AI-generated products that need review and publishing
+ * Handles AI-generated products that need review and publishing.
+ *
+ * IMPORTANT: AI products are never auto-generated. They are only created when
+ * POST /api/ai-products/generate is explicitly called (e.g. from admin UI).
+ * There is no cron, no startup hook, and no refresh that creates products.
+ * If you see new products after a refresh, they were created by a prior explicit
+ * generate call (or another session); delete removes them from the list only when
+ * the delete endpoint is successfully called.
  */
 
 export interface AIProduct {

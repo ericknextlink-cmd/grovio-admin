@@ -242,6 +242,37 @@ class BundlesController {
             }
         };
         /**
+         * Delete bundle (Admin only). Soft-delete (sets is_active = false).
+         */
+        this.deleteBundle = async (req, res) => {
+            try {
+                const { bundleId } = req.params;
+                const id = Array.isArray(bundleId) ? bundleId[0] : bundleId;
+                const result = await this.bundlesService.deleteBundle(id);
+                if (result.success) {
+                    res.json({
+                        success: true,
+                        message: 'Bundle deleted successfully',
+                    });
+                }
+                else {
+                    res.status(404).json({
+                        success: false,
+                        message: result.error || 'Bundle not found',
+                        errors: [result.error || 'Not found'],
+                    });
+                }
+            }
+            catch (error) {
+                console.error('Delete bundle error:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Internal server error',
+                    errors: ['Failed to delete bundle'],
+                });
+            }
+        };
+        /**
          * Refresh all bundles (Admin only)
          */
         this.refreshBundles = async (req, res) => {

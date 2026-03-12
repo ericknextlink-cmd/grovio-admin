@@ -4,6 +4,8 @@ exports.AIBundlesService = void 0;
 const openai_1 = require("@langchain/openai");
 const supabase_1 = require("../config/supabase");
 const uuid_1 = require("uuid");
+const ai_bundles_templates_1 = require("../prompts/ai-bundles.templates");
+const ai_bundles_prompts_1 = require("../prompts/ai-bundles.prompts");
 class AIBundlesService {
     constructor() {
         const apiKey = process.env.OPENAI_API_KEY;
@@ -17,7 +19,7 @@ class AIBundlesService {
         if (xaiKey) {
             this.xaiModel = new openai_1.ChatOpenAI({
                 apiKey: xaiKey,
-                modelName: process.env.XAI_MODEL_NAME || 'grok-2-latest',
+                modelName: process.env.XAI_MODEL_NAME || 'grok-4-1-fast-reasoning',
                 temperature: 0.7,
                 maxTokens: 2000,
                 configuration: { baseURL: 'https://api.x.ai/v1' },
@@ -27,6 +29,30 @@ class AIBundlesService {
             this.xaiModel = null;
         }
         this.supabase = (0, supabase_1.createAdminClient)();
+    }
+    /**
+     * Fetch products from DB for bundle generation. Tries in_stock=true first; if none, falls back to all products.
+     */
+    async fetchProductsForBundles(limitCount = 3500) {
+        let { data: products, error: productsError } = await this.supabase
+            .from('products')
+            .select('*')
+            .eq('in_stock', true)
+            .order('rating', { ascending: false })
+            .limit(limitCount);
+        if (productsError || !products || products.length === 0) {
+            const fallback = await this.supabase
+                .from('products')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(limitCount);
+            products = fallback.data;
+            productsError = fallback.error;
+        }
+        if (productsError || !products || products.length === 0) {
+            return [];
+        }
+        return products;
     }
     /** Fetch first image per product for given IDs; return up to 5 URLs (for shop card/carousel). */
     async getProductImagesForBundle(productIds) {
@@ -72,17 +98,11 @@ class AIBundlesService {
             if (!process.env.OPENAI_API_KEY) {
                 return await this.generateDeterministicBundles(count);
             }
-            // Fetch as many in-stock products as practical so AI can create bundles from full catalog (~3000+)
-            const { data: products, error: productsError } = await this.supabase
-                .from('products')
-                .select('*')
-                .eq('in_stock', true)
-                .order('rating', { ascending: false })
-                .limit(3500);
-            if (productsError || !products || products.length === 0) {
+            const products = await this.fetchProductsForBundles(3500);
+            if (products.length === 0) {
                 return {
                     success: false,
-                    error: 'No products available',
+                    error: 'No products available in the catalog.',
                 };
             }
             const productCatalog = products.map(p => ({
@@ -94,40 +114,23 @@ class AIBundlesService {
                 brand: p.brand,
                 rating: p.rating,
             }));
-            const budgetConstraint = budgetMin != null && budgetMax != null
-                ? `**CRITICAL - Budget:** Each bundle's total (sum of selected product prices) MUST be between ${budgetMin} and ${budgetMax} GHS. Choose productIds so that the sum of their prices falls in this range.`
-                : 'Each bundle should have a sensible total price (sum of product prices).';
-            const productCountRule = productsPerBundleCap != null
-                ? `Each bundle must have exactly ${productsPerBundleCap} products.`
-                : 'Each bundle must have between 3 and 20 products (you decide how many).';
-            const taskInstruction = customPrompt?.trim()
-                ? `**Admin instructions:** ${customPrompt}\n\nCreate ${count} bundles that match the above. ${productCountRule}`
-                : `Create ${count} diverse product bundles. ${productCountRule} Consider: Student Essentials, Family Dinner, Healthy Breakfast, Quick Lunch, Vegetarian, Protein Pack, Baking Essentials, Comfort Food, Spice Collection.`;
-            const prompt = `You are a grocery shopping expert creating curated product bundles for Ghanaian shoppers.
-
-**Available Products (use ONLY these id and price values):**
-${JSON.stringify(productCatalog, null, 2)}
-
-**Task:** ${taskInstruction}
-
-**Requirements:**
-1. ${productCountRule} Use ONLY product "id" values from the Available Products list above.
-2. Products should complement each other (make sense together).
-3. ${budgetConstraint}
-4. Include products from different categories for balance.
-
-**Output Format (JSON array only, no other text):**
-[{
-  "title": "Bundle title",
-  "description": "Short description",
-  "category": "Category name",
-  "targetAudience": "who it's for",
-  "badge": "Optional badge",
-  "productIds": ["<actual-uuid-from-list>", "<actual-uuid-from-list>", ...],
-  "discountPercentage": 0
-}]
-
-Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JSON array.`;
+            const budgetConstraint = (0, ai_bundles_prompts_1.getBudgetConstraint)(budgetMin, budgetMax);
+            const isPromptOnlyMode = (customPrompt?.trim()?.length ?? 0) > 100;
+            const productCountRule = (0, ai_bundles_prompts_1.getProductCountRule)(productsPerBundleCap);
+            const taskInstruction = (0, ai_bundles_prompts_1.getTaskInstruction)({
+                isPromptOnlyMode,
+                customPrompt: customPrompt?.trim(),
+                count,
+                productCountRule,
+            });
+            const prompt = (0, ai_bundles_prompts_1.buildBundleGenerationPrompt)({
+                productCatalogJson: JSON.stringify(productCatalog, null, 2),
+                taskInstruction,
+                productCountRule,
+                budgetConstraint,
+                userDescription: isPromptOnlyMode ? customPrompt.trim() : undefined,
+                isPromptOnlyMode,
+            });
             // Use xAI/Grok when available for bundle generation (better guides for reasonable bundles)
             const modelToUse = this.xaiModel ?? this.model;
             const response = await modelToUse.invoke(prompt);
@@ -185,75 +188,15 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
      */
     async generateDeterministicBundles(count) {
         try {
-            const { data: products } = await this.supabase
-                .from('products')
-                .select('*')
-                .eq('in_stock', true)
-                .order('rating', { ascending: false });
+            const products = await this.fetchProductsForBundles(2000);
             if (!products || products.length === 0) {
                 return {
                     success: false,
-                    error: 'No products available',
+                    error: 'No products available in the catalog.',
                 };
             }
-            const bundleTemplates = [
-                {
-                    title: 'Student Essentials Pack',
-                    description: 'Perfect starter pack for students - rice, seasonings, and basics',
-                    category: 'Student',
-                    targetAudience: 'students',
-                    badge: 'Most Popular',
-                    categories: ['Rice & Grains', 'Seasonings & Spices', 'Cooking Oils'],
-                    maxPrice: 50,
-                },
-                {
-                    title: 'Family Dinner Bundle',
-                    description: 'Everything for a complete family dinner - proteins, vegetables, seasonings',
-                    category: 'Family',
-                    targetAudience: 'families',
-                    badge: 'Best Value',
-                    categories: ['Protein', 'Vegetables', 'Seasonings & Spices'],
-                    maxPrice: 80,
-                },
-                {
-                    title: 'Healthy Breakfast Set',
-                    description: 'Start your day right with nutritious breakfast items',
-                    category: 'Health',
-                    targetAudience: 'health-conscious',
-                    badge: 'Healthy Choice',
-                    categories: ['Dairy & Eggs', 'Breakfast Cereals'],
-                    maxPrice: 30,
-                },
-                {
-                    title: 'Quick Lunch Combo',
-                    description: 'Fast and easy lunch ingredients for busy weekdays',
-                    category: 'Quick Meals',
-                    targetAudience: 'professionals',
-                    badge: 'Time Saver',
-                    categories: ['Pasta & Noodles', 'Dairy & Eggs', 'Cooking Oils'],
-                    maxPrice: 35,
-                },
-                {
-                    title: 'Vegetarian Delight',
-                    description: 'Complete vegetarian meal ingredients',
-                    category: 'Vegetarian',
-                    targetAudience: 'vegetarians',
-                    badge: 'Plant-Based',
-                    categories: ['Vegetables', 'Rice & Grains', 'Seasonings & Spices'],
-                    maxPrice: 40,
-                },
-                {
-                    title: 'Protein Power Pack',
-                    description: 'High-protein ingredients for fitness enthusiasts',
-                    category: 'Fitness',
-                    targetAudience: 'fitness enthusiasts',
-                    badge: 'Muscle Builder',
-                    categories: ['Protein', 'Dairy & Eggs'],
-                    maxPrice: 60,
-                },
-            ];
             const bundles = [];
-            for (const template of bundleTemplates.slice(0, count)) {
+            for (const template of ai_bundles_templates_1.DETERMINISTIC_BUNDLE_TEMPLATES.slice(0, count)) {
                 // Get products from specified categories
                 const bundleProducts = [];
                 let totalPrice = 0;
@@ -685,6 +628,28 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
         }
     }
     /**
+     * Delete (deactivate) a bundle. Sets is_active = false.
+     */
+    async deleteBundle(bundleId) {
+        try {
+            const { error } = await this.supabase
+                .from('ai_product_bundles')
+                .update({ is_active: false })
+                .eq('bundle_id', bundleId);
+            if (error) {
+                return { success: false, error: error.message };
+            }
+            return { success: true };
+        }
+        catch (error) {
+            console.error('Delete bundle error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to delete bundle',
+            };
+        }
+    }
+    /**
      * Get bundle by ID
      */
     async getBundleById(bundleId) {
@@ -693,6 +658,7 @@ Note: discountPercentage 0 means bundle price = sum of items. Return ONLY the JS
                 .from('ai_product_bundles')
                 .select('*')
                 .eq('bundle_id', bundleId)
+                .eq('is_active', true)
                 .single();
             if (error) {
                 return {

@@ -406,6 +406,7 @@ export const bundlesApi = {
     apiClient.post<any>('/api/bundles', body),
   update: (bundleId: string, body: { title?: string; description?: string; category?: string; productIds?: string[] }) =>
     apiClient.put<any>(`/api/bundles/${bundleId}`, body),
+  delete: (bundleId: string) => apiClient.delete<any>(`/api/bundles/${bundleId}`),
   generate: (body: { count?: number; prompt?: string; budgetMin?: number; budgetMax?: number; productsPerBundle?: number }) =>
     apiClient.post<any>('/api/bundles/generate', body),
   refresh: () => apiClient.post<any>('/api/bundles/refresh'),

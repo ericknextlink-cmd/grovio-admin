@@ -2,8 +2,8 @@ import { Router } from 'express'
 import { AIController } from '../controllers/ai.controller'
 import { body, query } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
-import { optionalAuth } from '../middleware/optionalAuth.middleware'
 import { authenticateToken } from '../middleware/auth.middleware'
+import { authRateLimiter } from '../middleware/authRateLimit.middleware'
 
 const router = Router()
 const aiController = new AIController()
@@ -151,18 +151,17 @@ const supplierProductRecommendationsValidation = [
   handleValidationErrors
 ]
 
-// Public AI routes (work for both authenticated and anonymous users)
-// Optional auth = better personalization for logged-in users
-router.post('/chat', optionalAuth, chatValidation, aiController.getChatResponse)
-router.post('/recommendations', optionalAuth, recommendationsValidation, aiController.getRecommendations)
-router.get('/search', optionalAuth, searchValidation, aiController.searchProducts)
-router.post('/budget-analysis', optionalAuth, budgetAnalysisValidation, aiController.getBudgetAnalysis)
-router.post('/meal-suggestions', optionalAuth, mealSuggestionsValidation, aiController.getMealSuggestions)
-router.post('/supplier-recommendations', optionalAuth, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations)
+// AI routes require authentication; per-user rate limit to prevent auth abuse
+router.post('/chat', authenticateToken, authRateLimiter, chatValidation, aiController.getChatResponse)
+router.post('/recommendations', authenticateToken, authRateLimiter, recommendationsValidation, aiController.getRecommendations)
+router.get('/search', authenticateToken, authRateLimiter, searchValidation, aiController.searchProducts)
+router.post('/budget-analysis', authenticateToken, authRateLimiter, budgetAnalysisValidation, aiController.getBudgetAnalysis)
+router.post('/meal-suggestions', authenticateToken, authRateLimiter, mealSuggestionsValidation, aiController.getMealSuggestions)
+router.post('/supplier-recommendations', authenticateToken, authRateLimiter, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations)
 
-// Thread management routes (require full authentication)
-router.get('/threads/:threadId', authenticateToken, aiController.getConversationHistory)
-router.get('/threads', authenticateToken, aiController.getUserThreads)
-router.delete('/threads/:threadId', authenticateToken, aiController.deleteThread)
+// Thread management routes
+router.get('/threads/:threadId', authenticateToken, authRateLimiter, aiController.getConversationHistory)
+router.get('/threads', authenticateToken, authRateLimiter, aiController.getUserThreads)
+router.delete('/threads/:threadId', authenticateToken, authRateLimiter, aiController.deleteThread)
 
 export { router as aiRoutes }

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderService = void 0;
 const supabase_1 = require("../config/supabase");
+const safeError_1 = require("../utils/safeError");
 const paystack_service_1 = require("./paystack.service");
 const pdf_invoice_service_1 = require("./pdf-invoice.service");
 const email_service_1 = require("./email.service");
@@ -406,7 +407,7 @@ class OrderService {
                 const msg = orderError.message || 'Failed to create order';
                 return {
                     success: false,
-                    error: process.env.NODE_ENV === 'development' ? msg : 'Failed to create order',
+                    error: (0, safeError_1.safeErrorMessage)(msg, 'Failed to create order'),
                 };
             }
             // 6. Create order items

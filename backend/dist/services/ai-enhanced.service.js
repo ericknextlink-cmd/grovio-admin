@@ -19,7 +19,7 @@ class AIEnhancedService {
         }
         // Initialize OpenAI (Primary model - product recommendations)
         this.openAIModel = new openai_1.ChatOpenAI({
-            apiKey: openAIKey || 'dummy',
+            apiKey: openAIKey || '',
             modelName: 'gpt-4o-mini',
             temperature: 0.3,
             maxTokens: 1500,

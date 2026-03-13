@@ -54,7 +54,7 @@ class AdminService {
                 adminId: admin.id,
                 username: admin.username,
                 role: admin.role
-            }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '24h' });
+            }, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf', { expiresIn: '24h' });
             // Remove password hash from response
             const { password_hash: _pw, ...adminData } = admin;
             void _pw;
@@ -184,7 +184,7 @@ class AdminService {
      */
     verifyToken(token) {
         try {
-            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf');
             return {
                 adminId: decoded.adminId,
                 username: decoded.username,
@@ -212,7 +212,7 @@ class AdminService {
                 adminId: admin.id,
                 username: admin.username,
                 role: admin.role
-            }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '24h' });
+            }, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf', { expiresIn: '24h' });
             return {
                 success: true,
                 message: 'Token refreshed successfully',

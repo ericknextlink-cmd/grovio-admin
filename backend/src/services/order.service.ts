@@ -1,4 +1,5 @@
 import { createAdminClient } from '../config/supabase'
+import { safeErrorMessage } from '../utils/safeError'
 import { PaystackService } from './paystack.service'
 import { PDFInvoiceService, InvoiceData } from './pdf-invoice.service'
 import { EmailService } from './email.service'
@@ -499,7 +500,7 @@ export class OrderService {
         const msg = orderError.message || 'Failed to create order'
         return {
           success: false,
-          error: process.env.NODE_ENV === 'development' ? msg : 'Failed to create order',
+          error: safeErrorMessage(msg, 'Failed to create order'),
         }
       }
 

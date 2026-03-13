@@ -184,7 +184,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // Logging middleware
 app.use(morgan('combined'))
 
-// API Routes
+// API Routes (admin routes under /api/admin, /api/dashboard, /api/products, etc. use authenticateAdmin in their routers)
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/account', accountRoutes)

@@ -4,7 +4,7 @@ exports.bundlesRoutes = void 0;
 const express_1 = require("express");
 const bundles_controller_1 = require("../controllers/bundles.controller");
 const adminAuth_middleware_1 = require("../middleware/adminAuth.middleware");
-const optionalAuth_middleware_1 = require("../middleware/optionalAuth.middleware");
+const auth_middleware_1 = require("../middleware/auth.middleware");
 const express_validator_1 = require("express-validator");
 const validation_middleware_1 = require("../middleware/validation.middleware");
 const router = (0, express_1.Router)();
@@ -91,19 +91,19 @@ const generateBundlesValidation = [
         .withMessage('Products per bundle must be between 2 and 20'),
     validation_middleware_1.handleValidationErrors,
 ];
-// Public routes (optional auth for personalization)
+// Bundles list and personalized require authentication (no guest access)
 /**
  * @route   GET /api/bundles
  * @desc    Get all product bundles (optionally filtered by category)
- * @access  Public (personalized if authenticated)
+ * @access  Authenticated
  */
-router.get('/', optionalAuth_middleware_1.optionalAuth, getBundlesValidation, bundlesController.getBundles);
+router.get('/', auth_middleware_1.authenticateToken, getBundlesValidation, bundlesController.getBundles);
 /**
  * @route   GET /api/bundles/personalized
  * @desc    Get personalized bundles based on user preferences
- * @access  Public (better with auth)
+ * @access  Authenticated
  */
-router.get('/personalized', optionalAuth_middleware_1.optionalAuth, bundlesController.getPersonalizedBundles);
+router.get('/personalized', auth_middleware_1.authenticateToken, bundlesController.getPersonalizedBundles);
 /**
  * @route   GET /api/bundles/:bundleId
  * @desc    Get bundle by ID

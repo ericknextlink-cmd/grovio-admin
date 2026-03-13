@@ -171,7 +171,7 @@ app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // Logging middleware
 app.use((0, morgan_1.default)('combined'));
-// API Routes
+// API Routes (admin routes under /api/admin, /api/dashboard, /api/products, etc. use authenticateAdmin in their routers)
 app.use('/api/health', health_routes_1.healthRoutes);
 app.use('/api/auth', auth_routes_1.authRoutes);
 app.use('/api/account', account_routes_1.accountRoutes);

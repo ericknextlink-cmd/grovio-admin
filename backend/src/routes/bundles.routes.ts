@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { BundlesController } from '../controllers/bundles.controller'
 import { authenticateAdmin } from '../middleware/adminAuth.middleware'
-import { optionalAuth } from '../middleware/optionalAuth.middleware'
+import { authenticateToken } from '../middleware/auth.middleware'
 import { body, query, param } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
 
@@ -93,21 +93,20 @@ const generateBundlesValidation = [
   handleValidationErrors,
 ]
 
-// Public routes (optional auth for personalization)
-
+// Bundles list and personalized require authentication (no guest access)
 /**
  * @route   GET /api/bundles
  * @desc    Get all product bundles (optionally filtered by category)
- * @access  Public (personalized if authenticated)
+ * @access  Authenticated
  */
-router.get('/', optionalAuth, getBundlesValidation, bundlesController.getBundles)
+router.get('/', authenticateToken, getBundlesValidation, bundlesController.getBundles)
 
 /**
  * @route   GET /api/bundles/personalized
  * @desc    Get personalized bundles based on user preferences
- * @access  Public (better with auth)
+ * @access  Authenticated
  */
-router.get('/personalized', optionalAuth, bundlesController.getPersonalizedBundles)
+router.get('/personalized', authenticateToken, bundlesController.getPersonalizedBundles)
 
 /**
  * @route   GET /api/bundles/:bundleId

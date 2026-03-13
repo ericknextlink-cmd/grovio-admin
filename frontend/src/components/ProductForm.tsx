@@ -388,8 +388,9 @@ export default function ProductForm({
               <input
                 type="number"
                 min="0"
+                step="1"
                 value={formData.quantity}
-                onChange={(e) => handleInputChange('quantity', parseInt(e.target.value) || 0)}
+                onChange={(e) => handleInputChange('quantity', Math.floor(Number(e.target.value)) || 0)}
                 className={cn(
                   "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                   errors.quantity ? "border-red-500" : "border-gray-300 dark:border-gray-600",
@@ -410,7 +411,7 @@ export default function ProductForm({
               <div className="flex gap-2">
                 <input
                   type="number"
-                  step={formData.weight_unit === 'g' ? '1' : '0.1'}
+                  step="0.01"
                   min="0"
                   value={formData.weight ?? ''}
                   onChange={(e) => handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : undefined)}
@@ -419,7 +420,7 @@ export default function ProductForm({
                     errors.weight ? "border-red-500" : "border-gray-300 dark:border-gray-600",
                     "dark:bg-gray-800 dark:text-white"
                   )}
-                  placeholder={formData.weight_unit === 'g' ? 'e.g. 500' : 'e.g. 1.5'}
+                  placeholder={formData.weight_unit === 'g' ? 'e.g. 500 or 0.5' : 'e.g. 1.5'}
                 />
                 <select
                   value={formData.weight_unit}
@@ -439,7 +440,7 @@ export default function ProductForm({
               </label>
               <input
                 type="number"
-                step="0.1"
+                step="0.01"
                 min="0"
                 value={formData.volume || ''}
                 onChange={(e) => handleInputChange('volume', e.target.value ? parseFloat(e.target.value) : undefined)}

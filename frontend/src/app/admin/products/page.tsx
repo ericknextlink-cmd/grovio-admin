@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, X } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Package, Loader2, Sparkles, X, CheckSquare, Square } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
 import ProductForm from '@/components/ProductForm'
 import AIProductRecommendationsBar, { AIRecommendedProduct } from '@/components/AIProductRecommendationsBar'
@@ -64,6 +64,12 @@ export default function ProductsPage() {
   // Modal state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+
+  // Row selection for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkStockLoading, setBulkStockLoading] = useState(false)
+  const [bulkQuantityInput, setBulkQuantityInput] = useState('')
+  const [bulkSetQuantityLoading, setBulkSetQuantityLoading] = useState(false)
   
   // AI Recommendation state
   const [showAIRecommendationModal, setShowAIRecommendationModal] = useState(false)
@@ -247,6 +253,97 @@ export default function ProductsPage() {
     setAiResponse('')
     setAiRecommendedProducts([])
     clearAICart()
+  }
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllOnPage = () => {
+    const onPage = new Set(products.map((p) => p.id))
+    const allSelected = onPage.size > 0 && products.every((p) => selectedIds.has(p.id))
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        onPage.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        onPage.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const handleBulkMarkStock = async (inStock: boolean) => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setBulkStockLoading(true)
+    try {
+      let ok = 0
+      let fail = 0
+      for (const id of ids) {
+        const product = products.find((p) => p.id === id)
+        const quantity = product?.quantity ?? 0
+        const res = await productsApi.updateStock(id, quantity, inStock)
+        if (res.success) ok++
+        else fail++
+      }
+      if (fail > 0) {
+        toast.error(`${ok} updated, ${fail} failed`)
+      } else {
+        toast.success(`${ok} product${ok === 1 ? '' : 's'} marked as ${inStock ? 'in stock' : 'out of stock'}`)
+      }
+      setSelectedIds(new Set())
+      await fetchProducts()
+    } catch (e) {
+      toast.error('Bulk update failed')
+      console.error(e)
+    } finally {
+      setBulkStockLoading(false)
+    }
+  }
+
+  const handleBulkSetQuantity = async () => {
+    const value = Math.floor(Number(bulkQuantityInput))
+    if (Number.isNaN(value) || value < 0) {
+      toast.error('Enter a valid quantity (0 or more)')
+      return
+    }
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setBulkSetQuantityLoading(true)
+    try {
+      let ok = 0
+      let fail = 0
+      for (const id of ids) {
+        const product = products.find((p) => p.id === id)
+        const inStock = product?.in_stock ?? true
+        const res = await productsApi.updateStock(id, value, inStock)
+        if (res.success) ok++
+        else fail++
+      }
+      if (fail > 0) {
+        toast.error(`${ok} updated, ${fail} failed`)
+      } else {
+        toast.success(`Quantity set to ${value} for ${ok} product${ok === 1 ? '' : 's'}`)
+      }
+      setSelectedIds(new Set())
+      setBulkQuantityInput('')
+      await fetchProducts()
+    } catch (e) {
+      toast.error('Bulk set quantity failed')
+      console.error(e)
+    } finally {
+      setBulkSetQuantityLoading(false)
+    }
   }
 
   const mapProductToFormProduct = (product: Product): GroceryProduct => ({
@@ -466,12 +563,80 @@ export default function ProductsPage() {
             </div>
           ) : (
             <>
+              {/* Bulk actions bar */}
+              {selectedIds.size > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {selectedIds.size} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkMarkStock(true)}
+                    disabled={bulkStockLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {bulkStockLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Mark in stock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkMarkStock(false)}
+                    disabled={bulkStockLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {bulkStockLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Mark out of stock
+                  </button>
+                  <div className="inline-flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={bulkQuantityInput}
+                      onChange={(e) => setBulkQuantityInput(e.target.value)}
+                      placeholder="Qty"
+                      className="w-20 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBulkSetQuantity}
+                      disabled={bulkSetQuantityLoading || !bulkQuantityInput.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {bulkSetQuantityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Set quantity
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-sm text-gray-600 dark:text-gray-400 hover:underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              )}
+
               {/* Products Table */}
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-900">
                       <tr>
+                        <th className="w-10 px-4 py-3 text-left">
+                          <button
+                            type="button"
+                            onClick={toggleSelectAllOnPage}
+                            className="inline-flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            title={products.every((p) => selectedIds.has(p.id)) ? 'Deselect all' : 'Select all'}
+                          >
+                            {products.length > 0 && products.every((p) => selectedIds.has(p.id)) ? (
+                              <CheckSquare className="h-5 w-5 text-blue-600" />
+                            ) : (
+                              <Square className="h-5 w-5 text-gray-400" />
+                            )}
+                          </button>
+                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Product
                         </th>
@@ -498,6 +663,19 @@ export default function ProductsPage() {
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {products.map((product) => (
                         <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="w-10 px-4 py-4 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectProduct(product.id)}
+                              className="inline-flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            >
+                              {selectedIds.has(product.id) ? (
+                                <CheckSquare className="h-5 w-5 text-blue-600" />
+                              ) : (
+                                <Square className="h-5 w-5 text-gray-400" />
+                              )}
+                            </button>
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
                               <div className="h-10 w-10 shrink-0 mr-3">

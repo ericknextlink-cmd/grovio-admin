@@ -97,12 +97,14 @@ class ProductsService {
         try {
             // Generate slug from name
             const slug = this.generateSlug(productData.name);
+            const { weight_unit: _wu, ...rest } = productData;
             const payload = {
-                ...productData,
+                ...rest,
                 category: productData.category_name ?? productData.category,
                 slug,
                 currency: productData.currency || 'GHS'
             };
+            // weight_unit omitted until products table has the column (run supabase-products-weight-unit.sql)
             if (payload.original_price !== undefined) {
                 // Keep original_price as-is when provided (e.g. from supplier import)
             }
@@ -162,8 +164,7 @@ class ProductsService {
                 payload.quantity = updates.quantity;
             if (updates.weight !== undefined)
                 payload.weight = updates.weight;
-            if (updates.weight_unit !== undefined)
-                payload.weight_unit = updates.weight_unit;
+            // weight_unit omitted until products table has the column (run supabase-products-weight-unit.sql)
             if (updates.volume !== undefined)
                 payload.volume = updates.volume;
             if (updates.type !== undefined)

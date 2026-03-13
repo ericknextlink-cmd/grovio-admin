@@ -126,21 +126,52 @@ export default function ProductForm({
     }
   }, [formData, product, isOpen])
 
+  /** Client-side validation aligned with backend. Run on submit; do not send request if invalid. */
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
 
-    if (!formData.name.trim()) newErrors.name = 'Product name is required'
-    if (!formData.brand.trim()) newErrors.brand = 'Brand is required'
-    if (!formData.category) newErrors.category = 'Category is required'
-    if (formData.price <= 0) newErrors.price = 'Price must be greater than 0'
-    if (formData.quantity < 0) newErrors.quantity = 'Quantity cannot be negative'
-    if (formData.weight != null && formData.weight <= 0) {
-      newErrors.weight = 'Weight must be greater than 0'
+    const name = formData.name.trim()
+    if (!name) {
+      newErrors.name = 'Product name is required'
+    } else if (name.length < 2 || name.length > 200) {
+      newErrors.name = 'Product name must be between 2 and 200 characters'
     }
-    if (formData.volume != null && formData.volume <= 0) {
-      newErrors.volume = 'Volume must be greater than 0'
+
+    if (formData.brand.length > 100) {
+      newErrors.brand = 'Brand must not exceed 100 characters'
     }
-    if (formData.images.length === 0) newErrors.images = 'At least one image is required'
+
+    if (!formData.category) {
+      newErrors.category = 'Category is required'
+    }
+
+    if (formData.description.length > 1000) {
+      newErrors.description = 'Description must not exceed 1000 characters'
+    }
+
+    if (typeof formData.price !== 'number' || formData.price < 0) {
+      newErrors.price = 'Price must be zero or a positive number'
+    }
+
+    if (!Number.isInteger(formData.quantity) || formData.quantity < 0) {
+      newErrors.quantity = 'Quantity must be a non-negative integer'
+    }
+
+    if (formData.weight != null && (Number(formData.weight) < 0 || isNaN(Number(formData.weight)))) {
+      newErrors.weight = 'Weight must be zero or a positive number'
+    }
+
+    if (formData.volume != null && (Number(formData.volume) < 0 || isNaN(Number(formData.volume)))) {
+      newErrors.volume = 'Volume must be zero or a positive number when provided'
+    }
+
+    if (formData.subcategory && formData.subcategory.length > 100) {
+      newErrors.subcategory = 'Subcategory must not exceed 100 characters'
+    }
+
+    if (formData.images.length === 0) {
+      newErrors.images = 'At least one image is required'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -222,7 +253,7 @@ export default function ProductForm({
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Brand *
+                Brand
               </label>
               <input
                 type="text"

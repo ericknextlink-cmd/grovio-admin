@@ -47,7 +47,7 @@ export class AIProductsService {
     const apiKey = process.env.OPENAI_API_KEY
 
     this.model = new ChatOpenAI({
-      apiKey: apiKey || 'dummy',
+      apiKey: apiKey || '',
       modelName: 'gpt-4o-mini',
       temperature: 0.7,
       maxTokens: 3000,

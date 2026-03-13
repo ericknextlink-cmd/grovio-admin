@@ -11,7 +11,7 @@ class AIBundlesService {
         const apiKey = process.env.OPENAI_API_KEY;
         const xaiKey = process.env.XAI_API_KEY;
         this.model = new openai_1.ChatOpenAI({
-            apiKey: apiKey || 'dummy',
+            apiKey: apiKey || '',
             modelName: 'gpt-4o-mini',
             temperature: 0.7,
             maxTokens: 2000,

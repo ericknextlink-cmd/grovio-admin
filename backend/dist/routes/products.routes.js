@@ -47,17 +47,17 @@ const createProductValidation = [
         .isInt({ min: 0 })
         .withMessage('Quantity must be a non-negative integer'),
     (0, express_validator_1.body)('weight')
-        .optional()
+        .optional({ nullable: true })
         .isFloat({ min: 0 })
-        .withMessage('Weight must be a positive number'),
+        .withMessage('Weight must be zero or a positive number'),
     (0, express_validator_1.body)('weight_unit')
         .optional()
         .isIn(['kg', 'g'])
         .withMessage('Weight unit must be kg or g'),
     (0, express_validator_1.body)('volume')
-        .optional()
+        .optional({ nullable: true })
         .isFloat({ min: 0 })
-        .withMessage('Volume must be a positive number'),
+        .withMessage('Volume must be zero or a positive number when provided'),
     (0, express_validator_1.body)('type')
         .optional()
         .trim()
@@ -132,17 +132,17 @@ const updateProductValidation = [
         .isInt({ min: 0 })
         .withMessage('Quantity must be a non-negative integer'),
     (0, express_validator_1.body)('weight')
-        .optional()
+        .optional({ nullable: true })
         .isFloat({ min: 0 })
-        .withMessage('Weight must be a positive number'),
+        .withMessage('Weight must be zero or a positive number'),
     (0, express_validator_1.body)('weight_unit')
         .optional()
         .isIn(['kg', 'g'])
         .withMessage('Weight unit must be kg or g'),
     (0, express_validator_1.body)('volume')
-        .optional()
+        .optional({ nullable: true })
         .isFloat({ min: 0 })
-        .withMessage('Volume must be a positive number'),
+        .withMessage('Volume must be zero or a positive number when provided'),
     (0, express_validator_1.body)('type')
         .optional()
         .trim()

@@ -137,20 +137,57 @@ class ProductsService {
         }
     }
     /**
-     * Update product
+     * Update product. Builds a safe payload with only known DB columns (snake_case) to avoid Supabase errors.
      */
     async updateProduct(id, updates) {
         try {
-            // If name is being updated, regenerate slug
-            if (updates.name) {
-                updates.slug = this.generateSlug(updates.name);
+            const payload = {};
+            if (updates.name !== undefined) {
+                payload.name = updates.name;
+                payload.slug = this.generateSlug(updates.name);
             }
-            if (updates.category_name) {
-                updates.category = updates.category_name;
+            if (updates.brand !== undefined)
+                payload.brand = updates.brand;
+            if (updates.description !== undefined)
+                payload.description = updates.description;
+            if (updates.category_name !== undefined)
+                payload.category_name = updates.category_name;
+            if (updates.subcategory !== undefined)
+                payload.subcategory = updates.subcategory;
+            if (updates.price !== undefined)
+                payload.price = updates.price;
+            if (updates.currency !== undefined)
+                payload.currency = updates.currency;
+            if (updates.quantity !== undefined)
+                payload.quantity = updates.quantity;
+            if (updates.weight !== undefined)
+                payload.weight = updates.weight;
+            if (updates.weight_unit !== undefined)
+                payload.weight_unit = updates.weight_unit;
+            if (updates.volume !== undefined)
+                payload.volume = updates.volume;
+            if (updates.type !== undefined)
+                payload.type = updates.type;
+            if (updates.packaging !== undefined)
+                payload.packaging = updates.packaging;
+            if (updates.in_stock !== undefined)
+                payload.in_stock = updates.in_stock;
+            if (updates.rating !== undefined)
+                payload.rating = updates.rating;
+            if (updates.reviews_count !== undefined)
+                payload.reviews_count = updates.reviews_count;
+            if (updates.images !== undefined)
+                payload.images = updates.images;
+            if (Object.keys(payload).length === 0) {
+                return {
+                    success: false,
+                    message: 'No valid fields to update.',
+                    statusCode: 400
+                };
             }
             const { data: product, error } = await this.supabase
                 .from('products')
-                .update(updates)
+                .update(payload)
                 .eq('id', id)
                 .select()
                 .single();
@@ -439,9 +476,11 @@ class ProductsService {
                 statusCode: 409
             };
         }
-        return {
-            message: defaultMessage
-        };
+        // Return actual Supabase error when present so clients can debug (e.g. column does not exist)
+        if (rawMessage) {
+            return { message: rawMessage, statusCode: 400 };
+        }
+        return { message: defaultMessage };
     }
 }
 exports.ProductsService = ProductsService;

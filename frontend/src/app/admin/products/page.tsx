@@ -306,6 +306,17 @@ export default function ProductsPage() {
       let response
       if (editingProduct) {
         response = await productsApi.update(editingProduct.id, payload)
+        if (!response.success && imageUrls.length > 0) {
+          // Save failed but we already uploaded images — try to at least save image URLs so they're not orphaned
+          const imagesOnlyResponse = await productsApi.update(editingProduct.id, { images: imageUrls })
+          if (imagesOnlyResponse.success) {
+            toast.success('Product images saved. Other fields could not be updated — please try again.')
+            await fetchProducts()
+            setEditingProduct(null)
+            setIsProductModalOpen(false)
+            return
+          }
+        }
       } else {
         response = await productsApi.create(payload)
       }

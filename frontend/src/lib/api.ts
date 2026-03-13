@@ -168,18 +168,12 @@ class ApiClient {
       credentials: 'include', // Include cookies in all requests
     }
 
-    // Add auth token if available
-    // Check cookies first, then fallback to localStorage for backward compatibility
+    // Add auth token if available (cookie only for admin to avoid XSS token theft from localStorage)
     if (typeof window !== 'undefined') {
       const needsAdminAuth = isAdminRoute(endpoint, method)
       
       if (needsAdminAuth) {
-        // Try cookie first, then localStorage as fallback
-        let token = getAdminToken()
-        if (!token) {
-          token = localStorage.getItem('admin_token')
-        }
-        
+        const token = getAdminToken()
         if (token) {
           config.headers = {
             ...config.headers,
@@ -187,11 +181,7 @@ class ApiClient {
           }
         }
       } else {
-        // Regular user auth token
-        const authToken = getCookie('auth_token') || 
-                         localStorage.getItem('auth_token') || 
-                         sessionStorage.getItem('auth_token')
-        
+        const authToken = getCookie('auth_token')
         if (authToken) {
           config.headers = {
             ...config.headers,
@@ -496,7 +486,7 @@ export const adminVouchersApi = {
     if (expiryText) params.set('expiryText', expiryText)
     if (templateName) params.set('templateName', templateName)
     const url = `${API_BASE_URL}/api/admin/vouchers/${voucherId}/preview-image?${params.toString()}`
-    const token = typeof window !== 'undefined' ? (localStorage.getItem('admin_token') || document.cookie.match(/admin_token=([^;]+)/)?.[1]) : ''
+    const token = typeof window !== 'undefined' ? getAdminToken() : null
     const res = await fetch(url, {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

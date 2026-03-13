@@ -30,7 +30,7 @@ export default function AdminSignInPage() {
       if (!isMounted) return
       
       try {
-        const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
+        const token = getAdminToken()
         if (!token) return
 
         // Check if admin token is valid by calling admin profile endpoint
@@ -82,17 +82,14 @@ export default function AdminSignInPage() {
       const data = await response.json()
 
       if (data.success && data.data) {
-        // Store admin token in cookie (primary) and localStorage (fallback)
+        // Store admin token in cookie only (no localStorage to reduce XSS token theft risk)
         if (data.data.token) {
           setAdminToken(data.data.token)
-          // Also store in localStorage for backward compatibility
-          localStorage.setItem('admin_token', data.data.token)
         }
 
-        // Store admin info in cookie (primary) and localStorage (fallback)
+        // Store admin info in cookie only
         if (data.data.admin) {
           setAdminUser(data.data.admin)
-          localStorage.setItem('admin_user', JSON.stringify(data.data.admin))
         }
 
         // Redirect to admin dashboard

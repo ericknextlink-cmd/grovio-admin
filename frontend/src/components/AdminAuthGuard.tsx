@@ -25,16 +25,11 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
       try {
         hasCheckedAuth.current = true
         
-        // Check both cookies and localStorage for token
-        const token = getAdminToken() || (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
+        const token = getAdminToken()
         
         if (!token) {
           isRedirecting.current = true
           clearAdminCookies()
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('admin_token')
-            localStorage.removeItem('admin_user')
-          }
           router.replace('/admin/signin')
           setIsLoading(false)
           return
@@ -51,10 +46,6 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         if (!response.ok) {
           isRedirecting.current = true
           clearAdminCookies()
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('admin_token')
-            localStorage.removeItem('admin_user')
-          }
           router.replace('/admin/signin')
           setIsLoading(false)
           return
@@ -65,10 +56,6 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         if (!data.success || !data.data) {
           isRedirecting.current = true
           clearAdminCookies()
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('admin_token')
-            localStorage.removeItem('admin_user')
-          }
           router.replace('/admin/signin')
           setIsLoading(false)
           return
@@ -78,10 +65,6 @@ export default function AdminAuthGuard({ children }: AdminAuthGuardProps) {
       } catch {
         isRedirecting.current = true
         clearAdminCookies()
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('admin_token')
-          localStorage.removeItem('admin_user')
-        }
         router.replace('/admin/signin')
       } finally {
         setIsLoading(false)

@@ -71,7 +71,7 @@ export default function PasswordUpdateForm({ onSuccess }: PasswordUpdateFormProp
     setLoading(true)
 
     try {
-      const token = getAdminToken() || localStorage.getItem('admin_token')
+      const token = getAdminToken()
       if (!token) {
         setError('You are not authenticated. Please sign in again.')
         setLoading(false)

@@ -353,6 +353,67 @@ export class ProductsService {
   }
 
   /**
+   * Batch update stock/quantity for many products in one request.
+   * action: 'in_stock' | 'out_of_stock' | 'set_quantity'. For set_quantity, quantity is required.
+   */
+  async batchUpdateStock(
+    productIds: string[],
+    action: 'in_stock' | 'out_of_stock' | 'set_quantity',
+    quantity?: number
+  ): Promise<{ success: boolean; message: string; updated?: number; statusCode?: number }> {
+    if (!productIds.length) {
+      return { success: false, message: 'No product IDs provided', statusCode: 400 }
+    }
+    if (action === 'set_quantity' && (quantity === undefined || quantity === null || Number.isNaN(Number(quantity)))) {
+      return { success: false, message: 'Quantity is required for set_quantity action', statusCode: 400 }
+    }
+    const q = Math.floor(Number(quantity))
+    if (action === 'set_quantity' && q < 0) {
+      return { success: false, message: 'Quantity must be non-negative', statusCode: 400 }
+    }
+    try {
+      const uniqueIds = [...new Set(productIds)]
+      let payload: { in_stock?: boolean; quantity?: number }
+      if (action === 'in_stock') {
+        payload = { in_stock: true }
+      } else if (action === 'out_of_stock') {
+        payload = { in_stock: false }
+      } else {
+        payload = { quantity: q }
+      }
+      const { data, error } = await this.supabase
+        .from('products')
+        .update(payload)
+        .in('id', uniqueIds)
+        .select('id')
+
+      if (error) {
+        const mapped = this.mapSupabaseError(error, 'Unable to update stock. Please try again.')
+        return {
+          success: false,
+          message: mapped.message,
+          statusCode: mapped.statusCode ?? 500
+        }
+      }
+      const updated = Array.isArray(data) ? data.length : 0
+      return {
+        success: true,
+        message: updated === uniqueIds.length
+          ? `${updated} product(s) updated.`
+          : `${updated} of ${uniqueIds.length} product(s) updated.`,
+        updated
+      }
+    } catch (error) {
+      console.error('Batch update stock error:', error)
+      return {
+        success: false,
+        message: 'Unable to update stock. Please try again.',
+        statusCode: 500
+      }
+    }
+  }
+
+  /**
    * Get product statistics
    */
   async getProductStats(): Promise<ProductStats> {

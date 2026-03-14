@@ -187,6 +187,25 @@ const updateStockValidation = [
         .withMessage('In stock must be a boolean'),
     validation_middleware_1.handleValidationErrors
 ];
+const BATCH_STOCK_MAX_IDS = 500;
+const batchUpdateStockValidation = [
+    (0, express_validator_1.body)('productIds')
+        .isArray()
+        .withMessage('productIds must be an array')
+        .custom((ids) => ids.length <= BATCH_STOCK_MAX_IDS)
+        .withMessage(`productIds must not exceed ${BATCH_STOCK_MAX_IDS}`),
+    (0, express_validator_1.body)('productIds.*')
+        .isUUID()
+        .withMessage('Each product ID must be a valid UUID'),
+    (0, express_validator_1.body)('action')
+        .isIn(['in_stock', 'out_of_stock', 'set_quantity'])
+        .withMessage('action must be in_stock, out_of_stock, or set_quantity'),
+    (0, express_validator_1.body)('quantity')
+        .optional()
+        .isInt({ min: 0 })
+        .withMessage('quantity must be a non-negative integer when provided'),
+    validation_middleware_1.handleValidationErrors
+];
 const getProductsValidation = [
     (0, express_validator_1.query)('page')
         .optional()
@@ -223,6 +242,7 @@ router.get('/:id', productIdValidation, productsController.getProductById);
 router.use(adminAuth_middleware_1.authenticateAdmin);
 router.post('/', createProductValidation, productsController.createProduct);
 router.post('/bulk', productsController.createBulkProducts);
+router.patch('/batch-stock', batchUpdateStockValidation, productsController.batchUpdateStock);
 router.put('/:id', updateProductValidation, productsController.updateProduct);
 router.delete('/:id', productIdValidation, productsController.deleteProduct);
 router.patch('/:id/stock', updateStockValidation, productsController.updateStock);

@@ -188,6 +188,26 @@ const updateStockValidation = [
   handleValidationErrors
 ]
 
+const BATCH_STOCK_MAX_IDS = 500
+const batchUpdateStockValidation = [
+  body('productIds')
+    .isArray()
+    .withMessage('productIds must be an array')
+    .custom((ids: unknown[]) => ids.length <= BATCH_STOCK_MAX_IDS)
+    .withMessage(`productIds must not exceed ${BATCH_STOCK_MAX_IDS}`),
+  body('productIds.*')
+    .isUUID()
+    .withMessage('Each product ID must be a valid UUID'),
+  body('action')
+    .isIn(['in_stock', 'out_of_stock', 'set_quantity'])
+    .withMessage('action must be in_stock, out_of_stock, or set_quantity'),
+  body('quantity')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('quantity must be a non-negative integer when provided'),
+  handleValidationErrors
+]
+
 const getProductsValidation = [
   query('page')
     .optional()
@@ -228,6 +248,7 @@ router.use(authenticateAdmin)
 
 router.post('/', createProductValidation, productsController.createProduct)
 router.post('/bulk', productsController.createBulkProducts)
+router.patch('/batch-stock', batchUpdateStockValidation, productsController.batchUpdateStock)
 router.put('/:id', updateProductValidation, productsController.updateProduct)
 router.delete('/:id', productIdValidation, productsController.deleteProduct)
 router.patch('/:id/stock', updateStockValidation, productsController.updateStock)

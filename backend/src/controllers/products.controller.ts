@@ -217,6 +217,38 @@ export class ProductsController {
   }
 
   /**
+   * Batch update stock/quantity for multiple products (Admin only). One request instead of N.
+   */
+  batchUpdateStock = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { productIds, action, quantity } = req.body as {
+        productIds: string[]
+        action: 'in_stock' | 'out_of_stock' | 'set_quantity'
+        quantity?: number
+      }
+      const result = await this.productsService.batchUpdateStock(productIds, action, quantity)
+      if (!result.success) {
+        res.status(result.statusCode ?? 400).json({
+          success: false,
+          message: result.message
+        } as ApiResponse<null>)
+        return
+      }
+      res.json({
+        success: true,
+        message: result.message,
+        data: { updated: result.updated }
+      } as ApiResponse<{ updated: number }>)
+    } catch (error) {
+      console.error('Batch update stock error:', error)
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      } as ApiResponse<null>)
+    }
+  }
+
+  /**
    * Bulk create products from supplier import (Admin only). Match by name + original_price; only insert if not exists.
    * Recommended: send up to 100 products per request; frontend chunks and calls multiple times.
    */

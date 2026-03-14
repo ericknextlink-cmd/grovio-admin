@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Truck, MapPin, Save, Loader2 } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
+import LocationPicker from '@/components/LocationPicker'
 import { deliveryApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -119,47 +120,33 @@ export default function AdminDeliverySettingsPage() {
             Warehouse / platform location
           </CardTitle>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Set the warehouse coordinates. Distance from this point to the customer delivery address is used to compute the delivery fee. You can add a location picker component here later.
+            Pick the warehouse address. Distance from this point to the customer delivery address is used to compute the delivery fee. Search and select a location (Ghana); coordinates are saved automatically.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="warehouse_lat">Latitude</Label>
-              <Input
-                id="warehouse_lat"
-                type="number"
-                step="any"
-                placeholder="e.g. 5.6037"
-                value={warehouseLat}
-                onChange={(e) => setWarehouseLat(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="warehouse_lng">Longitude</Label>
-              <Input
-                id="warehouse_lng"
-                type="number"
-                step="any"
-                placeholder="e.g. -0.1870"
-                value={warehouseLng}
-                onChange={(e) => setWarehouseLng(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
           <div>
-            <Label htmlFor="warehouse_address">Address (optional label)</Label>
-            <Input
-              id="warehouse_address"
-              type="text"
-              placeholder="e.g. Accra, Industrial Area"
-              value={warehouseAddress}
-              onChange={(e) => setWarehouseAddress(e.target.value)}
-              className="mt-1"
+            <Label className="mb-2 block">Warehouse address</Label>
+            <LocationPicker
+              selectedLocation={warehouseAddress}
+              onLocationSelect={(addressText, coords) => {
+                setWarehouseAddress(addressText)
+                if (coords) {
+                  setWarehouseLat(String(coords.lat))
+                  setWarehouseLng(String(coords.lng))
+                } else {
+                  setWarehouseLat('')
+                  setWarehouseLng('')
+                }
+              }}
+              placeholder="Select warehouse location"
+              modalTitle="Warehouse location"
             />
           </div>
+          {(warehouseLat || warehouseLng) && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+              <p>Coordinates (saved with address): Lat {warehouseLat || '—'}, Lng {warehouseLng || '—'}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

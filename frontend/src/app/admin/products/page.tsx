@@ -83,42 +83,74 @@ export default function ProductsPage() {
   const [aiResponse, setAiResponse] = useState('')
   const [aiRecommendedProducts, setAiRecommendedProducts] = useState<AIRecommendedProduct[]>([])
 
+  const BACKEND_MAX_LIMIT = 100
+
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const params: any = {
-        page,
-        limit,
+      const baseParams: Record<string, unknown> = {
         sortBy,
         sortOrder,
       }
+      if (searchQuery) baseParams.search = searchQuery
+      if (selectedCategory) baseParams.category = selectedCategory
+      if (inStockFilter !== undefined) baseParams.inStock = inStockFilter
 
-      if (searchQuery) {
-        params.search = searchQuery
-      }
-
-      if (selectedCategory) {
-        params.category = selectedCategory
-      }
-
-      if (inStockFilter !== undefined) {
-        params.inStock = inStockFilter
-      }
-
-      const response = await productsApi.getAll(params)
-
-      if (response.success && response.data) {
-        setProducts(Array.isArray(response.data) ? response.data : [])
-        
-        if (response.pagination) {
-          setTotal(response.pagination.total)
-          setTotalPages(response.pagination.totalPages)
+      if (limit <= BACKEND_MAX_LIMIT) {
+        const response = await productsApi.getAll({
+          ...baseParams,
+          page,
+          limit,
+        } as any)
+        if (response.success && response.data) {
+          setProducts(Array.isArray(response.data) ? response.data : [])
+          if (response.pagination) {
+            setTotal(response.pagination.total)
+            setTotalPages(response.pagination.totalPages)
+          }
+        } else {
+          setError(response.message || 'Failed to fetch products')
         }
-      } else {
-        setError(response.message || 'Failed to fetch products')
+        return
       }
+
+      // Batch requests when limit > 100 (backend allows max 100 per request)
+      const perRequest = BACKEND_MAX_LIMIT
+      const numBackendPages = Math.ceil(limit / perRequest)
+      const backendPageStart = (page - 1) * numBackendPages + 1
+      const requests = Array.from({ length: numBackendPages }, (_, i) =>
+        productsApi.getAll({
+          ...baseParams,
+          page: backendPageStart + i,
+          limit: perRequest,
+        } as any)
+      )
+      const results = await Promise.all(requests)
+      const seenIds = new Set<string>()
+      const merged: Product[] = []
+      let totalCount = 0
+      for (let i = 0; i < results.length; i++) {
+        const res = results[i]
+        if (!res.success || !res.data) {
+          setError(res.message || 'Failed to fetch products')
+          setProducts([])
+          setLoading(false)
+          return
+        }
+        if (i === 0 && res.pagination) totalCount = res.pagination.total
+        const list = Array.isArray(res.data) ? res.data : []
+        for (const p of list) {
+          if (p?.id && !seenIds.has(p.id)) {
+            seenIds.add(p.id)
+            merged.push(p as Product)
+          }
+        }
+      }
+      setProducts(merged)
+      setTotal(totalCount)
+      setTotalPages(Math.max(1, Math.ceil(totalCount / limit)))
     } catch (err) {
       setError('An error occurred while fetching products')
       console.error('Fetch products error:', err)

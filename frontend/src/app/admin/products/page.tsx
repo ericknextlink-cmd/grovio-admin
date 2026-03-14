@@ -224,6 +224,21 @@ export default function ProductsPage() {
     return words.slice(0, 3).join(' ')
   }
 
+  /** Normalize product images to string[] (backend may return array, JSON string, singular image, or undefined). */
+  const normalizeProductImages = (p: { images?: unknown; image?: unknown }): string[] => {
+    const raw = p.images ?? (p as { image?: unknown }).image
+    if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === 'string')
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+      } catch {
+        return raw.trim() ? [raw] : []
+      }
+    }
+    return []
+  }
+
   useEffect(() => {
     if (!editingProduct?.name) {
       setSimilarProducts([])
@@ -242,7 +257,7 @@ export default function ProductsPage() {
         const others = list
           .filter((p: Product) => {
             if (p.id === editingProduct.id) return false
-            if (!Array.isArray(p.images) || p.images.length === 0) return false
+            if (normalizeProductImages(p).length === 0) return false
             return countMatchingWords(editingProduct.name, p.name) >= minMatchingWords
           })
           .map((p: Product) => ({ ...p, _matchCount: countMatchingWords(editingProduct.name, p.name) }))
@@ -927,7 +942,7 @@ export default function ProductsPage() {
         categories={categories}
         onSubmit={handleProductFormSubmit}
         onCancel={closeProductModal}
-        similarProducts={editingProduct ? similarProducts.map((p) => ({ id: p.id, name: p.name, images: p.images || [] })) : []}
+        similarProducts={editingProduct ? similarProducts.map((p) => ({ id: p.id, name: p.name, images: normalizeProductImages(p) })) : []}
         similarProductsLoading={similarProductsLoading}
       />
       

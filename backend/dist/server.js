@@ -32,6 +32,7 @@ const pricing_routes_1 = require("./routes/pricing.routes");
 const scheduled_orders_routes_1 = require("./routes/scheduled-orders.routes");
 const contact_routes_1 = require("./routes/contact.routes");
 const voucher_routes_1 = require("./routes/voucher.routes");
+const delivery_routes_1 = require("./routes/delivery.routes");
 const log_frontend_error_routes_1 = require("./routes/log-frontend-error.routes");
 const error_middleware_1 = require("./middleware/error.middleware");
 const notFound_middleware_1 = require("./middleware/notFound.middleware");
@@ -194,6 +195,7 @@ app.use('/api/pricing', pricing_routes_1.pricingRoutes);
 app.use('/api/scheduled-orders', scheduled_orders_routes_1.scheduledOrdersRoutes);
 app.use('/api/contact', contact_routes_1.contactRoutes);
 app.use('/api/vouchers', voucher_routes_1.voucherRoutes);
+app.use('/api/delivery', delivery_routes_1.deliveryRoutes);
 app.use('/api/log-frontend-error', log_frontend_error_routes_1.logFrontendErrorRoutes);
 // Webhook endpoint (before general routes)
 app.use('/api/webhook', order_routes_1.orderRoutes);

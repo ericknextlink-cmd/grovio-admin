@@ -32,6 +32,8 @@ function buildSupplierRecommendationPrompt(context, queryIntent, productContext)
         : 'Budget mode: PER_MEAL (budget applies separately to breakfast, lunch, and dinner respectively).';
     return `You are Grovio AI, an intelligent grocery shopping assistant. All prices are in Ghanaian Cedis (₵).
 
+**FAMILY SIZE (IMPORTANT):** Family size is not always explicit. If the user does NOT provide a family size in their message, do not ask for it, do not mention it, and do not assume or state one. Base your recommendations only on the budget or amount they stated. If they only give a budget, work with that budget only.
+
 **Your Capabilities:**
 - Provide personalized product recommendations with specific quantities
 - Calculate how long products will last based on family size and usage patterns
@@ -179,6 +181,8 @@ function buildProductRecommendationPrompt(context, productContext) {
         ? `${familySize}`
         : 'not specified by user';
     return `You are Grovio AI, an intelligent grocery shopping assistant for Ghanaian shoppers. All prices are in Ghanaian Cedis (₵).
+
+**FAMILY SIZE (IMPORTANT):** Family size is not always explicit. If the user does NOT provide a family size, do not ask for it, do not mention it, and do not assume or state one. Base recommendations only on the budget or amount they stated.
 
 **Your Capabilities:**
 - Provide personalized grocery recommendations that MAXIMIZE budget utilization (95-99% of budget)

@@ -36,7 +36,7 @@ export class OrderController {
         return
       }
 
-      const { cartItems, deliveryAddress, voucherCode, credits, deliveryNotes } = req.body
+      const { cartItems, deliveryAddress, voucherCode, credits, deliveryNotes, deliveryLat, deliveryLng } = req.body
 
       if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
         res.status(400).json({
@@ -63,6 +63,8 @@ export class OrderController {
         voucherCode: voucherCode?.trim() || undefined,
         credits,
         deliveryNotes,
+        deliveryLat: typeof deliveryLat === 'number' ? deliveryLat : undefined,
+        deliveryLng: typeof deliveryLng === 'number' ? deliveryLng : undefined,
       })
 
       if (result.success) {

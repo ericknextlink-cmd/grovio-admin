@@ -28,6 +28,7 @@ import { pricingRoutes } from './routes/pricing.routes'
 import { scheduledOrdersRoutes } from './routes/scheduled-orders.routes'
 import { contactRoutes } from './routes/contact.routes'
 import { voucherRoutes } from './routes/voucher.routes'
+import { deliveryRoutes } from './routes/delivery.routes'
 import { logFrontendErrorRoutes } from './routes/log-frontend-error.routes'
 import { errorHandler } from './middleware/error.middleware'
 import { notFoundHandler } from './middleware/notFound.middleware'
@@ -207,6 +208,7 @@ app.use('/api/pricing', pricingRoutes)
 app.use('/api/scheduled-orders', scheduledOrdersRoutes)
 app.use('/api/contact', contactRoutes)
 app.use('/api/vouchers', voucherRoutes)
+app.use('/api/delivery', deliveryRoutes)
 app.use('/api/log-frontend-error', logFrontendErrorRoutes)
 
 // Webhook endpoint (before general routes)

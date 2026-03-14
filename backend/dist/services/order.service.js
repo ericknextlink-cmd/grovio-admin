@@ -7,6 +7,7 @@ const paystack_service_1 = require("./paystack.service");
 const pdf_invoice_service_1 = require("./pdf-invoice.service");
 const email_service_1 = require("./email.service");
 const voucher_service_1 = require("./voucher.service");
+const delivery_service_1 = require("./delivery.service");
 const uuid_1 = require("uuid");
 const ACTIVE_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'confirmed'];
 const DELIVERY_CODE_MAX_ATTEMPTS = 50;
@@ -79,7 +80,16 @@ class OrderService {
      */
     async createPendingOrder(params) {
         try {
-            const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes } = params;
+            const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes, deliveryLat, deliveryLng } = params;
+            const deliveryService = new delivery_service_1.DeliveryService();
+            const lat = deliveryLat != null && deliveryLng != null && Number.isFinite(deliveryLat) && Number.isFinite(deliveryLng)
+                ? deliveryLat
+                : null;
+            const lng = lat !== null ? deliveryLng : null;
+            const { deliveryFee: computedFee } = lat != null && lng != null
+                ? await deliveryService.calculateFee(lat, lng)
+                : { deliveryFee: delivery_service_1.DeliveryService.DEFAULT_DELIVERY_FEE };
+            const deliveryFeeNum = Math.max(0, computedFee);
             // 1. Get user details
             const { data: user, error: userError } = await this.supabase
                 .from('users')
@@ -148,7 +158,7 @@ class OrderService {
                     };
                 }
             }
-            const totalAmount = subtotal - discount - credits;
+            const totalAmount = subtotal + deliveryFeeNum - discount - credits;
             if (totalAmount <= 0) {
                 return {
                     success: false,
@@ -167,6 +177,7 @@ class OrderService {
                 subtotal,
                 discount,
                 credits,
+                delivery_fee: deliveryFeeNum,
                 total_amount: totalAmount,
                 delivery_address: deliveryAddress,
                 delivery_notes: deliveryNotes,
@@ -353,6 +364,7 @@ class OrderService {
             const rawChannel = (paymentData.channel ?? paymentData.authorization?.channel);
             const channel = rawChannel?.toLowerCase().replace(/-/g, '_');
             const paymentMethod = channel && allowedMethods.includes(channel) ? channel : 'paystack';
+            const deliveryFeeOrder = Number(pendingOrder.delivery_fee) || 0;
             const { data: order, error: orderError } = await this.supabase
                 .from('orders')
                 .insert({
@@ -363,6 +375,7 @@ class OrderService {
                 subtotal: pendingOrder.subtotal,
                 discount: pendingOrder.discount,
                 credits: pendingOrder.credits,
+                delivery_fee: deliveryFeeOrder,
                 total_amount: pendingOrder.total_amount,
                 currency: 'GHS',
                 payment_method: paymentMethod,

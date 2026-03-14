@@ -4,6 +4,7 @@ import { PaystackService } from './paystack.service'
 import { PDFInvoiceService, InvoiceData } from './pdf-invoice.service'
 import { EmailService } from './email.service'
 import { VoucherService } from './voucher.service'
+import { DeliveryService } from './delivery.service'
 import { v4 as uuidv4 } from 'uuid'
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'confirmed']
@@ -36,6 +37,9 @@ export interface CreatePendingOrderParams {
   discount?: number
   credits?: number
   deliveryNotes?: string
+  /** Optional customer coords so server can compute delivery fee; if missing, default fee is used. */
+  deliveryLat?: number
+  deliveryLng?: number
 }
 
 export interface InitializePaymentResult {
@@ -138,7 +142,16 @@ export class OrderService {
    */
   async createPendingOrder(params: CreatePendingOrderParams): Promise<InitializePaymentResult> {
     try {
-      const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes } = params
+      const { userId, cartItems, deliveryAddress, voucherCode, credits = 0, deliveryNotes, deliveryLat, deliveryLng } = params
+      const deliveryService = new DeliveryService()
+      const lat = deliveryLat != null && deliveryLng != null && Number.isFinite(deliveryLat) && Number.isFinite(deliveryLng)
+        ? deliveryLat
+        : null
+      const lng = lat !== null ? deliveryLng! : null
+      const { deliveryFee: computedFee } = lat != null && lng != null
+        ? await deliveryService.calculateFee(lat, lng)
+        : { deliveryFee: DeliveryService.DEFAULT_DELIVERY_FEE }
+      const deliveryFeeNum = Math.max(0, computedFee)
 
       // 1. Get user details
       const { data: user, error: userError } = await this.supabase
@@ -219,7 +232,7 @@ export class OrderService {
         }
       }
 
-      const totalAmount = subtotal - discount - credits
+      const totalAmount = subtotal + deliveryFeeNum - discount - credits
 
       if (totalAmount <= 0) {
         return {
@@ -241,6 +254,7 @@ export class OrderService {
           subtotal,
           discount,
           credits,
+          delivery_fee: deliveryFeeNum,
           total_amount: totalAmount,
           delivery_address: deliveryAddress,
           delivery_notes: deliveryNotes,
@@ -445,6 +459,7 @@ export class OrderService {
       const channel = rawChannel?.toLowerCase().replace(/-/g, '_')
       const paymentMethod = channel && allowedMethods.includes(channel) ? channel : 'paystack'
 
+      const deliveryFeeOrder = Number(pendingOrder.delivery_fee) || 0
       const { data: order, error: orderError } = await this.supabase
         .from('orders')
         .insert({
@@ -455,6 +470,7 @@ export class OrderService {
           subtotal: pendingOrder.subtotal,
           discount: pendingOrder.discount,
           credits: pendingOrder.credits,
+          delivery_fee: deliveryFeeOrder,
           total_amount: pendingOrder.total_amount,
           currency: 'GHS',
           payment_method: paymentMethod,

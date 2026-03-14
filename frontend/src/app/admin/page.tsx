@@ -11,6 +11,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 import { GroceryProduct, AdminStats } from '@/types/grocery'
 import { productsApi, dashboardApi } from '@/lib/api'
 import { toast } from 'sonner'
+import { useLiveTime } from '@/hooks/useLiveTime'
 
 interface Product {
   id: string
@@ -56,6 +57,7 @@ export default function AdminDashboard() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<GroceryProduct | undefined>()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const liveNow = useLiveTime()
 
   // Fetch dashboard stats from API (live DB only; no fallback)
   useEffect(() => {
@@ -283,8 +285,8 @@ export default function AdminDashboard() {
             <div className="flex items-center space-x-4">
               <div className="text-right">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Last updated</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {new Date().toLocaleTimeString()}
+                <p className="text-sm font-medium text-gray-900 dark:text-white tabular-nums">
+                  {liveNow.toLocaleTimeString()}
                 </p>
               </div>
             </div>

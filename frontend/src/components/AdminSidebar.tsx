@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles, FileText, Percent, Layers, Ticket, CheckCircle } from 'lucide-react'
+import { ShoppingBag, Settings, LogOut, Tag, Package, CreditCard, Sparkles, FileText, Percent, Layers, Ticket, CheckCircle, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { getAdminToken, getAdminUser, clearAdminCookies } from '@/lib/cookies'
@@ -64,6 +64,7 @@ export default function AdminSidebar({ currentPage, isSidebarOpen, setIsSidebarO
     { icon: Tag, label: 'Categories', active: currentPage === 'categories', href: '/admin/categories' },
     { icon: Package, label: 'Orders', active: currentPage === 'orders', href: '/admin/orders' },
     { icon: CheckCircle, label: 'Confirm Delivery', active: currentPage === 'confirm-delivery', href: '/admin/confirm-delivery' },
+    { icon: Truck, label: 'Delivery Settings', active: currentPage === 'delivery-settings', href: '/admin/delivery-settings' },
     { icon: CreditCard, label: 'Transactions', active: currentPage === 'transactions', href: '/admin/transactions' },
     { icon: Settings, label: 'Settings', active: currentPage === 'settings', href: '/admin/settings' },
   ]

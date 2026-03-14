@@ -63,6 +63,11 @@ function isAdminRoute(endpoint: string, method: string = 'GET'): boolean {
   if (endpoint.includes('/api/orders/admin')) {
     return true
   }
+
+  // Delivery settings (admin only)
+  if (endpoint.includes('/api/delivery/settings')) {
+    return true
+  }
   
   // Admin panel: send admin auth for products/categories so list endpoints work when required
   if (endpoint.includes('/api/products') || endpoint.includes('/api/categories')) {
@@ -321,6 +326,27 @@ export const productsApi = {
     apiClient.patch<any>(`/api/products/${id}/stock`, { quantity, inStock }),
 
   getStats: () => apiClient.get<any>('/api/products/admin/stats'),
+}
+
+// Delivery settings (platform warehouse + price per km for checkout delivery fee)
+export const deliveryApi = {
+  getSettings: () =>
+    apiClient.get<{
+      warehouseLat: number | null
+      warehouseLng: number | null
+      warehouseAddress: string | null
+      pricePerKm: number
+      pricePerMeter: number | null
+      updatedAt: string | null
+    }>('/api/delivery/settings'),
+
+  updateSettings: (data: {
+    warehouseLat?: number | null
+    warehouseLng?: number | null
+    warehouseAddress?: string | null
+    pricePerKm?: number
+    pricePerMeter?: number | null
+  }) => apiClient.put<unknown>('/api/delivery/settings', data),
 }
 
 // AI Products API

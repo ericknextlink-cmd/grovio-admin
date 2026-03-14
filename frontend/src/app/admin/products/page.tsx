@@ -627,7 +627,7 @@ export default function ProductsPage() {
                           <button
                             type="button"
                             onClick={toggleSelectAllOnPage}
-                            className="inline-flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
                             title={products.every((p) => selectedIds.has(p.id)) ? 'Deselect all' : 'Select all'}
                           >
                             {products.length > 0 && products.every((p) => selectedIds.has(p.id)) ? (
@@ -667,7 +667,7 @@ export default function ProductsPage() {
                             <button
                               type="button"
                               onClick={() => toggleSelectProduct(product.id)}
-                              className="inline-flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
                             >
                               {selectedIds.has(product.id) ? (
                                 <CheckSquare className="h-5 w-5 text-blue-600" />

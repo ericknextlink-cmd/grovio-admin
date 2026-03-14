@@ -3,6 +3,7 @@
 
 import React from 'react'
 import { Package, CheckCircle, XCircle, Tag, TrendingUp, ShoppingCart, DollarSign, CreditCard, Clock } from 'lucide-react'
+import { useLiveTime } from '@/hooks/useLiveTime'
 import { AdminStats } from '@/types/grocery'
 import { cn, formatPrice } from '@/lib/utils'
 
@@ -93,6 +94,7 @@ const defaultStats: AdminStats = {
 
 export default function StatsDashboard({ stats, className }: StatsDashboardProps) {
   const safeStats = stats && typeof stats === 'object' ? stats : defaultStats
+  const liveNow = useLiveTime()
 
   const getStatValue = (key: string) => {
     return safeStats[key as keyof AdminStats] ?? 0
@@ -136,7 +138,7 @@ export default function StatsDashboard({ stats, className }: StatsDashboardProps
 
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <TrendingUp className="h-4 w-4" />
-          <span>Last updated: {new Date().toLocaleTimeString()}</span>
+          <span>Last updated: <span className="tabular-nums">{liveNow.toLocaleTimeString()}</span></span>
         </div>
       </div>
 

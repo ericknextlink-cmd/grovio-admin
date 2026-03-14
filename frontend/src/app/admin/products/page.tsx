@@ -171,18 +171,26 @@ export default function ProductsPage() {
   const fetchCategories = useCallback(async () => {
     try {
       const response = await categoriesApi.getAll()
-      if (response.success && response.data) {
-        const normalized = (response.data as any[]).map((category) => ({
-          id: category.id,
-          name: category.name,
-          slug: category.slug,
-          description: category.description || '',
-          icon: category.icon || '',
-          images: Array.isArray(category.images) ? category.images : [],
-          subcategories: Array.isArray(category.subcategories) ? category.subcategories : [],
-        })) as GroceryCategory[]
-        setCategories(normalized)
-      }
+      if (!response.success) return
+      // Backend may return { data: categories } or nested shape
+      const raw = response.data
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray((raw as { categories?: unknown[] })?.categories)
+          ? (raw as { categories: any[] }).categories
+          : Array.isArray((raw as { data?: unknown[] })?.data)
+            ? (raw as { data: any[] }).data
+            : []
+      const normalized = list.map((category: any) => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        description: category.description || '',
+        icon: category.icon || '',
+        images: Array.isArray(category.images) ? category.images : [],
+        subcategories: Array.isArray(category.subcategories) ? category.subcategories : [],
+      })) as GroceryCategory[]
+      setCategories(normalized)
     } catch (err) {
       console.error('Fetch categories error:', err)
     }
@@ -192,18 +200,28 @@ export default function ProductsPage() {
     fetchCategories()
   }, [fetchCategories])
 
-  /** Score name similarity for "reuse image from similar product". Higher = more similar. */
-  const nameSimilarityScore = (a: string, b: string): number => {
-    const na = a.trim().toLowerCase()
-    const nb = b.trim().toLowerCase()
-    if (na === nb) return 100
-    const wordsA = new Set(na.split(/\s+/).filter(Boolean))
-    const wordsB = new Set(nb.split(/\s+/).filter(Boolean))
-    let common = 0
-    wordsA.forEach((w) => { if (wordsB.has(w)) common++ })
-    const score = (common / Math.max(wordsA.size, wordsB.size, 1)) * 50
-    if (na.includes(nb) || nb.includes(na)) return score + 40
-    return score
+  // When opening product modal, ensure categories are loaded (retry if initially empty)
+  useEffect(() => {
+    if (isProductModalOpen && categories.length === 0) {
+      fetchCategories()
+    }
+  }, [isProductModalOpen, categories.length, fetchCategories])
+
+  /** Words from product name (for "reuse image" matching). At least 2–3 of these should match. */
+  const getProductNameWords = (name: string): string[] =>
+    name.trim().toLowerCase().split(/\s+/).filter(Boolean)
+
+  /** Count how many words from nameA appear in nameB (e.g. "LELE RICE" matches "LELE RICE 25KG"). */
+  const countMatchingWords = (nameA: string, nameB: string): number => {
+    const wordsA = getProductNameWords(nameA)
+    const wordsBSet = new Set(getProductNameWords(nameB))
+    return wordsA.filter((w) => wordsBSet.has(w)).length
+  }
+
+  /** Search query from product name: first 2–3 words so backend returns "LELE RICE 25KG", "LELE RICE 50KG", etc. */
+  const getSimilarProductsSearchQuery = (name: string): string => {
+    const words = getProductNameWords(name)
+    return words.slice(0, 3).join(' ')
   }
 
   useEffect(() => {
@@ -214,17 +232,23 @@ export default function ProductsPage() {
     let cancelled = false
     setSimilarProductsLoading(true)
     setSimilarProducts([])
+    const searchQuery = getSimilarProductsSearchQuery(editingProduct.name)
     productsApi
-      .getAll({ search: editingProduct.name, limit: 100, page: 1, sortBy: 'name', sortOrder: 'asc' })
+      .getAll({ search: searchQuery, limit: 100, page: 1, sortBy: 'name', sortOrder: 'asc' })
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
         const list = Array.isArray(response.data) ? response.data : []
+        const minMatchingWords = 2
         const others = list
-          .filter((p: Product) => p.id !== editingProduct.id && Array.isArray(p.images) && p.images.length > 0)
-          .map((p: Product) => ({ ...p, _score: nameSimilarityScore(editingProduct.name, p.name) }))
-          .sort((a: Product & { _score: number }, b: Product & { _score: number }) => (b._score - a._score))
-          .slice(0, 2)
-          .map(({ _score, ...p }: Product & { _score: number }) => p)
+          .filter((p: Product) => {
+            if (p.id === editingProduct.id) return false
+            if (!Array.isArray(p.images) || p.images.length === 0) return false
+            return countMatchingWords(editingProduct.name, p.name) >= minMatchingWords
+          })
+          .map((p: Product) => ({ ...p, _matchCount: countMatchingWords(editingProduct.name, p.name) }))
+          .sort((a: Product & { _matchCount: number }, b: Product & { _matchCount: number }) => b._matchCount - a._matchCount)
+          .slice(0, 3)
+          .map(({ _matchCount, ...p }: Product & { _matchCount: number }) => p)
         if (!cancelled) setSimilarProducts(others)
       })
       .catch(() => { if (!cancelled) setSimilarProducts([]) })
@@ -370,19 +394,15 @@ export default function ProductsPage() {
     if (ids.length === 0) return
     setBulkStockLoading(true)
     try {
-      let ok = 0
-      let fail = 0
-      for (const id of ids) {
-        const product = products.find((p) => p.id === id)
-        const quantity = product?.quantity ?? 0
-        const res = await productsApi.updateStock(id, quantity, inStock)
-        if (res.success) ok++
-        else fail++
-      }
-      if (fail > 0) {
-        toast.error(`${ok} updated, ${fail} failed`)
+      const res = await productsApi.batchUpdateStock({
+        productIds: ids,
+        action: inStock ? 'in_stock' : 'out_of_stock',
+      })
+      if (res.success) {
+        const updated = (res.data as { updated?: number })?.updated ?? ids.length
+        toast.success(`${updated} product${updated === 1 ? '' : 's'} marked as ${inStock ? 'in stock' : 'out of stock'}`)
       } else {
-        toast.success(`${ok} product${ok === 1 ? '' : 's'} marked as ${inStock ? 'in stock' : 'out of stock'}`)
+        toast.error(res.message ?? 'Bulk update failed')
       }
       setSelectedIds(new Set())
       await fetchProducts()
@@ -404,19 +424,16 @@ export default function ProductsPage() {
     if (ids.length === 0) return
     setBulkSetQuantityLoading(true)
     try {
-      let ok = 0
-      let fail = 0
-      for (const id of ids) {
-        const product = products.find((p) => p.id === id)
-        const inStock = product?.in_stock ?? true
-        const res = await productsApi.updateStock(id, value, inStock)
-        if (res.success) ok++
-        else fail++
-      }
-      if (fail > 0) {
-        toast.error(`${ok} updated, ${fail} failed`)
+      const res = await productsApi.batchUpdateStock({
+        productIds: ids,
+        action: 'set_quantity',
+        quantity: value,
+      })
+      if (res.success) {
+        const updated = (res.data as { updated?: number })?.updated ?? ids.length
+        toast.success(`Quantity set to ${value} for ${updated} product${updated === 1 ? '' : 's'}`)
       } else {
-        toast.success(`Quantity set to ${value} for ${ok} product${ok === 1 ? '' : 's'}`)
+        toast.error(res.message ?? 'Bulk set quantity failed')
       }
       setSelectedIds(new Set())
       setBulkQuantityInput('')

@@ -19,7 +19,7 @@ interface ProductFormProps {
   onSubmit: (product: Omit<GroceryProduct, 'id' | 'createdAt' | 'updatedAt'>) => void
   onCancel: () => void
   isOpen: boolean
-  /** When editing, up to 2 similar products to reuse images from (by URL, no upload). */
+  /** When editing, up to 3 similar products (name match + has image) to reuse images from (by URL, no upload). */
   similarProducts?: SimilarProductOption[]
   similarProductsLoading?: boolean
 }

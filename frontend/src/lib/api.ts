@@ -325,6 +325,13 @@ export const productsApi = {
   updateStock: (id: string, quantity: number, inStock: boolean) =>
     apiClient.patch<any>(`/api/products/${id}/stock`, { quantity, inStock }),
 
+  /** Batch update stock/quantity for many products in one request. */
+  batchUpdateStock: (params: {
+    productIds: string[]
+    action: 'in_stock' | 'out_of_stock' | 'set_quantity'
+    quantity?: number
+  }) => apiClient.patch<any>('/api/products/batch-stock', params),
+
   getStats: () => apiClient.get<any>('/api/products/admin/stats'),
 }
 

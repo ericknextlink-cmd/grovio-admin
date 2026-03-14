@@ -7,12 +7,21 @@ import { cn } from '@/lib/utils'
 import { GroceryProduct, GroceryCategory } from '@/types/grocery'
 import ImageUpload from './ImageUpload'
 
+export interface SimilarProductOption {
+  id: string
+  name: string
+  images: string[]
+}
+
 interface ProductFormProps {
   product?: GroceryProduct
   categories: GroceryCategory[]
   onSubmit: (product: Omit<GroceryProduct, 'id' | 'createdAt' | 'updatedAt'>) => void
   onCancel: () => void
   isOpen: boolean
+  /** When editing, up to 2 similar products to reuse images from (by URL, no upload). */
+  similarProducts?: SimilarProductOption[]
+  similarProductsLoading?: boolean
 }
 
 const initialFormData = {
@@ -42,7 +51,9 @@ export default function ProductForm({
   categories,
   onSubmit,
   onCancel,
-  isOpen
+  isOpen,
+  similarProducts = [],
+  similarProductsLoading = false,
 }: ProductFormProps) {
   const [formData, setFormData] = useState(() => ({ ...initialFormData }))
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -530,6 +541,43 @@ export default function ProductForm({
               />
             </div>
           </div>
+
+          {/* Reuse image from similar product (edit only) */}
+          {product && (similarProductsLoading || similarProducts.length > 0) && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Reuse image from similar product
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Select a product below to use its image(s) for this product — no upload needed.
+              </p>
+              {similarProductsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">Loading similar products...</div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {similarProducts.map((sp) => (
+                    <button
+                      key={sp.id}
+                      type="button"
+                      onClick={() => handleInputChange('images', Array.isArray(sp.images) ? [...sp.images] : [])}
+                      className="flex items-center gap-2 p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                    >
+                      {sp.images?.[0] && (
+                        <img
+                          src={sp.images[0]}
+                          alt=""
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      )}
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[180px]">
+                        {sp.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Image Upload */}
           <div className="space-y-2">

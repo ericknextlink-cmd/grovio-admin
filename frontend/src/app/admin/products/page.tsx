@@ -50,7 +50,10 @@ export default function ProductsPage() {
   
   // Pagination
   const [page, setPage] = useState(1)
-  const [limit] = useState(20)
+  const LIMIT_OPTIONS = [10, 20, 50, 100, 200, 500, 1000] as const
+  const [limitOption, setLimitOption] = useState<number | 'custom'>(20)
+  const [customLimit, setCustomLimit] = useState<string>('100')
+  const limit = limitOption === 'custom' ? (parseInt(customLimit, 10) || 100) : limitOption
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   
@@ -64,6 +67,8 @@ export default function ProductsPage() {
   // Modal state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([])
+  const [similarProductsLoading, setSimilarProductsLoading] = useState(false)
 
   // Row selection for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -122,6 +127,11 @@ export default function ProductsPage() {
     }
   }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, searchQuery, limit])
 
+  const handleLimitChange = (value: number | 'custom') => {
+    setLimitOption(value)
+    setPage(1)
+  }
+
   useEffect(() => {
     fetchProducts()
   }, [page, sortBy, sortOrder, selectedCategory, inStockFilter, fetchProducts])
@@ -149,6 +159,46 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchCategories()
   }, [fetchCategories])
+
+  /** Score name similarity for "reuse image from similar product". Higher = more similar. */
+  const nameSimilarityScore = (a: string, b: string): number => {
+    const na = a.trim().toLowerCase()
+    const nb = b.trim().toLowerCase()
+    if (na === nb) return 100
+    const wordsA = new Set(na.split(/\s+/).filter(Boolean))
+    const wordsB = new Set(nb.split(/\s+/).filter(Boolean))
+    let common = 0
+    wordsA.forEach((w) => { if (wordsB.has(w)) common++ })
+    const score = (common / Math.max(wordsA.size, wordsB.size, 1)) * 50
+    if (na.includes(nb) || nb.includes(na)) return score + 40
+    return score
+  }
+
+  useEffect(() => {
+    if (!editingProduct?.name) {
+      setSimilarProducts([])
+      return
+    }
+    let cancelled = false
+    setSimilarProductsLoading(true)
+    setSimilarProducts([])
+    productsApi
+      .getAll({ search: editingProduct.name, limit: 100, page: 1, sortBy: 'name', sortOrder: 'asc' })
+      .then((response) => {
+        if (cancelled || !response.success || !response.data) return
+        const list = Array.isArray(response.data) ? response.data : []
+        const others = list
+          .filter((p: Product) => p.id !== editingProduct.id && Array.isArray(p.images) && p.images.length > 0)
+          .map((p: Product) => ({ ...p, _score: nameSimilarityScore(editingProduct.name, p.name) }))
+          .sort((a: Product & { _score: number }, b: Product & { _score: number }) => (b._score - a._score))
+          .slice(0, 2)
+          .map(({ _score, ...p }: Product & { _score: number }) => p)
+        if (!cancelled) setSimilarProducts(others)
+      })
+      .catch(() => { if (!cancelled) setSimilarProducts([]) })
+      .finally(() => { if (!cancelled) setSimilarProductsLoading(false) })
+    return () => { cancelled = true }
+  }, [editingProduct?.id, editingProduct?.name])
 
   // When search query changes, reset to page 1 (pagination stays on current page otherwise)
   useEffect(() => {
@@ -203,6 +253,7 @@ export default function ProductsPage() {
   const closeProductModal = () => {
     setIsProductModalOpen(false)
     setEditingProduct(null)
+    setSimilarProducts([])
   }
 
   const handleAIRecommendation = async () => {
@@ -758,12 +809,46 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-between">
+              {/* Table count selector + Pagination */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <span>Show</span>
+                    <select
+                      value={limitOption === 'custom' ? 'custom' : limitOption}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (v === 'custom') handleLimitChange('custom')
+                        else handleLimitChange(parseInt(v, 10))
+                      }}
+                      className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    >
+                      {LIMIT_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                      <option value="custom">Custom</option>
+                    </select>
+                    <span>per page</span>
+                    {limitOption === 'custom' && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={5000}
+                        value={customLimit}
+                        onChange={(e) => {
+                          setCustomLimit(e.target.value)
+                          setPage(1)
+                        }}
+                        onBlur={() => setPage(1)}
+                        className="w-20 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      />
+                    )}
+                  </div>
                   <div className="text-sm text-gray-700 dark:text-gray-300">
                     Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} products
                   </div>
+                </div>
+                {totalPages > 1 && (
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -780,8 +865,8 @@ export default function ProductsPage() {
                       Next
                     </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </>
           )}
         </div>
@@ -793,6 +878,8 @@ export default function ProductsPage() {
         categories={categories}
         onSubmit={handleProductFormSubmit}
         onCancel={closeProductModal}
+        similarProducts={editingProduct ? similarProducts.map((p) => ({ id: p.id, name: p.name, images: p.images || [] })) : []}
+        similarProductsLoading={similarProductsLoading}
       />
       
       {/* AI Recommendation Modal */}

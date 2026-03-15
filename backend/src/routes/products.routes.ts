@@ -188,7 +188,7 @@ const updateStockValidation = [
   handleValidationErrors
 ]
 
-const BATCH_STOCK_MAX_IDS = 500
+const BATCH_STOCK_MAX_IDS = 2000
 const batchUpdateStockValidation = [
   body('productIds')
     .isArray()

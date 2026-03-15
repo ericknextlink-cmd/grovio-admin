@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { AIController } from '../controllers/ai.controller'
 import { body, query } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
-import { authenticateToken } from '../middleware/auth.middleware'
+import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth.middleware'
 import { authRateLimiter } from '../middleware/authRateLimit.middleware'
 
 const router = Router()
@@ -151,13 +151,13 @@ const supplierProductRecommendationsValidation = [
   handleValidationErrors
 ]
 
-// AI routes require authentication; per-user rate limit to prevent auth abuse
-router.post('/chat', authenticateToken, authRateLimiter, chatValidation, aiController.getChatResponse)
-router.post('/recommendations', authenticateToken, authRateLimiter, recommendationsValidation, aiController.getRecommendations)
-router.get('/search', authenticateToken, authRateLimiter, searchValidation, aiController.searchProducts)
-router.post('/budget-analysis', authenticateToken, authRateLimiter, budgetAnalysisValidation, aiController.getBudgetAnalysis)
-router.post('/meal-suggestions', authenticateToken, authRateLimiter, mealSuggestionsValidation, aiController.getMealSuggestions)
-router.post('/supplier-recommendations', authenticateToken, authRateLimiter, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations)
+// Chat and supplier-recommendations allow guests (optional auth); others require sign-in
+router.post('/chat', optionalAuthenticateToken, authRateLimiter, chatValidation, aiController.getChatResponse)
+router.post('/recommendations', optionalAuthenticateToken, authRateLimiter, recommendationsValidation, aiController.getRecommendations)
+router.get('/search', optionalAuthenticateToken, authRateLimiter, searchValidation, aiController.searchProducts)
+router.post('/budget-analysis', optionalAuthenticateToken, authRateLimiter, budgetAnalysisValidation, aiController.getBudgetAnalysis)
+router.post('/meal-suggestions', optionalAuthenticateToken, authRateLimiter, mealSuggestionsValidation, aiController.getMealSuggestions)
+router.post('/supplier-recommendations', optionalAuthenticateToken, authRateLimiter, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations)
 
 // Thread management routes
 router.get('/threads/:threadId', authenticateToken, authRateLimiter, aiController.getConversationHistory)

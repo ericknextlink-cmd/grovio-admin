@@ -311,6 +311,69 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 }
 
 /**
+ * Optional auth: if a valid token is present, set req.user; otherwise leave req.user undefined and continue.
+ * Use for routes that work for both guests and authenticated users (e.g. AI chat).
+ */
+export const optionalAuthenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    let token: string | null = null
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1]
+    }
+
+    const supabase = createClient(req, res)
+    let user = null
+    let error = null
+
+    if (token) {
+      const { data, error: tokenError } = await supabase.auth.getUser(token)
+      user = data.user
+      error = tokenError
+    } else {
+      const { data, error: sessionError } = await supabase.auth.getUser()
+      user = data.user
+      error = sessionError
+    }
+
+    if (error || !user) {
+      req.user = undefined
+      next()
+      return
+    }
+
+    const adminSupabase = createAdminClient()
+    const { data: userData, error: dbError } = await adminSupabase
+      .from('users')
+      .select('id, email, role')
+      .eq('id', user.id)
+      .single()
+
+    if (dbError && dbError.code !== 'PGRST116') {
+      req.user = undefined
+      next()
+      return
+    }
+
+    if (!userData) {
+      req.user = undefined
+      next()
+      return
+    }
+
+    req.user = {
+      id: userData.id,
+      email: userData.email,
+      role: userData.role,
+    }
+    next()
+  } catch {
+    req.user = undefined
+    next()
+  }
+}
+
+/**
  * Middleware to check if user is admin
  */
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -2,6 +2,21 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsController = void 0;
 const products_service_1 = require("../services/products.service");
+/** Ensure value is JSON-serializable (BigInt -> number, etc.) to avoid 500 on res.json() */
+function toJsonSafe(value) {
+    if (typeof value === 'bigint')
+        return Number(value);
+    if (Array.isArray(value))
+        return value.map(toJsonSafe);
+    if (value !== null && typeof value === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+            out[k] = toJsonSafe(v);
+        }
+        return out;
+    }
+    return value;
+}
 class ProductsController {
     constructor() {
         /**
@@ -23,17 +38,27 @@ class ProductsController {
                 const result = await this.productsService.getAllProducts(filters);
                 const data = (result.data ?? []).map((p) => {
                     const { original_price: _, ...rest } = p;
-                    return rest;
+                    return toJsonSafe(rest);
                 });
+                const pagination = result.pagination;
+                const safePagination = pagination
+                    ? {
+                        page: Number(pagination.page),
+                        limit: Number(pagination.limit),
+                        total: Number(pagination.total),
+                        totalPages: Number(pagination.totalPages)
+                    }
+                    : undefined;
                 res.json({
                     success: true,
                     message: 'Products retrieved successfully',
                     data,
-                    pagination: result.pagination
+                    pagination: safePagination
                 });
             }
             catch (error) {
-                console.error('Get all products error:', error);
+                const err = error;
+                console.error('Get all products error:', err?.message ?? String(error), error?.stack);
                 res.status(500).json({
                     success: false,
                     message: 'Internal server error'

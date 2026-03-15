@@ -54,19 +54,21 @@ class ProductsService {
             if (error) {
                 throw error;
             }
-            const totalPages = Math.ceil((count || 0) / filters.limit);
+            const total = Number(count ?? 0);
+            const totalPages = Math.ceil(total / filters.limit);
             return {
                 data: products || [],
                 pagination: {
                     page: filters.page,
                     limit: filters.limit,
-                    total: count || 0,
+                    total,
                     totalPages
                 }
             };
         }
         catch (error) {
-            console.error('Get all products error:', error);
+            const err = error;
+            console.error('Get all products error:', err?.message ?? err, err?.stack);
             throw error;
         }
     }

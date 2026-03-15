@@ -2,6 +2,20 @@ import { Request, Response } from 'express'
 import { ProductsService, Product } from '../services/products.service'
 import { ApiResponse } from '../types/api.types'
 
+/** Ensure value is JSON-serializable (BigInt -> number, etc.) to avoid 500 on res.json() */
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return Number(value) as T
+  if (Array.isArray(value)) return value.map(toJsonSafe) as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = toJsonSafe(v)
+    }
+    return out as T
+  }
+  return value
+}
+
 export class ProductsController {
   private productsService: ProductsService
 
@@ -39,16 +53,26 @@ export class ProductsController {
       const result = await this.productsService.getAllProducts(filters)
       const data = (result.data ?? []).map((p: Product) => {
         const { original_price: _, ...rest } = p
-        return rest
+        return toJsonSafe(rest) as Omit<Product, 'original_price'>
       })
+      const pagination = result.pagination
+      const safePagination = pagination
+        ? {
+            page: Number(pagination.page),
+            limit: Number(pagination.limit),
+            total: Number(pagination.total),
+            totalPages: Number(pagination.totalPages)
+          }
+        : undefined
       res.json({
         success: true,
         message: 'Products retrieved successfully',
         data,
-        pagination: result.pagination
+        pagination: safePagination
       } as ApiResponse<typeof data>)
     } catch (error) {
-      console.error('Get all products error:', error)
+      const err = error as Error & { message?: string }
+      console.error('Get all products error:', err?.message ?? String(error), (error as Error)?.stack)
       res.status(500).json({
         success: false,
         message: 'Internal server error'

@@ -187,7 +187,7 @@ const updateStockValidation = [
         .withMessage('In stock must be a boolean'),
     validation_middleware_1.handleValidationErrors
 ];
-const BATCH_STOCK_MAX_IDS = 500;
+const BATCH_STOCK_MAX_IDS = 2000;
 const batchUpdateStockValidation = [
     (0, express_validator_1.body)('productIds')
         .isArray()

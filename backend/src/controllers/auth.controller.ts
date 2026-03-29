@@ -187,15 +187,9 @@ export class AuthController {
         // Ensure path starts with /
         const safePath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`
         
-        // Append tokens to the redirect URL as query params (fallback for cross-domain cookies)
-        const session = result.session as { access_token?: string; refresh_token?: string }
-        const tokenParams = new URLSearchParams({
-          access_token: session.access_token ?? '',
-          refresh_token: session.refresh_token ?? '',
-        }).toString()
-
-        const separator = safePath.includes('?') ? '&' : '?'
-        res.redirect(`${frontendUrl}${safePath}${separator}${tokenParams}`)
+        // Do not place sensitive tokens in URL query params.
+        // Session exchange should rely on secure cookie/session flow only.
+        res.redirect(`${frontendUrl}${safePath}`)
       } else {
         console.error('OAuth callback failed:', result.errors)
         res.redirect(`${frontendUrl}/login?error=auth_failed&message=${encodeURIComponent(result.message || 'Authentication failed')}`)

@@ -174,6 +174,7 @@ export class VoucherService {
     valid_from?: string
     valid_until?: string
     max_uses?: number
+    usage_type?: 'recurring' | 'one_time'
   }): Promise<{ id: string; code: string } | { error: string }> {
     const code = params.code.trim().toUpperCase()
     if (!code) return { error: 'Code is required' }
@@ -192,6 +193,7 @@ export class VoucherService {
         valid_from: params.valid_from ?? new Date().toISOString(),
         valid_until: params.valid_until ?? null,
         max_uses: params.max_uses ?? null,
+        usage_type: params.usage_type === 'one_time' ? 'one_time' : 'recurring',
       })
       .select('id, code')
       .single()
@@ -218,11 +220,12 @@ export class VoucherService {
     valid_until: string | null
     max_uses: number | null
     use_count: number
+    usage_type: string
     created_at: string
   }>> {
     const { data, error } = await this.supabase
       .from('discount_vouchers')
-      .select('id, code, discount_type, discount_value, description, image_type, min_order_amount, valid_from, valid_until, max_uses, use_count, created_at')
+      .select('id, code, discount_type, discount_value, description, image_type, min_order_amount, valid_from, valid_until, max_uses, use_count, usage_type, created_at')
       .order('created_at', { ascending: false })
 
     if (error || !data) return []
@@ -238,6 +241,7 @@ export class VoucherService {
       valid_until: r.valid_until ?? null,
       max_uses: r.max_uses ?? null,
       use_count: Number(r.use_count ?? 0),
+      usage_type: r.usage_type === 'one_time' ? 'one_time' : 'recurring',
       created_at: r.created_at,
     }))
   }
@@ -256,6 +260,7 @@ export class VoucherService {
       min_order_amount?: number
       valid_until?: string | null
       max_uses?: number | null
+      usage_type?: 'recurring' | 'one_time'
     }
   ): Promise<{ id: string; code: string } | { error: string }> {
     if (!id) return { error: 'Voucher ID is required' }
@@ -291,6 +296,9 @@ export class VoucherService {
     if (params.min_order_amount !== undefined) payload.min_order_amount = params.min_order_amount
     if (params.valid_until !== undefined) payload.valid_until = params.valid_until
     if (params.max_uses !== undefined) payload.max_uses = params.max_uses
+    if (params.usage_type !== undefined) {
+      payload.usage_type = params.usage_type === 'one_time' ? 'one_time' : 'recurring'
+    }
 
     if (Object.keys(payload).length === 0) {
       return { error: 'No fields provided to update' }
@@ -339,10 +347,11 @@ export class VoucherService {
     description: string | null
     image_type: string | null
     valid_until: string | null
+    usage_type: 'recurring' | 'one_time'
   } | null> {
     const { data, error } = await this.supabase
       .from('discount_vouchers')
-      .select('id, code, discount_type, discount_value, description, image_type, valid_until')
+      .select('id, code, discount_type, discount_value, description, image_type, valid_until, usage_type')
       .eq('id', id)
       .maybeSingle()
     if (error || !data) return null
@@ -354,6 +363,7 @@ export class VoucherService {
       description: data.description ?? null,
       image_type: data.image_type ?? null,
       valid_until: data.valid_until ?? null,
+      usage_type: data.usage_type === 'one_time' ? 'one_time' : 'recurring',
     }
   }
 

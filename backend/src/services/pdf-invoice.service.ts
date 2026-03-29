@@ -61,24 +61,22 @@ export interface InvoiceGenerationResult {
 }
 
 /**
- * Templates:
- * - Template.pdf: Single-page full invoice (≤6 items). Logo, Billed To, QR, serial, date, items, totals, thank you, footer.
- * - Template1.pdf: First page of multi-page. Logo, Billed To, QR, serial, date, items (fill page; no totals/footer).
- * - Template2.pdf: Last page of multi-page. Has footer/thank you baked in. We draw: items (that fit above totals), then Subtotal, Discounts & Credits, Total. Used once per invoice as the last page.
- * - Blank pages: Created in code (no file). Table only for continuation items.
+ * Templates (Supabase `templates/` or `backend/public/`):
+ * - Template.pdf: Single-page full invoice (≤6 items) and last page of multi-page (footer + totals area).
+ * - Template-no-footer.pdf: First page of multi-page (header + items; no footer/totals band).
+ * - Template-BLank.pdf: Middle continuation pages (try common case variants if renamed).
  */
 const DEFAULT_TEMPLATE_FILENAME = 'Template.pdf'
-const TEMPLATE1_FILENAME = 'Template1.pdf'
-const TEMPLATE2_FILENAME = 'Template2.pdf'
-/** Try alternate names for user's files (e.g. "Template (1).pdf") */
-const TEMPLATE1_ALT = 'Template (1).pdf'
-const TEMPLATE2_ALT = 'Template (2).pdf'
+const MULTI_PAGE_FIRST_TEMPLATE = 'Template-no-footer.pdf'
+const MULTI_PAGE_LAST_TEMPLATE = 'Template.pdf'
+/** Blank continuation page PDF (asset uses mixed case “BLank”). */
+const BLANK_PAGE_TEMPLATE_CANDIDATES = ['Template-BLank.pdf', 'Template-blank.pdf', 'template-blank.pdf'] as const
 
 /** Single-page threshold: items ≤ this use Template.pdf only. */
 const SINGLE_PAGE_MAX_ITEMS = 6
-/** Don't draw items below this Y on Template1 (so we don't run into bottom). */
+/** Don't draw items below this Y on first multi-page template (so we don't run into bottom). */
 const ITEM_FLOOR_Y_PAGE1 = 380
-/** On Template2 (last page), items must stay above this Y so totals never overlap (reserve space for Subtotal/Discounts/Total block). */
+/** On last page template, items must stay above this Y so totals never overlap (reserve space for Subtotal/Discounts/Total block). */
 const ITEM_FLOOR_Y_LAST_PAGE = 920
 /** Last page: items start this far from top (smaller = items/totals higher; “totals position” for ~10 items, then totals shift down when more). */
 /** First page: gap below table heading so first product row doesn’t cross into it (mt-4 style). */
@@ -231,7 +229,7 @@ export class PDFInvoiceService {
   /**
    * Generate invoice PDF and return bytes only (no upload).
    * Single-page (≤6 items): Template.pdf with everything.
-   * Multi-page (7+ items): Template1 (first page, items until full) → optional blank table-only pages → Template2 (last page: remaining items + totals; footer/thank you on template).
+   * Multi-page (7+ items): Template-no-footer.pdf → optional blank pages → Template.pdf last page.
    */
   async generateInvoiceToBuffer(data: InvoiceData): Promise<Uint8Array> {
     const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber)
@@ -241,13 +239,16 @@ export class PDFInvoiceService {
         return await this.fillTemplate(data, qrCodeData, templateBytes)
       }
 
-      // Multi-page: need Template1 and Template2
-      const template1Bytes = await this.getTemplateBytesOrNull(TEMPLATE1_FILENAME, TEMPLATE1_ALT)
-      const template2Bytes = await this.getTemplateBytesOrNull(TEMPLATE2_FILENAME, TEMPLATE2_ALT)
+      const template1Bytes = await this.getTemplateBytesOrNull(MULTI_PAGE_FIRST_TEMPLATE)
+      const template2Bytes = await this.getTemplateBytesOrNull(MULTI_PAGE_LAST_TEMPLATE)
       if (!template1Bytes || !template2Bytes) {
-        console.warn('Multi-page invoice: Template1 or Template2 not found. Using single-page with Template.pdf.')
+        console.warn(
+          'Multi-page invoice: Template-no-footer.pdf or Template.pdf missing. Using single-page Template.pdf.'
+        )
         return await this.fillTemplate(data, qrCodeData, templateBytes)
       }
+
+      const blankTemplateBytes = await this.getTemplateBytesOrNull(...BLANK_PAGE_TEMPLATE_CANDIDATES)
 
       const pageHeight1 = await this.getTemplatePageHeight(template1Bytes)
       const pageHeight2 = await this.getTemplatePageHeight(template2Bytes)
@@ -275,7 +276,7 @@ export class PDFInvoiceService {
 
       const pageBuffers: Uint8Array[] = []
 
-      // Page 1: Template1 — draw effectiveM1 items (capped when 3+ pages so middle pages fill first)
+      // Page 1: Template-no-footer.pdf — draw effectiveM1 items (capped when 3+ pages so middle pages fill first)
       const { bytes: page1Bytes, itemsDrawn: _drawn } = await this.fillTemplate1FirstPage(
         data,
         qrCodeData,
@@ -302,7 +303,7 @@ export class PDFInvoiceService {
           const maxFit = this.computeItemsThatFit(data, offset, template2Size.height, ITEM_FLOOR_Y_PAGE1, CONTINUATION_PAGE_START_OFFSET)
           const limit = Math.min(ITEMS_PER_BLANK_PAGE, maxFit, lastPageItemStart - offset)
           if (limit <= 0) break
-          const buf = await this.drawBlankTablePage(data, offset, limit, template2Size)
+          const buf = await this.drawBlankTablePage(data, offset, limit, template2Size, blankTemplateBytes)
           pageBuffers.push(buf)
           offset += limit
         }
@@ -334,7 +335,7 @@ export class PDFInvoiceService {
       // 1. Generate QR Code
       const qrCodeData = await this.generateQRCode(data.invoiceNumber, data.orderNumber)
 
-      // 2. Generate PDF (single page if ≤6 items; multi-page merge if >6 items using Template / Template2 / Template3)
+      // 2. Generate PDF (single page if ≤6 items; multi-page: Template-no-footer + blank + Template.pdf)
       const pdfBytes = await this.generateInvoiceToBuffer(data)
 
       // 3. Upload PDF to Supabase storage
@@ -850,23 +851,27 @@ export class PDFInvoiceService {
   }
 
   /**
-   * Create a blank continuation page and draw only the items table. No logo, Billed To, QR, footer.
-   * When pageSize (from Template2) is provided, uses the same dimensions and coordinates as the template so layout matches.
+   * Middle continuation page: items table only. Uses blank template PDF when provided; else white page matching `pageSize`.
    */
   private async drawBlankTablePage(
     data: InvoiceData,
     itemOffset: number,
     itemLimit: number,
-    pageSize?: { width: number; height: number }
+    pageSize?: { width: number; height: number },
+    blankTemplateBytes?: Uint8Array | null
   ): Promise<Uint8Array> {
     const items = data.items.slice(itemOffset, itemOffset + itemLimit)
     if (items.length === 0) throw new Error('drawBlankTablePage: no items in slice')
 
-    const pdfDoc = await PDFDocument.create()
-    const [pageWidth, pageHeight] = pageSize
-      ? [pageSize.width, pageSize.height]
-      : [595, 842]
-    const page = pdfDoc.addPage([pageWidth, pageHeight])
+    const useBlankFile = Boolean(blankTemplateBytes?.length && pageSize)
+    const pdfDoc = useBlankFile
+      ? await PDFDocument.load(blankTemplateBytes!)
+      : await PDFDocument.create()
+    const page = useBlankFile
+      ? pdfDoc.getPages()[0]
+      : pdfDoc.addPage(
+          pageSize ? [pageSize.width, pageSize.height] : [595, 842]
+        )
     const { width, height } = page.getSize()
 
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)

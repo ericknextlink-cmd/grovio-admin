@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth.middleware'
 import { authenticateAdmin } from '../middleware/adminAuth.middleware'
 import { body, param, query } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
+import rateLimit from 'express-rate-limit'
 
 const router = Router()
 const orderController = new OrderController()
@@ -126,6 +127,54 @@ const checkPaymentStatusValidation = [
   handleValidationErrors,
 ]
 
+const verifyDeliveryCodeValidation = [
+  body('code')
+    .optional()
+    .isLength({ min: 4, max: 4 })
+    .withMessage('Delivery code must be exactly 4 digits')
+    .matches(/^\d{4}$/)
+    .withMessage('Delivery code must be exactly 4 digits'),
+  query('code')
+    .optional()
+    .isLength({ min: 4, max: 4 })
+    .withMessage('Delivery code must be exactly 4 digits')
+    .matches(/^\d{4}$/)
+    .withMessage('Delivery code must be exactly 4 digits'),
+  handleValidationErrors,
+]
+
+const verifyDeliveryTokenValidation = [
+  body('token')
+    .optional()
+    .trim()
+    .isLength({ min: 12, max: 512 })
+    .withMessage('Verification token format is invalid'),
+  query('token')
+    .optional()
+    .trim()
+    .isLength({ min: 12, max: 512 })
+    .withMessage('Verification token format is invalid'),
+  handleValidationErrors,
+]
+
+const deliveryVerifyCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many delivery verification attempts. Please try again later.',
+  skipSuccessfulRequests: true,
+})
+
+const deliveryVerifyTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many delivery verification attempts. Please try again later.',
+  skipSuccessfulRequests: true,
+})
+
 // Public routes
 
 /**
@@ -140,14 +189,20 @@ router.post('/webhook/paystack', orderController.handleWebhook)
  * @desc    Verify delivery by 4-digit code (rider or admin)
  * @access  Public
  */
-router.post('/delivery/verify-code', orderController.verifyDeliveryByCode)
+router.post('/delivery/verify-code', deliveryVerifyCodeLimiter, verifyDeliveryCodeValidation, orderController.verifyDeliveryByCode)
 
 /**
  * @route   POST /api/orders/delivery/verify-qr
  * @desc    Verify delivery by QR token (rider or admin)
  * @access  Public
  */
-router.post('/delivery/verify-qr', orderController.verifyDeliveryByToken)
+router.post('/delivery/verify-qr', deliveryVerifyTokenLimiter, verifyDeliveryTokenValidation, orderController.verifyDeliveryByToken)
+
+// Admin routes
+router.get('/admin/orders', authenticateAdmin, orderController.getAdminOrders)
+router.get('/admin/transactions', authenticateAdmin, orderController.getAdminPaymentTransactions)
+router.get('/admin/stats', authenticateAdmin, orderController.getOrderStats)
+router.put('/:id/status', authenticateAdmin, updateStatusValidation, orderController.updateOrderStatus)
 
 // Protected routes (require authentication)
 router.use(authenticateToken)
@@ -214,37 +269,6 @@ router.get('/pending/:pendingOrderId', pendingOrderValidation, orderController.g
  * @access  Private
  */
 router.post('/pending/:pendingOrderId/cancel', pendingOrderValidation, orderController.cancelPendingOrder)
-
-// Admin routes
-router.use(authenticateAdmin)
-
-/**
- * @route   GET /api/orders/admin/orders
- * @desc    List all orders (Admin only, live DB)
- * @access  Admin
- */
-router.get('/admin/orders', orderController.getAdminOrders)
-
-/**
- * @route   GET /api/orders/admin/transactions
- * @desc    List all payment transactions (Admin only, live DB)
- * @access  Admin
- */
-router.get('/admin/transactions', orderController.getAdminPaymentTransactions)
-
-/**
- * @route   GET /api/orders/admin/stats
- * @desc    Get order statistics (Admin only)
- * @access  Admin
- */
-router.get('/admin/stats', orderController.getOrderStats)
-
-/**
- * @route   PUT /api/orders/:id/status
- * @desc    Update order status (Admin only)
- * @access  Admin
- */
-router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus)
 
 export { router as orderRoutes }
 

@@ -162,7 +162,7 @@ class OrderController {
         this.handleWebhook = async (req, res) => {
             try {
                 const signature = req.headers['x-paystack-signature'];
-                const payload = JSON.stringify(req.body);
+                const payload = req.rawBody ?? JSON.stringify(req.body);
                 // Verify webhook signature
                 const isValid = this.paystackService.verifyWebhookSignature(signature, payload);
                 if (!isValid) {

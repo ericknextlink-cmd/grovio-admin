@@ -147,13 +147,13 @@ const supplierProductRecommendationsValidation = [
     (0, express_validator_1.body)('budgetMode').optional().isIn(['combined', 'per_meal']).withMessage('Budget mode must be combined or per_meal'),
     validation_middleware_1.handleValidationErrors
 ];
-// AI routes require authentication; per-user rate limit to prevent auth abuse
-router.post('/chat', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, chatValidation, aiController.getChatResponse);
-router.post('/recommendations', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, recommendationsValidation, aiController.getRecommendations);
-router.get('/search', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, searchValidation, aiController.searchProducts);
-router.post('/budget-analysis', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, budgetAnalysisValidation, aiController.getBudgetAnalysis);
-router.post('/meal-suggestions', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, mealSuggestionsValidation, aiController.getMealSuggestions);
-router.post('/supplier-recommendations', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations);
+// Chat and supplier-recommendations allow guests (optional auth); others require sign-in
+router.post('/chat', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, chatValidation, aiController.getChatResponse);
+router.post('/recommendations', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, recommendationsValidation, aiController.getRecommendations);
+router.get('/search', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, searchValidation, aiController.searchProducts);
+router.post('/budget-analysis', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, budgetAnalysisValidation, aiController.getBudgetAnalysis);
+router.post('/meal-suggestions', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, mealSuggestionsValidation, aiController.getMealSuggestions);
+router.post('/supplier-recommendations', auth_middleware_1.optionalAuthenticateToken, authRateLimit_middleware_1.authRateLimiter, supplierProductRecommendationsValidation, aiController.getSupplierProductRecommendations);
 // Thread management routes
 router.get('/threads/:threadId', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, aiController.getConversationHistory);
 router.get('/threads', auth_middleware_1.authenticateToken, authRateLimit_middleware_1.authRateLimiter, aiController.getUserThreads);

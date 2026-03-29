@@ -7,6 +7,14 @@ exports.AdminService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const supabase_1 = require("../config/supabase");
+function getRequiredAdminJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET is required for admin authentication');
+    }
+    return secret;
+}
+const adminJwtSecret = getRequiredAdminJwtSecret();
 class AdminService {
     constructor() {
         this.supabase = (0, supabase_1.createAdminClient)();
@@ -54,7 +62,7 @@ class AdminService {
                 adminId: admin.id,
                 username: admin.username,
                 role: admin.role
-            }, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf', { expiresIn: '24h' });
+            }, adminJwtSecret, { expiresIn: '24h' });
             // Remove password hash from response
             const { password_hash: _pw, ...adminData } = admin;
             void _pw;
@@ -184,7 +192,7 @@ class AdminService {
      */
     verifyToken(token) {
         try {
-            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf');
+            const decoded = jsonwebtoken_1.default.verify(token, adminJwtSecret);
             return {
                 adminId: decoded.adminId,
                 username: decoded.username,
@@ -212,7 +220,7 @@ class AdminService {
                 adminId: admin.id,
                 username: admin.username,
                 role: admin.role
-            }, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf', { expiresIn: '24h' });
+            }, adminJwtSecret, { expiresIn: '24h' });
             return {
                 success: true,
                 message: 'Token refreshed successfully',

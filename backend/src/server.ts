@@ -36,6 +36,10 @@ import { findAvailablePort } from './utils/port'
 
 const app: Application = express()
 
+interface RawBodyRequest extends Request {
+  rawBody?: string
+}
+
 // Trust proxy for rate limiting in production (Railway, Render, etc.)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
@@ -179,7 +183,12 @@ app.use('/api/webhook', webhookLimiter)
 app.use('/api/', generalLimiter)
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => {
+    ;(req as RawBodyRequest).rawBody = buf.toString('utf8')
+  },
+}))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Logging middleware

@@ -139,6 +139,7 @@ class VoucherService {
             valid_from: params.valid_from ?? new Date().toISOString(),
             valid_until: params.valid_until ?? null,
             max_uses: params.max_uses ?? null,
+            usage_type: params.usage_type === 'one_time' ? 'one_time' : 'recurring',
         })
             .select('id, code')
             .single();
@@ -155,7 +156,7 @@ class VoucherService {
     async listAllVouchers() {
         const { data, error } = await this.supabase
             .from('discount_vouchers')
-            .select('id, code, discount_type, discount_value, description, image_type, min_order_amount, valid_from, valid_until, max_uses, use_count, created_at')
+            .select('id, code, discount_type, discount_value, description, image_type, min_order_amount, valid_from, valid_until, max_uses, use_count, usage_type, created_at')
             .order('created_at', { ascending: false });
         if (error || !data)
             return [];
@@ -171,6 +172,7 @@ class VoucherService {
             valid_until: r.valid_until ?? null,
             max_uses: r.max_uses ?? null,
             use_count: Number(r.use_count ?? 0),
+            usage_type: r.usage_type === 'one_time' ? 'one_time' : 'recurring',
             created_at: r.created_at,
         }));
     }
@@ -217,6 +219,9 @@ class VoucherService {
             payload.valid_until = params.valid_until;
         if (params.max_uses !== undefined)
             payload.max_uses = params.max_uses;
+        if (params.usage_type !== undefined) {
+            payload.usage_type = params.usage_type === 'one_time' ? 'one_time' : 'recurring';
+        }
         if (Object.keys(payload).length === 0) {
             return { error: 'No fields provided to update' };
         }
@@ -258,7 +263,7 @@ class VoucherService {
     async getVoucherById(id) {
         const { data, error } = await this.supabase
             .from('discount_vouchers')
-            .select('id, code, discount_type, discount_value, description, image_type, valid_until')
+            .select('id, code, discount_type, discount_value, description, image_type, valid_until, usage_type')
             .eq('id', id)
             .maybeSingle();
         if (error || !data)
@@ -271,6 +276,7 @@ class VoucherService {
             description: data.description ?? null,
             image_type: data.image_type ?? null,
             valid_until: data.valid_until ?? null,
+            usage_type: data.usage_type === 'one_time' ? 'one_time' : 'recurring',
         };
     }
     /**

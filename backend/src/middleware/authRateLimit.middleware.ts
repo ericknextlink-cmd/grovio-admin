@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { AuthRequest } from './auth.middleware'
 
 /**
@@ -14,6 +14,8 @@ export const authRateLimiter = rateLimit({
   keyGenerator: (req) => {
     const userId = (req as AuthRequest).user?.id
     if (userId) return `user:${userId}`
-    return req.ip || req.socket?.remoteAddress || 'anon'
+    // express-rate-limit requires using ipKeyGenerator for IPv6-safe behavior
+    const ip = req.ip || req.socket?.remoteAddress || 'anon'
+    return ipKeyGenerator(ip)
   },
 })

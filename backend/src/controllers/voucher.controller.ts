@@ -1,6 +1,11 @@
 import { Response } from 'express'
 import { VoucherService } from '../services/voucher.service'
-import { VoucherImageService, VoucherImageType } from '../services/voucher-image.service'
+import {
+  formatVoucherOfferDescription,
+  VoucherImageService,
+  VoucherImageType,
+  type VoucherUsageDisplay,
+} from '../services/voucher-image.service'
 import { ApiResponse } from '../types/api.types'
 
 export interface AuthRequest {
@@ -127,26 +132,34 @@ export async function getMyVoucherImage(req: AuthRequest, res: Response): Promis
 
     const imageType: VoucherImageType = voucher.image_type === 'nss' ? 'nss' : 'regular'
     const discountValue = Number(voucher.discount_value || 0)
-    const discountText =
+    const amountText =
       voucher.discount_type === 'percentage'
         ? `${discountValue}% OFF`
         : `GHC ${discountValue.toFixed(0)} OFF`
-    const expiryText = voucher.valid_until
-      ? `Until ${new Date(voucher.valid_until).toLocaleDateString()}`
-      : undefined
+    const usageDisplay: VoucherUsageDisplay =
+      voucher.usage_type === 'one_time' ? 'one_time' : 'recurring'
+    const customDesc = voucher.description?.trim()
+    const expiryText =
+      customDesc && voucher.valid_until
+        ? `Until ${new Date(voucher.valid_until).toLocaleDateString()}`
+        : undefined
     const offerDescription =
-      voucher.description ??
-      (voucher.discount_type === 'percentage'
-        ? `Get ${discountValue}% off your checkout`
-        : `Get GHC ${discountValue.toFixed(2)} off your checkout`)
+      customDesc ??
+      formatVoucherOfferDescription({
+        discountType: voucher.discount_type,
+        discountValue,
+        validUntil: voucher.valid_until,
+        usageDisplay,
+      })
 
     const imageBuffer = await voucherImageService.generate(imageType, {
       code: voucher.code,
-      userName: undefined,
-      expiryText,
-      discountText,
+      upToText: 'UP TO',
+      expiryText: customDesc ? expiryText : undefined,
+      amountText,
       offerDescription,
       textColor: '#ffffff',
+      websiteText: 'WWW.GROVIOGHANA.COM',
     })
 
     if (!imageBuffer) {

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authenticateUser = exports.requireUser = exports.requireAdmin = exports.authenticateToken = void 0;
+exports.authenticateUser = exports.requireUser = exports.requireAdmin = exports.optionalAuthenticateToken = exports.authenticateToken = void 0;
 const supabase_1 = require("../config/supabase");
 /**
  * Middleware to authenticate user using Supabase JWT token
@@ -277,6 +277,64 @@ const authenticateToken = async (req, res, next) => {
     }
 };
 exports.authenticateToken = authenticateToken;
+/**
+ * Optional auth: if a valid token is present, set req.user; otherwise leave req.user undefined and continue.
+ * Use for routes that work for both guests and authenticated users (e.g. AI chat).
+ */
+const optionalAuthenticateToken = async (req, res, next) => {
+    try {
+        let token = null;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        }
+        const supabase = (0, supabase_1.createClient)(req, res);
+        let user = null;
+        let error = null;
+        if (token) {
+            const { data, error: tokenError } = await supabase.auth.getUser(token);
+            user = data.user;
+            error = tokenError;
+        }
+        else {
+            const { data, error: sessionError } = await supabase.auth.getUser();
+            user = data.user;
+            error = sessionError;
+        }
+        if (error || !user) {
+            req.user = undefined;
+            next();
+            return;
+        }
+        const adminSupabase = (0, supabase_1.createAdminClient)();
+        const { data: userData, error: dbError } = await adminSupabase
+            .from('users')
+            .select('id, email, role')
+            .eq('id', user.id)
+            .single();
+        if (dbError && dbError.code !== 'PGRST116') {
+            req.user = undefined;
+            next();
+            return;
+        }
+        if (!userData) {
+            req.user = undefined;
+            next();
+            return;
+        }
+        req.user = {
+            id: userData.id,
+            email: userData.email,
+            role: userData.role,
+        };
+        next();
+    }
+    catch {
+        req.user = undefined;
+        next();
+    }
+};
+exports.optionalAuthenticateToken = optionalAuthenticateToken;
 /**
  * Middleware to check if user is admin
  */

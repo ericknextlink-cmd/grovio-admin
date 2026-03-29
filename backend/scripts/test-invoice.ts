@@ -1,7 +1,7 @@
 /**
  * Manual test script for PDF invoice generation.
- * Uses template from Supabase storage (templates/Template.pdf) if available,
- * otherwise local backend/public/Template.pdf.
+ * Single-page: templates/Template.pdf (or public/Template.pdf).
+ * Multi-page (7+ items): also needs Template-no-footer.pdf and a blank page PDF (Template-BLank.pdf or Template-blank.pdf).
  *
  * Run from backend directory:
  *   pnpm run test:invoice              # default: 6 products (single-page)

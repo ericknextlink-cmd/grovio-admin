@@ -11,6 +11,10 @@ export interface AuthRequest extends Request {
   }
 }
 
+interface RawBodyRequest extends Request {
+  rawBody?: string
+}
+
 export class OrderController {
   private orderService: OrderService
   private paystackService: PaystackService
@@ -187,7 +191,7 @@ export class OrderController {
   handleWebhook = async (req: Request, res: Response): Promise<void> => {
     try {
       const signature = req.headers['x-paystack-signature'] as string
-      const payload = JSON.stringify(req.body)
+      const payload = (req as RawBodyRequest).rawBody ?? JSON.stringify(req.body)
 
       // Verify webhook signature
       const isValid = this.paystackService.verifyWebhookSignature(signature, payload)

@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.orderRoutes = void 0;
 const express_1 = require("express");
@@ -7,6 +10,7 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const adminAuth_middleware_1 = require("../middleware/adminAuth.middleware");
 const express_validator_1 = require("express-validator");
 const validation_middleware_1 = require("../middleware/validation.middleware");
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const router = (0, express_1.Router)();
 exports.orderRoutes = router;
 const orderController = new order_controller_1.OrderController();
@@ -120,6 +124,50 @@ const checkPaymentStatusValidation = [
         .withMessage('Payment reference is required'),
     validation_middleware_1.handleValidationErrors,
 ];
+const verifyDeliveryCodeValidation = [
+    (0, express_validator_1.body)('code')
+        .optional()
+        .isLength({ min: 4, max: 4 })
+        .withMessage('Delivery code must be exactly 4 digits')
+        .matches(/^\d{4}$/)
+        .withMessage('Delivery code must be exactly 4 digits'),
+    (0, express_validator_1.query)('code')
+        .optional()
+        .isLength({ min: 4, max: 4 })
+        .withMessage('Delivery code must be exactly 4 digits')
+        .matches(/^\d{4}$/)
+        .withMessage('Delivery code must be exactly 4 digits'),
+    validation_middleware_1.handleValidationErrors,
+];
+const verifyDeliveryTokenValidation = [
+    (0, express_validator_1.body)('token')
+        .optional()
+        .trim()
+        .isLength({ min: 12, max: 512 })
+        .withMessage('Verification token format is invalid'),
+    (0, express_validator_1.query)('token')
+        .optional()
+        .trim()
+        .isLength({ min: 12, max: 512 })
+        .withMessage('Verification token format is invalid'),
+    validation_middleware_1.handleValidationErrors,
+];
+const deliveryVerifyCodeLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many delivery verification attempts. Please try again later.',
+    skipSuccessfulRequests: true,
+});
+const deliveryVerifyTokenLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many delivery verification attempts. Please try again later.',
+    skipSuccessfulRequests: true,
+});
 // Public routes
 /**
  * @route   POST /api/webhook/paystack
@@ -132,13 +180,18 @@ router.post('/webhook/paystack', orderController.handleWebhook);
  * @desc    Verify delivery by 4-digit code (rider or admin)
  * @access  Public
  */
-router.post('/delivery/verify-code', orderController.verifyDeliveryByCode);
+router.post('/delivery/verify-code', deliveryVerifyCodeLimiter, verifyDeliveryCodeValidation, orderController.verifyDeliveryByCode);
 /**
  * @route   POST /api/orders/delivery/verify-qr
  * @desc    Verify delivery by QR token (rider or admin)
  * @access  Public
  */
-router.post('/delivery/verify-qr', orderController.verifyDeliveryByToken);
+router.post('/delivery/verify-qr', deliveryVerifyTokenLimiter, verifyDeliveryTokenValidation, orderController.verifyDeliveryByToken);
+// Admin routes
+router.get('/admin/orders', adminAuth_middleware_1.authenticateAdmin, orderController.getAdminOrders);
+router.get('/admin/transactions', adminAuth_middleware_1.authenticateAdmin, orderController.getAdminPaymentTransactions);
+router.get('/admin/stats', adminAuth_middleware_1.authenticateAdmin, orderController.getOrderStats);
+router.put('/:id/status', adminAuth_middleware_1.authenticateAdmin, updateStatusValidation, orderController.updateOrderStatus);
 // Protected routes (require authentication)
 router.use(auth_middleware_1.authenticateToken);
 /**
@@ -195,29 +248,3 @@ router.get('/pending/:pendingOrderId', pendingOrderValidation, orderController.g
  * @access  Private
  */
 router.post('/pending/:pendingOrderId/cancel', pendingOrderValidation, orderController.cancelPendingOrder);
-// Admin routes
-router.use(adminAuth_middleware_1.authenticateAdmin);
-/**
- * @route   GET /api/orders/admin/orders
- * @desc    List all orders (Admin only, live DB)
- * @access  Admin
- */
-router.get('/admin/orders', orderController.getAdminOrders);
-/**
- * @route   GET /api/orders/admin/transactions
- * @desc    List all payment transactions (Admin only, live DB)
- * @access  Admin
- */
-router.get('/admin/transactions', orderController.getAdminPaymentTransactions);
-/**
- * @route   GET /api/orders/admin/stats
- * @desc    Get order statistics (Admin only)
- * @access  Admin
- */
-router.get('/admin/stats', orderController.getOrderStats);
-/**
- * @route   PUT /api/orders/:id/status
- * @desc    Update order status (Admin only)
- * @access  Admin
- */
-router.put('/:id/status', updateStatusValidation, orderController.updateOrderStatus);

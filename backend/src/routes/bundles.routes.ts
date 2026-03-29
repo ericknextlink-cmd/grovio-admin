@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { BundlesController } from '../controllers/bundles.controller'
 import { authenticateAdmin } from '../middleware/adminAuth.middleware'
 import { authenticateToken } from '../middleware/auth.middleware'
+import { authenticateAdminOrUser } from '../middleware/authAny.middleware'
 import { body, query, param } from 'express-validator'
 import { handleValidationErrors } from '../middleware/validation.middleware'
 
@@ -97,9 +98,9 @@ const generateBundlesValidation = [
 /**
  * @route   GET /api/bundles
  * @desc    Get all product bundles (optionally filtered by category)
- * @access  Authenticated
+ * @access  Authenticated (user or admin)
  */
-router.get('/', authenticateToken, getBundlesValidation, bundlesController.getBundles)
+router.get('/', authenticateAdminOrUser, getBundlesValidation, bundlesController.getBundles)
 
 /**
  * @route   GET /api/bundles/personalized

@@ -38,7 +38,7 @@ async function listVouchers(_req, res) {
  */
 async function createVoucher(req, res) {
     try {
-        const { code, discount_type, discount_value, description, image_type, min_order_amount, valid_until, max_uses } = req.body;
+        const { code, discount_type, discount_value, description, image_type, min_order_amount, valid_until, max_uses, usage_type, } = req.body;
         if (!code || !discount_type || discount_value == null) {
             res.status(400).json({
                 success: false,
@@ -55,6 +55,7 @@ async function createVoucher(req, res) {
             min_order_amount: min_order_amount != null ? Number(min_order_amount) : undefined,
             valid_until: valid_until ? String(valid_until) : undefined,
             max_uses: max_uses != null ? Number(max_uses) : undefined,
+            usage_type: usage_type === 'one_time' ? 'one_time' : undefined,
         });
         if ('error' in result) {
             res.status(400).json({
@@ -89,7 +90,7 @@ async function updateVoucher(req, res) {
             });
             return;
         }
-        const { code, discount_type, discount_value, description, image_type, min_order_amount, valid_until, max_uses } = req.body;
+        const { code, discount_type, discount_value, description, image_type, min_order_amount, valid_until, max_uses, usage_type, } = req.body;
         const result = await voucherService.updateVoucher(id, {
             code: code != null ? String(code) : undefined,
             discount_type: discount_type === 'fixed' ? 'fixed' : discount_type === 'percentage' ? 'percentage' : undefined,
@@ -99,6 +100,13 @@ async function updateVoucher(req, res) {
             min_order_amount: min_order_amount != null ? Number(min_order_amount) : undefined,
             valid_until: valid_until !== undefined ? (valid_until ? String(valid_until) : null) : undefined,
             max_uses: max_uses !== undefined ? (max_uses === null || max_uses === '' ? null : Number(max_uses)) : undefined,
+            usage_type: usage_type === undefined
+                ? undefined
+                : usage_type === 'one_time'
+                    ? 'one_time'
+                    : usage_type === 'recurring'
+                        ? 'recurring'
+                        : undefined,
         });
         if ('error' in result) {
             res.status(400).json({
@@ -257,7 +265,7 @@ async function listVoucherTemplates(_req, res) {
 }
 /**
  * GET /api/admin/vouchers/:id/preview-image - Generate voucher image preview (admin).
- * Query: imageType=regular|nss, userName?, expiryText?
+ * Query: imageType=regular|nss, expiryText?, usageType=recurring|one_time (overrides DB for preview)
  */
 async function previewVoucherImage(req, res) {
     try {
@@ -268,25 +276,39 @@ async function previewVoucherImage(req, res) {
         }
         const imageType = req.query.imageType === 'nss' ? 'nss' : 'regular';
         const templateName = typeof req.query.templateName === 'string' ? req.query.templateName : undefined;
-        const userName = req.query.userName || undefined;
         const expiryText = req.query.expiryText || undefined;
+        const usageTypeQ = typeof req.query.usageType === 'string' ? req.query.usageType : undefined;
         const voucher = await voucherService.getVoucherById(id);
         if (!voucher) {
             res.status(404).json({ success: false, message: 'Voucher not found' });
             return;
         }
-        const discountText = voucher.discount_type === 'fixed'
+        const amountText = voucher.discount_type === 'fixed'
             ? `GHC ${voucher.discount_value} OFF`
             : `${voucher.discount_value}% OFF`;
-        const offerDescription = voucher.discount_type === 'fixed'
-            ? `Get GHC ${voucher.discount_value} off your order${expiryText ? ` ${expiryText}` : ''}`
-            : `Get ${voucher.discount_value}% off your order${expiryText ? ` ${expiryText}` : ''}`;
+        const customDesc = voucher.description?.trim();
+        const validForOffer = expiryText ?? voucher.valid_until;
+        const usageDisplay = usageTypeQ === 'one_time'
+            ? 'one_time'
+            : usageTypeQ === 'recurring'
+                ? 'recurring'
+                : voucher.usage_type === 'one_time'
+                    ? 'one_time'
+                    : 'recurring';
+        const offerDescription = customDesc ??
+            (0, voucher_image_service_1.formatVoucherOfferDescription)({
+                discountType: voucher.discount_type,
+                discountValue: Number(voucher.discount_value),
+                validUntil: validForOffer,
+                usageDisplay,
+            });
         const renderOptions = {
             code: voucher.code,
-            userName,
-            expiryText,
-            discountText,
+            upToText: 'UP TO',
+            expiryText: customDesc ? expiryText : undefined,
+            amountText,
             offerDescription,
+            websiteText: 'WWW.GROVIOGHANA.COM',
         };
         const buffer = templateName
             ? await voucherImageService.generateFromTemplateName(templateName, renderOptions)
@@ -297,7 +319,7 @@ async function previewVoucherImage(req, res) {
                 message: 'Voucher image template not available',
                 errors: [
                     `Could not load voucher template from ${process.env.SUPABASE_STORAGE_BUCKET || 'invoices'}/templates/`,
-                    'Expected voucher template files (orange/blue variants) were not found.',
+                    'Expected voucher art PNGs in templates/ (e.g. regular-organge.png, nss-orange.png).',
                 ],
             });
             return;

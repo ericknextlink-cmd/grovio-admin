@@ -168,7 +168,13 @@ app.use('/api/webhook', webhookLimiter);
 // Apply general rate limiting to all other API routes
 app.use('/api/', generalLimiter);
 // Body parsing middleware
-app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.json({
+    limit: '10mb',
+    verify: (req, _res, buf) => {
+        ;
+        req.rawBody = buf.toString('utf8');
+    },
+}));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // Logging middleware
 app.use((0, morgan_1.default)('combined'));

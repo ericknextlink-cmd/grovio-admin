@@ -2,6 +2,15 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { createAdminClient } from '../config/supabase'
 
+function getRequiredAdminJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('JWT_SECRET is required for admin authentication')
+  }
+  return secret
+}
+const adminJwtSecret = getRequiredAdminJwtSecret()
+
 export interface AdminUser {
   id: string
   username: string
@@ -78,7 +87,7 @@ export class AdminService {
           username: admin.username, 
           role: admin.role 
         },
-        process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf',
+        adminJwtSecret,
         { expiresIn: '24h' }
       )
 
@@ -230,7 +239,7 @@ export class AdminService {
    */
   verifyToken(token: string): { adminId: string; username: string; role: string } | null {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf') as { adminId: string; username: string; role: string }
+      const decoded = jwt.verify(token, adminJwtSecret) as unknown as { adminId: string; username: string; role: string }
       return {
         adminId: decoded.adminId,
         username: decoded.username,
@@ -266,7 +275,7 @@ export class AdminService {
           username: admin.username, 
           role: admin.role 
         },
-        process.env.JWT_SECRET || 'd01c6482d6a2db86701b0af6bb3aa1bd56ae53f5bca4005b06b90e11b5f344bf',
+        adminJwtSecret,
         { expiresIn: '24h' }
       )
 

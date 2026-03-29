@@ -5,6 +5,7 @@ const express_1 = require("express");
 const bundles_controller_1 = require("../controllers/bundles.controller");
 const adminAuth_middleware_1 = require("../middleware/adminAuth.middleware");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const authAny_middleware_1 = require("../middleware/authAny.middleware");
 const express_validator_1 = require("express-validator");
 const validation_middleware_1 = require("../middleware/validation.middleware");
 const router = (0, express_1.Router)();
@@ -95,9 +96,9 @@ const generateBundlesValidation = [
 /**
  * @route   GET /api/bundles
  * @desc    Get all product bundles (optionally filtered by category)
- * @access  Authenticated
+ * @access  Authenticated (user or admin)
  */
-router.get('/', auth_middleware_1.authenticateToken, getBundlesValidation, bundlesController.getBundles);
+router.get('/', authAny_middleware_1.authenticateAdminOrUser, getBundlesValidation, bundlesController.getBundles);
 /**
  * @route   GET /api/bundles/personalized
  * @desc    Get personalized bundles based on user preferences

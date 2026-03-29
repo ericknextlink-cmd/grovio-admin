@@ -557,16 +557,16 @@ export default function ProductsPage() {
 
       <div className="lg:ml-64">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Products</h1>
-              <p className="text-gray-600 dark:text-gray-400">Manage your product inventory</p>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:shrink-0">
               <button
                 onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:w-auto"
               >
                 <Plus className="h-4 w-4" />
                 Add Product
@@ -574,7 +574,7 @@ export default function ProductsPage() {
               <button
                 onClick={() => setShowAIRecommendationModal(true)}
                 disabled={products.length === 0}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
               >
                 <Sparkles className="h-4 w-4" />
                 AI Recommendations

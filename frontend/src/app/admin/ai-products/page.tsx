@@ -137,12 +137,6 @@ export default function AIProductsPage() {
                 <Sparkles className="h-6 w-6 text-purple-600" />
                 AI Products
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                AI-generated bundles created by the agent for you to review and approve. For supervised generation with your own prompt, use the Bundles page.
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                How it works: When you click &quot;Generate bundles&quot;, the backend sends your catalog to the AI (OpenAI or xAI/Grok when configured). The AI picks product combinations from the catalog, names the bundles, and saves them here. No new products are invented—only bundles of existing catalog items. You can edit or delete any bundle.
-              </p>
             </div>
             <button
               onClick={handleGenerateClick}
@@ -162,28 +156,6 @@ export default function AIProductsPage() {
               )}
             </button>
           </div>
-        </div>
-
-        {/* Quick link to Bundles page + how AI creates bundles */}
-        <div className="mx-6 mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Supervised bundle creation
-            </h3>
-            <Link
-              href="/admin/bundles"
-              className="text-sm text-purple-600 dark:text-purple-400 hover:underline"
-            >
-              Create bundles with your own prompt →
-            </Link>
-          </div>
-          <details className="text-sm text-gray-600 dark:text-gray-400">
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">How does the AI create bundles?</summary>
-            <p className="mt-2 pl-2 border-l-2 border-gray-200 dark:border-gray-600">
-              The backend loads your product catalog and sends it to the model (OpenAI or xAI/Grok if XAI_API_KEY is set). The AI selects product IDs from that catalog to form each bundle, assigns a title and category, and returns a JSON list. Bundles are saved to the database and listed here. Nothing is auto-generated on page load or server startup—only when you click &quot;Generate bundles&quot; or use the Bundles page with a prompt.
-            </p>
-          </details>
         </div>
 
         <div className="p-6">

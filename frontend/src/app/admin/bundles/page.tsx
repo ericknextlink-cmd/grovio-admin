@@ -228,13 +228,10 @@ export default function AdminBundlesPage() {
       <AdminSidebar currentPage="bundles" isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
       <main className="lg:pl-64 p-4 md:p-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-8">
             <Layers className="h-8 w-8" />
             Bundles
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1 mb-8">
-            View and create bundles: AI-generated (from catalog) or manual (you pick products). All bundles use products from the database.
-          </p>
 
           <div className="flex flex-wrap gap-4 mb-8">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 flex-1 min-w-[280px]">

@@ -530,9 +530,6 @@ export default function SupplierProductsPage() {
                 <FileText className="h-8 w-8" />
                 Supplier Products
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-2">
-                Load and compare products from Excel or CSV files
-              </p>
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">

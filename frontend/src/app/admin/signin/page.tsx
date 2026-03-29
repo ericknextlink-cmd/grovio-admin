@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Lock, User, AlertCircle } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
@@ -112,9 +112,6 @@ export default function AdminSignInPage() {
             <Lock className="h-6 w-6 text-white" />
           </div>
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
-          <CardDescription>
-            Enter your credentials to access the admin panel
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -128,9 +128,6 @@ export default function ConfirmDeliveryPage() {
       <div className="lg:ml-64">
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Confirm Delivery</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Enter the 4-digit code from the customer or scan the delivery QR to mark the order as delivered.
-          </p>
         </div>
 
         <div className="p-6 max-w-2xl space-y-8">

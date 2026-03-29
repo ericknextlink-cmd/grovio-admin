@@ -118,15 +118,14 @@ export default function AdminVouchersPage() {
       setPreviewTemplateName('')
       return
     }
-    const preferred = previewVoucher.image_type === 'nss'
-      ? templateFiles.find((name) => {
-          const n = name.toLowerCase()
-          return n.includes('nss') || n.includes('blue')
-        })
-      : templateFiles.find((name) => {
-          const n = name.toLowerCase()
-          return n.includes('orange')
-        })
+    const REGULAR_DEFAULT_VOUCHER_ART = 'regular-organge.png'
+    const NSS_DEFAULT_VOUCHER_ART = 'nss-orange.png'
+    const preferred =
+      previewVoucher.image_type === 'nss'
+        ? templateFiles.find((name) => name === NSS_DEFAULT_VOUCHER_ART) ??
+          templateFiles.find((name) => name.startsWith('nss-'))
+        : templateFiles.find((name) => name === REGULAR_DEFAULT_VOUCHER_ART) ??
+          templateFiles.find((name) => name.startsWith('regular-'))
     if (!previewTemplateName && preferred) {
       setPreviewTemplateName(preferred)
       return
@@ -292,7 +291,6 @@ export default function AdminVouchersPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Discounts</h1>
-              <p className="text-gray-600 dark:text-gray-400">Create vouchers and assign them to users</p>
             </div>
             <button
               type="button"

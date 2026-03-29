@@ -97,9 +97,6 @@ export default function AdminDeliverySettingsPage() {
         <Truck className="h-8 w-8 text-[#D35F0E]" />
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Delivery Settings</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Platform warehouse location and delivery rate. Used to calculate delivery fee at checkout from distance (km).
-          </p>
         </div>
       </div>
 

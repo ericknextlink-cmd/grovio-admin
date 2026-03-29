@@ -140,9 +140,6 @@ export default function PricingPage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pricing</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Markup by price range, discounts by range, and bundle markup on total original (supplier) price.
-              </p>
             </div>
             <button
               onClick={fetchRanges}

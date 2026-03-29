@@ -89,7 +89,6 @@ export default function TransactionsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transactions Management</h1>
-              <p className="text-gray-600 dark:text-gray-400">View and manage payment transactions</p>
             </div>
           </div>
         </div>
